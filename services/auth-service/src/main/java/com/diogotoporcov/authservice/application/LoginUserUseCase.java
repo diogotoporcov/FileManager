@@ -4,6 +4,7 @@ import com.diogotoporcov.authservice.api.dto.AuthResponse;
 import com.diogotoporcov.authservice.api.dto.LoginRequest;
 import com.diogotoporcov.authservice.error.InvalidCredentialsException;
 import com.diogotoporcov.authservice.token.JwtTokenService;
+import com.diogotoporcov.authservice.token.RefreshTokenService;
 import com.diogotoporcov.authservice.user.entity.LocalCredential;
 import com.diogotoporcov.authservice.user.entity.UserIdentity;
 import com.diogotoporcov.authservice.user.repository.LocalCredentialRepository;
@@ -21,29 +22,30 @@ public class LoginUserUseCase {
     private final LocalCredentialRepository credentials;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenService tokenService;
+    private final RefreshTokenService refreshTokens;
 
     public LoginUserUseCase(
             UserIdentityRepository users,
             LocalCredentialRepository credentials,
             PasswordEncoder passwordEncoder,
-            JwtTokenService tokenService
+            JwtTokenService tokenService,
+            RefreshTokenService refreshTokens
     ) {
         this.users = users;
         this.credentials = credentials;
         this.passwordEncoder = passwordEncoder;
         this.tokenService = tokenService;
+        this.refreshTokens = refreshTokens;
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public AuthResponse execute(LoginRequest req) {
         String email = normalizeEmail(req.email());
 
         UserIdentity user = users.findByEmailIgnoreCase(email)
                 .orElseThrow(InvalidCredentialsException::new);
 
-        if (!user.isActive()) {
-            throw new InvalidCredentialsException();
-        }
+        if (!user.isActive()) throw new InvalidCredentialsException();
 
         LocalCredential cred = credentials.findById(user.getId())
                 .orElseThrow(InvalidCredentialsException::new);
@@ -52,8 +54,10 @@ public class LoginUserUseCase {
             throw new InvalidCredentialsException();
         }
 
-        JwtTokenService.TokenPair token = tokenService.mintAccessToken(user.getId(), user.getEmail());
-        return new AuthResponse(token.accessToken(), token.tokenType(), token.expiresIn());
+        var access = tokenService.mintAccessToken(user.getId(), user.getEmail());
+        String refresh = refreshTokens.issueNew(user.getId());
+
+        return new AuthResponse(access.accessToken(), access.tokenType(), access.expiresIn(), refresh);
     }
 
     private static String normalizeEmail(String email) {

@@ -5,6 +5,7 @@ import com.diogotoporcov.authservice.api.dto.RegisterRequest;
 import com.diogotoporcov.authservice.error.EmailAlreadyInUseException;
 import com.diogotoporcov.authservice.events.internal.UserRegisteredInternalEvent;
 import com.diogotoporcov.authservice.token.JwtTokenService;
+import com.diogotoporcov.authservice.token.RefreshTokenService;
 import com.diogotoporcov.authservice.user.entity.LocalCredential;
 import com.diogotoporcov.authservice.user.entity.UserIdentity;
 import com.diogotoporcov.authservice.user.entity.UserStatus;
@@ -25,6 +26,7 @@ public class RegisterUserUseCase {
     private final LocalCredentialRepository credentials;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenService tokenService;
+    private final RefreshTokenService refreshTokens;
     private final ApplicationEventPublisher appEvents;
 
     public RegisterUserUseCase(
@@ -32,12 +34,14 @@ public class RegisterUserUseCase {
             LocalCredentialRepository credentials,
             PasswordEncoder passwordEncoder,
             JwtTokenService tokenService,
+            RefreshTokenService refreshTokens,
             ApplicationEventPublisher appEvents
     ) {
         this.users = users;
         this.credentials = credentials;
         this.passwordEncoder = passwordEncoder;
         this.tokenService = tokenService;
+        this.refreshTokens = refreshTokens;
         this.appEvents = appEvents;
     }
 
@@ -56,11 +60,12 @@ public class RegisterUserUseCase {
         String hash = passwordEncoder.encode(req.password());
         credentials.save(new LocalCredential(user, hash));
 
-        // Envia ao Rabbit após commit via @TransactionalEventListener
         appEvents.publishEvent(new UserRegisteredInternalEvent(userId, email));
 
-        JwtTokenService.TokenPair token = tokenService.mintAccessToken(userId, email);
-        return new AuthResponse(token.accessToken(), token.tokenType(), token.expiresIn());
+        var access = tokenService.mintAccessToken(userId, email);
+        String refresh = refreshTokens.issueNew(userId);
+
+        return new AuthResponse(access.accessToken(), access.tokenType(), access.expiresIn(), refresh);
     }
 
     private static String normalizeEmail(String email) {

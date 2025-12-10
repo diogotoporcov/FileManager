@@ -53,4 +53,24 @@ public class GlobalExceptionHandler {
         ).toList());
         return detail;
     }
+
+    @ExceptionHandler(InvalidRefreshTokenException.class)
+    @ResponseStatus(HttpStatus.UNAUTHORIZED)
+    public ProblemDetail handleInvalidRefresh(InvalidRefreshTokenException ex, HttpServletRequest req) {
+        ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, ex.getMessage());
+        pd.setTitle("Unauthorized");
+        pd.setProperty("timestamp", Instant.now().toString());
+        pd.setProperty("path", req.getRequestURI());
+        return pd;
+    }
+
+    @ExceptionHandler(RefreshTokenReuseDetectedException.class)
+    @ResponseStatus(HttpStatus.UNAUTHORIZED)
+    public ProblemDetail handleReuse(RefreshTokenReuseDetectedException ex, HttpServletRequest req) {
+        ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, ex.getMessage());
+        pd.setTitle("Unauthorized");
+        pd.setProperty("timestamp", Instant.now().toString());
+        pd.setProperty("path", req.getRequestURI());
+        return pd;
+    }
 }

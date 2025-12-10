@@ -2,10 +2,9 @@ package com.diogotoporcov.authservice.api;
 
 import com.diogotoporcov.authservice.api.dto.AuthResponse;
 import com.diogotoporcov.authservice.api.dto.LoginRequest;
+import com.diogotoporcov.authservice.api.dto.RefreshRequest;
 import com.diogotoporcov.authservice.api.dto.RegisterRequest;
-import com.diogotoporcov.authservice.application.DeleteUserUseCase;
-import com.diogotoporcov.authservice.application.LoginUserUseCase;
-import com.diogotoporcov.authservice.application.RegisterUserUseCase;
+import com.diogotoporcov.authservice.application.*;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -20,11 +19,21 @@ public class AuthController {
 
     private final RegisterUserUseCase registerUser;
     private final LoginUserUseCase loginUser;
+    private final RefreshTokenUseCase refreshToken;
+    private final LogoutUseCase logout;
     private final DeleteUserUseCase deleteUser;
 
-    public AuthController(RegisterUserUseCase registerUser, LoginUserUseCase loginUser, DeleteUserUseCase deleteUser) {
+    public AuthController(
+            RegisterUserUseCase registerUser,
+            LoginUserUseCase loginUser,
+            RefreshTokenUseCase refreshToken,
+            LogoutUseCase logout,
+            DeleteUserUseCase deleteUser
+    ) {
         this.registerUser = registerUser;
         this.loginUser = loginUser;
+        this.refreshToken = refreshToken;
+        this.logout = logout;
         this.deleteUser = deleteUser;
     }
 
@@ -37,6 +46,18 @@ public class AuthController {
     @PostMapping("/login")
     public AuthResponse login(@Valid @RequestBody LoginRequest request) {
         return loginUser.execute(request);
+    }
+
+    @PostMapping("/refresh")
+    public AuthResponse refresh(@Valid @RequestBody RefreshRequest request) {
+        return refreshToken.execute(request);
+    }
+
+    @PostMapping("/logout")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void logout(@AuthenticationPrincipal Jwt jwt) {
+        UUID userId = UUID.fromString(jwt.getSubject());
+        logout.execute(userId);
     }
 
     @DeleteMapping("/me")
