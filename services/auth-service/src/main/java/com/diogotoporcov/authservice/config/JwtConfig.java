@@ -3,13 +3,15 @@ package com.diogotoporcov.authservice.config;
 import com.nimbusds.jose.jwk.source.ImmutableSecret;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.security.oauth2.core.OAuth2TokenValidator;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.*;
+import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
+import org.springframework.security.oauth2.core.OAuth2TokenValidator;
 
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 import java.util.Base64;
+import java.util.List;
 
 @Configuration
 public class JwtConfig {
@@ -35,10 +37,14 @@ public class JwtConfig {
                 .macAlgorithm(MacAlgorithm.HS256)
                 .build();
 
-        // Valida issuer (iss). Audience (aud) vamos validar no filtro/authorization layer quando fechar o contrato.
         OAuth2TokenValidator<Jwt> withIssuer = JwtValidators.createDefaultWithIssuer(props.issuer());
-        decoder.setJwtValidator(withIssuer);
 
+        OAuth2TokenValidator<Jwt> withAudience =
+                new JwtClaimValidator<List<String>>("aud", aud ->
+                        aud != null && aud.contains(props.audience())
+                );
+
+        decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(withIssuer, withAudience));
         return decoder;
     }
 }
