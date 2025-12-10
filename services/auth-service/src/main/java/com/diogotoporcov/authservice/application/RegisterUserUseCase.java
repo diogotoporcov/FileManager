@@ -1,5 +1,6 @@
 package com.diogotoporcov.authservice.application;
 
+import com.diogotoporcov.authservice.api.RequestContextExtractor.SessionContext;
 import com.diogotoporcov.authservice.api.dto.AuthResponse;
 import com.diogotoporcov.authservice.api.dto.RegisterRequest;
 import com.diogotoporcov.authservice.error.EmailAlreadyInUseException;
@@ -25,7 +26,7 @@ public class RegisterUserUseCase {
     private final UserIdentityRepository users;
     private final LocalCredentialRepository credentials;
     private final PasswordEncoder passwordEncoder;
-    private final JwtTokenService tokenService;
+    private final JwtTokenService jwt;
     private final RefreshTokenService refreshTokens;
     private final ApplicationEventPublisher appEvents;
 
@@ -33,20 +34,20 @@ public class RegisterUserUseCase {
             UserIdentityRepository users,
             LocalCredentialRepository credentials,
             PasswordEncoder passwordEncoder,
-            JwtTokenService tokenService,
+            JwtTokenService jwt,
             RefreshTokenService refreshTokens,
             ApplicationEventPublisher appEvents
     ) {
         this.users = users;
         this.credentials = credentials;
         this.passwordEncoder = passwordEncoder;
-        this.tokenService = tokenService;
+        this.jwt = jwt;
         this.refreshTokens = refreshTokens;
         this.appEvents = appEvents;
     }
 
     @Transactional
-    public AuthResponse execute(RegisterRequest req) {
+    public AuthResponse execute(RegisterRequest req, SessionContext ctx) {
         String email = normalizeEmail(req.email());
 
         if (users.existsByEmailIgnoreCase(email)) {
@@ -62,10 +63,10 @@ public class RegisterUserUseCase {
 
         appEvents.publishEvent(new UserRegisteredInternalEvent(userId, email));
 
-        var access = tokenService.mintAccessToken(userId, email);
-        String refresh = refreshTokens.issueNew(userId);
+        var issued = refreshTokens.issueNew(userId, ctx);
+        var access = jwt.mintAccessToken(userId, email, issued.sessionId());
 
-        return new AuthResponse(access.accessToken(), access.tokenType(), access.expiresIn(), refresh);
+        return new AuthResponse(access.accessToken(), access.tokenType(), access.expiresIn(), issued.refreshToken());
     }
 
     private static String normalizeEmail(String email) {

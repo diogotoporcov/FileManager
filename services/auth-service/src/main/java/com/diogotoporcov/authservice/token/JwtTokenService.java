@@ -19,7 +19,7 @@ public class JwtTokenService {
         this.props = props;
     }
 
-    public TokenPair mintAccessToken(UUID userId, String email) {
+    public TokenPair mintAccessToken(UUID userId, String email, UUID sessionId) {
         Instant now = Instant.now();
         Instant exp = now.plus(props.accessTokenTtl());
 
@@ -29,8 +29,9 @@ public class JwtTokenService {
                 .expiresAt(exp)
                 .subject(userId.toString())
                 .audience(List.of(props.audience()))
-                .id(UUID.randomUUID().toString()) // jti
+                .id(UUID.randomUUID().toString())
                 .claim("email", email)
+                .claim("sid", sessionId.toString())
                 .build();
 
         String tokenValue = jwtEncoder.encode(JwtEncoderParameters.from(claims)).getTokenValue();

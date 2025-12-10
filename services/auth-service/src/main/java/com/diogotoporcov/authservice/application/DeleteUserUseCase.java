@@ -38,10 +38,8 @@ public class DeleteUserUseCase {
             throw new UserNotFoundException(userId);
         }
 
-        refreshTokens.revokeAllForUserIfExists(userId);
-
+        refreshTokens.revokeAllForUser(userId);
         credentials.findById(userId).ifPresent(credentials::delete);
-
         users.deleteById(userId);
 
         appEvents.publishEvent(new UserDeletedInternalEvent(userId));

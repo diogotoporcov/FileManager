@@ -1,5 +1,6 @@
 package com.diogotoporcov.authservice.application;
 
+import com.diogotoporcov.authservice.api.RequestContextExtractor.SessionContext;
 import com.diogotoporcov.authservice.api.dto.AuthResponse;
 import com.diogotoporcov.authservice.api.dto.RefreshRequest;
 import com.diogotoporcov.authservice.token.JwtTokenService;
@@ -22,14 +23,14 @@ public class RefreshTokenUseCase {
     }
 
     @Transactional
-    public AuthResponse execute(RefreshRequest req) {
-        var rotation = refreshTokens.rotate(req.refreshToken());
+    public AuthResponse execute(RefreshRequest req, SessionContext ctx) {
+        var rotation = refreshTokens.rotate(req.refreshToken(), ctx);
 
         String email = users.findById(rotation.userId())
                 .orElseThrow()
                 .getEmail();
 
-        var access = jwt.mintAccessToken(rotation.userId(), email);
+        var access = jwt.mintAccessToken(rotation.userId(), email, rotation.sessionId());
         return new AuthResponse(access.accessToken(), access.tokenType(), access.expiresIn(), rotation.newRefreshToken());
     }
 }

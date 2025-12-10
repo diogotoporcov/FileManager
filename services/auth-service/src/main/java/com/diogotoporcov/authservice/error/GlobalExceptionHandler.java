@@ -73,4 +73,15 @@ public class GlobalExceptionHandler {
         pd.setProperty("path", req.getRequestURI());
         return pd;
     }
+
+    @ExceptionHandler(SessionNotFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public ProblemDetail handleSessionNotFound(SessionNotFoundException ex, HttpServletRequest req) {
+        ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
+        pd.setTitle("Not Found");
+        pd.setProperty("timestamp", Instant.now().toString());
+        pd.setProperty("path", req.getRequestURI());
+        return pd;
+    }
+
 }
