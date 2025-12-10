@@ -14,31 +14,43 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(EmailAlreadyInUseException.class)
     @ResponseStatus(HttpStatus.CONFLICT)
     public ProblemDetail handleEmailInUse(EmailAlreadyInUseException ex, HttpServletRequest req) {
-        ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
-        pd.setTitle("Email already in use");
-        pd.setProperty("timestamp", Instant.now().toString());
-        pd.setProperty("path", req.getRequestURI());
-        return pd;
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        detail.setTitle("Email already in use");
+        detail.setProperty("timestamp", Instant.now().toString());
+        detail.setProperty("path", req.getRequestURI());
+        return detail;
     }
 
     @ExceptionHandler(InvalidCredentialsException.class)
     @ResponseStatus(HttpStatus.UNAUTHORIZED)
     public ProblemDetail handleInvalidCredentials(InvalidCredentialsException ex, HttpServletRequest req) {
-        ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, ex.getMessage());
-        pd.setTitle("Unauthorized");
-        pd.setProperty("timestamp", Instant.now().toString());
-        pd.setProperty("path", req.getRequestURI());
-        return pd;
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, ex.getMessage());
+        detail.setTitle("Unauthorized");
+        detail.setProperty("timestamp", Instant.now().toString());
+        detail.setProperty("path", req.getRequestURI());
+        return detail;
+    }
+
+    @ExceptionHandler(UserNotFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public ProblemDetail handleUserNotFound(UserNotFoundException ex, HttpServletRequest req) {
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
+        detail.setTitle("Not Found");
+        detail.setProperty("timestamp", Instant.now().toString());
+        detail.setProperty("path", req.getRequestURI());
+        return detail;
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public ProblemDetail handleValidation(MethodArgumentNotValidException ex, HttpServletRequest req) {
-        ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Validation error");
-        pd.setTitle("Bad Request");
-        pd.setProperty("timestamp", Instant.now().toString());
-        pd.setProperty("path", req.getRequestURI());
-        pd.setProperty("errors", ex.getBindingResult().getFieldErrors().stream().map(fe -> fe.getField() + ": " + fe.getDefaultMessage()).toList());
-        return pd;
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Validation error");
+        detail.setTitle("Bad Request");
+        detail.setProperty("timestamp", Instant.now().toString());
+        detail.setProperty("path", req.getRequestURI());
+        detail.setProperty("errors", ex.getBindingResult().getFieldErrors().stream().map(fe ->
+                fe.getField() + ": " + fe.getDefaultMessage()
+        ).toList());
+        return detail;
     }
 }
