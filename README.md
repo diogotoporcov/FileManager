@@ -1,7 +1,7 @@
 # FileManager
 
 [![Spring](https://img.shields.io/badge/spring-4.0.0-6DB33F.svg)](https://spring.io/)
-[![Java](https://img.shields.io/badge/Java-21-007396.svg)](https://adoptium.net/)
+[![Java](https://img.shields.io/badge/Java-25-007396.svg)](https://adoptium.net/)
 [![Gradle](https://img.shields.io/badge/Gradle-9.2.1-02303A.svg)](https://gradle.org/)
 [![RabbitMQ](https://img.shields.io/badge/RabbitMQ-4.2.0-FF6600.svg)](https://github.com/rabbitmq/rabbitmq-delayed-message-exchange)
 
