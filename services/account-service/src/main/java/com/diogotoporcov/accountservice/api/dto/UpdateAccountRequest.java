@@ -5,7 +5,8 @@ import com.fasterxml.jackson.annotation.JsonSetter;
 import com.fasterxml.jackson.annotation.Nulls;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
-public record UpdateMyAccountRequest(
+public record UpdateAccountRequest(
+        @JsonSetter(nulls = Nulls.FAIL)
         String fullName,
 
         @JsonSetter(nulls = Nulls.FAIL)

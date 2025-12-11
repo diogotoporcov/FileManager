@@ -1,6 +1,6 @@
 package com.diogotoporcov.accountservice.api.dto;
 
-public record MyAccountResponse(
+public record AccountResponse(
         String userId,
         String fullName,
         String username,

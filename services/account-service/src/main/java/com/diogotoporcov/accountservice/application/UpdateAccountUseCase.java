@@ -1,6 +1,6 @@
 package com.diogotoporcov.accountservice.application;
 
-import com.diogotoporcov.accountservice.api.dto.UpdateMyAccountRequest;
+import com.diogotoporcov.accountservice.api.dto.UpdateAccountRequest;
 import com.diogotoporcov.accountservice.error.InvalidUsernameException;
 import com.diogotoporcov.accountservice.error.UsernameAlreadyInUseException;
 import com.diogotoporcov.accountservice.account.LocaleUtil;
@@ -15,25 +15,25 @@ import java.util.UUID;
 import java.util.regex.Pattern;
 
 @Service
-public class UpdateMyAccountUseCase {
+public class UpdateAccountUseCase {
 
     private static final Pattern USERNAME_PATTERN = Pattern.compile("^[A-Za-z0-9_]{3,32}$");
 
     private final UserAccountRepository accounts;
-    private final GetMyAccountUseCase getMyAccount;
+    private final GetAccountUseCase getMyAccount;
 
-    public UpdateMyAccountUseCase(UserAccountRepository accounts, GetMyAccountUseCase getMyAccount) {
+    public UpdateAccountUseCase(UserAccountRepository accounts, GetAccountUseCase getAccount) {
         this.accounts = accounts;
-        this.getMyAccount = getMyAccount;
+        this.getMyAccount = getAccount;
     }
 
     @Transactional
-    public UserAccount execute(UUID userId, UpdateMyAccountRequest req) {
+    public UserAccount execute(UUID userId, UpdateAccountRequest req) {
         UserAccount account = getMyAccount.execute(userId);
 
         if (req.fullName() != null) {
-            String v = req.fullName().trim();
-            account.setFullName(v.isBlank() ? null : v);
+            String value = req.fullName().trim();
+            account.setFullName(value.isBlank() ? null : value);
         }
 
         if (req.username() != null) {
