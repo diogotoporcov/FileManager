@@ -1,4 +1,4 @@
-package com.diogotoporcov.accountservice.events.inbound;
+package com.diogotoporcov.accountservice.events.user.internal;
 
 import java.util.UUID;
 

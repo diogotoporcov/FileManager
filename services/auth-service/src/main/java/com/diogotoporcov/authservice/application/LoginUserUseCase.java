@@ -56,7 +56,7 @@ public class LoginUserUseCase {
         }
 
         var issued = refreshTokens.issueNew(user.getId(), ctx);
-        var access = jwt.mintAccessToken(user.getId(), user.getEmail(), issued.sessionId());
+        var access = jwt.mintAccessToken(user.getId(), issued.sessionId());
 
         return new AuthResponse(access.accessToken(), access.tokenType(), access.expiresIn(), issued.refreshToken());
     }

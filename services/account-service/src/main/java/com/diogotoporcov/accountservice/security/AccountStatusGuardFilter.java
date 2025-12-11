@@ -1,9 +1,9 @@
 package com.diogotoporcov.accountservice.security;
 
-import com.diogotoporcov.accountservice.application.GetMyProfileUseCase;
+import com.diogotoporcov.accountservice.application.GetMyAccountUseCase;
 import com.diogotoporcov.accountservice.error.AccountInactiveException;
-import com.diogotoporcov.accountservice.profile.entity.AccountStatus;
-import com.diogotoporcov.accountservice.profile.entity.UserProfile;
+import com.diogotoporcov.accountservice.account.entity.AccountStatus;
+import com.diogotoporcov.accountservice.account.entity.UserAccount;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -22,14 +22,14 @@ import java.util.UUID;
 
 public class AccountStatusGuardFilter extends OncePerRequestFilter {
 
-    private final GetMyProfileUseCase getMyProfile;
+    private final GetMyAccountUseCase getMyAccount;
     private final List<HandlerMapping> handlerMappings;
     private final HandlerExceptionResolver exceptionResolver;
 
-    public AccountStatusGuardFilter(GetMyProfileUseCase getMyProfile,
+    public AccountStatusGuardFilter(GetMyAccountUseCase getMyAccount,
                                     List<HandlerMapping> handlerMappings,
                                     HandlerExceptionResolver exceptionResolver) {
-        this.getMyProfile = getMyProfile;
+        this.getMyAccount = getMyAccount;
         this.handlerMappings = handlerMappings;
         this.exceptionResolver = exceptionResolver;
     }
@@ -84,14 +84,9 @@ public class AccountStatusGuardFilter extends OncePerRequestFilter {
                 throw new IllegalArgumentException("Invalid token subject");
             }
 
-            String email = jwt.getClaimAsString("email");
-            if (email == null || email.isBlank()) {
-                throw new IllegalArgumentException("Invalid token: missing email claim");
-            }
+            UserAccount account = getMyAccount.execute(userId);
 
-            UserProfile profile = getMyProfile.execute(userId, email);
-
-            if (profile.getStatus() == AccountStatus.INACTIVE) {
+            if (account.getStatus() == AccountStatus.INACTIVE) {
                 throw new AccountInactiveException("Account is inactive");
             }
 

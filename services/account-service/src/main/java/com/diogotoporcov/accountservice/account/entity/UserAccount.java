@@ -1,4 +1,4 @@
-package com.diogotoporcov.accountservice.profile.entity;
+package com.diogotoporcov.accountservice.account.entity;
 
 import jakarta.persistence.*;
 
@@ -6,36 +6,23 @@ import java.time.Instant;
 import java.util.UUID;
 
 @Entity
-@Table(
-        name = "user_profile",
-        uniqueConstraints = {
-                @UniqueConstraint(name = "uk_user_profile_username", columnNames = "username"),
-                @UniqueConstraint(name = "uk_user_profile_email", columnNames = "email")
-        },
-        indexes = {
-                @Index(name = "ix_user_profile_username", columnList = "username"),
-                @Index(name = "ix_user_profile_email", columnList = "email")
-        }
-)
-public class UserProfile {
+@Table(name = "user_account")
+public class UserAccount {
 
     @Id
     @Column(name = "user_id", nullable = false, updatable = false)
     private UUID userId;
 
-    @Column(name = "email", nullable = false, updatable = false, length = 254)
-    private String email;
-
     @Column(name = "full_name", length = 200)
     private String fullName;
 
-    @Column(name = "username", nullable = false, length = 40)
+    @Column(name = "username", unique = true, nullable = false, length = 40)
     private String username;
 
-    @Column(name = "locale", nullable = true, length = 10)
+    @Column(name = "locale", length = 10)
     private String locale;
 
-    @Column(name = "timezone", nullable = true, length = 64)
+    @Column(name = "timezone", length = 64)
     private String timezone;
 
     @Enumerated(EnumType.STRING)
@@ -48,11 +35,10 @@ public class UserProfile {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
-    protected UserProfile() {}
+    protected UserAccount() {}
 
-    public UserProfile(UUID userId, String email, String username, String locale, String timezone, AccountStatus status) {
+    public UserAccount(UUID userId, String username, String locale, String timezone, AccountStatus status) {
         this.userId = userId;
-        this.email = email;
         this.username = username;
         this.locale = locale;
         this.timezone = timezone;
@@ -72,7 +58,6 @@ public class UserProfile {
     }
 
     public UUID getUserId() { return userId; }
-    public String getEmail() { return email; }
     public String getFullName() { return fullName; }
     public String getUsername() { return username; }
     public String getLocale() { return locale; }
@@ -85,14 +70,14 @@ public class UserProfile {
     public void setTimezone(String timezone) { this.timezone = timezone; }
     public void setStatus(AccountStatus status) { this.status = status; }
 
-    public boolean isProfileComplete() {
+    public boolean isAccountComplete() {
         return notBlank(fullName)
                 && notBlank(username)
                 && notBlank(locale)
                 && notBlank(timezone);
     }
 
-    private static boolean notBlank(String v) {
-        return v != null && !v.isBlank();
+    private static boolean notBlank(String string) {
+        return string != null && !string.isBlank();
     }
 }

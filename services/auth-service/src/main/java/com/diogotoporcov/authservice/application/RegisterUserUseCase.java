@@ -9,7 +9,6 @@ import com.diogotoporcov.authservice.token.JwtTokenService;
 import com.diogotoporcov.authservice.token.RefreshTokenService;
 import com.diogotoporcov.authservice.user.entity.LocalCredential;
 import com.diogotoporcov.authservice.user.entity.UserIdentity;
-import com.diogotoporcov.authservice.user.entity.UserStatus;
 import com.diogotoporcov.authservice.user.repository.LocalCredentialRepository;
 import com.diogotoporcov.authservice.user.repository.UserIdentityRepository;
 import org.springframework.context.ApplicationEventPublisher;
@@ -56,7 +55,7 @@ public class RegisterUserUseCase {
 
         UUID userId = UUID.randomUUID();
 
-        UserIdentity managedUser = users.save(new UserIdentity(userId, email, UserStatus.ACTIVE));
+        UserIdentity managedUser = users.save(new UserIdentity(userId, email));
 
         String hash = passwordEncoder.encode(req.password());
         credentials.save(new LocalCredential(managedUser, hash));
@@ -64,7 +63,7 @@ public class RegisterUserUseCase {
         appEvents.publishEvent(new UserRegisteredInternalEvent(userId, email));
 
         var issued = refreshTokens.issueNew(userId, ctx);
-        var access = jwt.mintAccessToken(userId, email, issued.sessionId());
+        var access = jwt.mintAccessToken(userId, issued.sessionId());
 
         return new AuthResponse(access.accessToken(), access.tokenType(), access.expiresIn(), issued.refreshToken());
     }

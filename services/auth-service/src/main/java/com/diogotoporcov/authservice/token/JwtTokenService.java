@@ -20,7 +20,7 @@ public class JwtTokenService {
         this.props = props;
     }
 
-    public TokenPair mintAccessToken(UUID userId, String email, UUID sessionId) {
+    public TokenPair mintAccessToken(UUID userId, UUID sessionId) {
         Instant now = Instant.now();
         Instant exp = now.plus(props.accessTokenTtl());
 
@@ -31,7 +31,6 @@ public class JwtTokenService {
                 .subject(userId.toString())
                 .audience(List.of(props.audience()))
                 .id(UUID.randomUUID().toString())
-                .claim("email", email)
                 .claim("sid", sessionId.toString())
                 .build();
 

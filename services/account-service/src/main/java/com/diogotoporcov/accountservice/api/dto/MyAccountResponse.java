@@ -1,8 +1,10 @@
 package com.diogotoporcov.accountservice.api.dto;
 
-public record UpdateMyProfileRequest(
+public record MyAccountResponse(
+        String userId,
         String fullName,
         String username,
         String locale,
-        String timezone
+        String timezone,
+        String status
 ) {}

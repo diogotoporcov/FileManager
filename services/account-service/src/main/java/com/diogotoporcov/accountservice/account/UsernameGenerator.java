@@ -1,4 +1,4 @@
-package com.diogotoporcov.accountservice.profile;
+package com.diogotoporcov.accountservice.account;
 
 import com.aventrix.jnanoid.jnanoid.NanoIdUtils;
 import org.springframework.stereotype.Component;

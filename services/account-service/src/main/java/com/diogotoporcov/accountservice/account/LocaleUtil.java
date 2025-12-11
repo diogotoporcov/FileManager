@@ -1,4 +1,4 @@
-package com.diogotoporcov.accountservice.profile;
+package com.diogotoporcov.accountservice.account;
 
 import com.diogotoporcov.accountservice.error.InvalidLocaleException;
 

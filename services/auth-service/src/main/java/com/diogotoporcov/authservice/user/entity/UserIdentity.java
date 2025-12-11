@@ -6,24 +6,15 @@ import java.time.Instant;
 import java.util.UUID;
 
 @Entity
-@Table(
-        name = "user_identity",
-        uniqueConstraints = {
-                @UniqueConstraint(name = "uk_user_identity_email", columnNames = {"email"})
-        }
-)
+@Table(name = "user_identity")
 public class UserIdentity {
 
     @Id
     @Column(name = "id", nullable = false, updatable = false)
     private UUID id;
 
-    @Column(name = "email", nullable = false, length = 254)
+    @Column(name = "email", nullable = false, length = 254, unique = true)
     private String email;
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "status", nullable = false, length = 16)
-    private UserStatus status;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -33,10 +24,9 @@ public class UserIdentity {
 
     protected UserIdentity() {}
 
-    public UserIdentity(UUID id, String email, UserStatus status) {
+    public UserIdentity(UUID id, String email) {
         this.id = id;
         this.email = email;
-        this.status = status;
     }
 
     @PrePersist
@@ -57,14 +47,6 @@ public class UserIdentity {
 
     public String getEmail() {
         return email;
-    }
-
-    public UserStatus getStatus() {
-        return status;
-    }
-
-    public boolean isActive() {
-        return status == UserStatus.ACTIVE;
     }
 
     public Instant getCreatedAt() {
