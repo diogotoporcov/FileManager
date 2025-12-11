@@ -19,7 +19,7 @@ public class JwtConfig {
     @Bean
     public SecretKey jwtSecretKey(JwtProperties props) {
         if (props.secret() == null || props.secret().isBlank()) {
-            throw new IllegalStateException("JWT secret is not configured. Set JWT_SECRET_B64 in environment.");
+            throw new IllegalStateException("JWT secret is not configured. Set JWT_SECRET in environment.");
         }
         byte[] decoded = Base64.getDecoder().decode(props.secret());
         return new SecretKeySpec(decoded, "HmacSHA256");
