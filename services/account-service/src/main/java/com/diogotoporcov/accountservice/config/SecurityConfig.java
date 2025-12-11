@@ -2,6 +2,7 @@ package com.diogotoporcov.accountservice.config;
 
 import com.diogotoporcov.accountservice.application.GetMyProfileUseCase;
 import com.diogotoporcov.accountservice.security.AccountStatusGuardFilter;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.Customizer;
@@ -10,6 +11,7 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.web.servlet.HandlerExceptionResolver;
 import org.springframework.web.servlet.HandlerMapping;
 
 import java.util.List;
@@ -41,9 +43,11 @@ public class SecurityConfig {
     @Bean
     public AccountStatusGuardFilter accountStatusGuardFilter(
             GetMyProfileUseCase profileUseCase,
-            List<HandlerMapping> handlerMappings
+            List<HandlerMapping> handlerMappings,
+            @Qualifier("handlerExceptionResolver") HandlerExceptionResolver exceptionResolver
     ) {
-        return new AccountStatusGuardFilter(profileUseCase, handlerMappings);
+        return new AccountStatusGuardFilter(profileUseCase, handlerMappings, exceptionResolver);
     }
+
 
 }
