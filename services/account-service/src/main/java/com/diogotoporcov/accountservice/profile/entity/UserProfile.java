@@ -32,10 +32,10 @@ public class UserProfile {
     @Column(name = "username", nullable = false, length = 40)
     private String username;
 
-    @Column(name = "locale", nullable = false, length = 10)
+    @Column(name = "locale", nullable = true, length = 10)
     private String locale;
 
-    @Column(name = "timezone", nullable = false, length = 64)
+    @Column(name = "timezone", nullable = true, length = 64)
     private String timezone;
 
     @Enumerated(EnumType.STRING)
@@ -84,4 +84,15 @@ public class UserProfile {
     public void setLocale(String locale) { this.locale = locale; }
     public void setTimezone(String timezone) { this.timezone = timezone; }
     public void setStatus(AccountStatus status) { this.status = status; }
+
+    public boolean isProfileComplete() {
+        return notBlank(fullName)
+                && notBlank(username)
+                && notBlank(locale)
+                && notBlank(timezone);
+    }
+
+    private static boolean notBlank(String v) {
+        return v != null && !v.isBlank();
+    }
 }

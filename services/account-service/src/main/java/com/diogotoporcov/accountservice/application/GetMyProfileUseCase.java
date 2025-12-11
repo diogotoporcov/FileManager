@@ -1,6 +1,5 @@
 package com.diogotoporcov.accountservice.application;
 
-import com.diogotoporcov.accountservice.profile.LocaleUtil;
 import com.diogotoporcov.accountservice.profile.UsernameGenerator;
 import com.diogotoporcov.accountservice.profile.entity.AccountStatus;
 import com.diogotoporcov.accountservice.profile.entity.UserProfile;
@@ -29,9 +28,9 @@ public class GetMyProfileUseCase {
                     userId,
                     email,
                     username,
-                    LocaleUtil.normalizeOrThrow("en-US"),
-                    "UTC",
-                    AccountStatus.ACTIVE
+                    null,
+                    null,
+                    AccountStatus.INACTIVE
             ));
         });
     }

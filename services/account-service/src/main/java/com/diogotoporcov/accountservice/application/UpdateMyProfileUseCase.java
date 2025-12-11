@@ -5,6 +5,7 @@ import com.diogotoporcov.accountservice.error.InvalidUsernameException;
 import com.diogotoporcov.accountservice.error.UsernameAlreadyInUseException;
 import com.diogotoporcov.accountservice.profile.LocaleUtil;
 import com.diogotoporcov.accountservice.profile.TimezoneUtil;
+import com.diogotoporcov.accountservice.profile.entity.AccountStatus;
 import com.diogotoporcov.accountservice.profile.entity.UserProfile;
 import com.diogotoporcov.accountservice.profile.repository.UserProfileRepository;
 import org.springframework.stereotype.Service;
@@ -52,6 +53,10 @@ public class UpdateMyProfileUseCase {
 
         if (req.timezone() != null) {
             profile.setTimezone(TimezoneUtil.normalizeOrThrow(req.timezone()));
+        }
+
+        if (profile.getStatus() != AccountStatus.SUSPENDED && profile.getStatus() != AccountStatus.DELETED) {
+            profile.setStatus(profile.isProfileComplete() ? AccountStatus.ACTIVE : AccountStatus.INACTIVE);
         }
 
         return profiles.save(profile);

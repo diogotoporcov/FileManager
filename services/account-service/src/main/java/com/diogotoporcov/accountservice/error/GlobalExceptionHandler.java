@@ -32,4 +32,13 @@ public class GlobalExceptionHandler {
         pd.setProperty("path", req.getRequestURI());
         return pd;
     }
+
+    @ExceptionHandler(AccountInactiveException.class)
+    public ProblemDetail handleInactive(AccountInactiveException ex, HttpServletRequest req) {
+        ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, ex.getMessage());
+        pd.setTitle("Forbidden");
+        pd.setProperty("timestamp", Instant.now().toString());
+        pd.setProperty("path", req.getRequestURI());
+        return pd;
+    }
 }
