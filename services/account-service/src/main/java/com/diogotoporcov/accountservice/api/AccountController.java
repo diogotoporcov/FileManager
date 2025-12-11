@@ -1,9 +1,9 @@
 package com.diogotoporcov.accountservice.api;
 
-import com.diogotoporcov.accountservice.api.dto.MyAccountResponse;
-import com.diogotoporcov.accountservice.api.dto.UpdateMyAccountRequest;
-import com.diogotoporcov.accountservice.application.GetMyAccountUseCase;
-import com.diogotoporcov.accountservice.application.UpdateMyAccountUseCase;
+import com.diogotoporcov.accountservice.api.dto.AccountResponse;
+import com.diogotoporcov.accountservice.api.dto.UpdateAccountRequest;
+import com.diogotoporcov.accountservice.application.GetAccountUseCase;
+import com.diogotoporcov.accountservice.application.UpdateAccountUseCase;
 import com.diogotoporcov.accountservice.account.entity.UserAccount;
 import com.diogotoporcov.accountservice.security.AllowInactive;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -16,33 +16,45 @@ import java.util.UUID;
 @RequestMapping("/account")
 public class AccountController {
 
-    private final GetMyAccountUseCase getMyAccount;
-    private final UpdateMyAccountUseCase updateMyAccount;
+    private final GetAccountUseCase getAccount;
+    private final UpdateAccountUseCase updateAccount;
 
-    public AccountController(GetMyAccountUseCase getMyAccount, UpdateMyAccountUseCase updateMyAccount) {
-        this.getMyAccount = getMyAccount;
-        this.updateMyAccount = updateMyAccount;
+    public AccountController(GetAccountUseCase getAccount, UpdateAccountUseCase updateAccount) {
+        this.getAccount = getAccount;
+        this.updateAccount = updateAccount;
     }
 
     @AllowInactive
     @GetMapping("/me")
-    public MyAccountResponse me(@AuthenticationPrincipal Jwt jwt) {
+    public AccountResponse me(@AuthenticationPrincipal Jwt jwt) {
         UUID userId = UUID.fromString(jwt.getSubject());
-        UserAccount account = getMyAccount.execute(userId);
+        UserAccount account = getAccount.execute(userId);
         return toResponse(account);
     }
 
     @AllowInactive
     @PatchMapping("/me")
-    public MyAccountResponse update(@AuthenticationPrincipal Jwt jwt, @RequestBody UpdateMyAccountRequest req) {
+    public AccountResponse update(@AuthenticationPrincipal Jwt jwt, @RequestBody UpdateAccountRequest req) {
         UUID userId = UUID.fromString(jwt.getSubject());
 
-        UserAccount account = updateMyAccount.execute(userId, req);
+        UserAccount account = updateAccount.execute(userId, req);
         return toResponse(account);
     }
 
-    private static MyAccountResponse toResponse(UserAccount account) {
-        return new MyAccountResponse(
+    @GetMapping("/{userId:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}}")
+    public AccountResponse getUserFromId(@PathVariable("userId") UUID userId) {
+        UserAccount account = getAccount.execute(userId);
+        return toResponse(account);
+    }
+
+    @GetMapping("/{username}")
+    public AccountResponse getUserFromUsername(@PathVariable("username") String username) {
+        UserAccount account = getAccount.execute(username);
+        return toResponse(account);
+    }
+
+    private static AccountResponse toResponse(UserAccount account) {
+        return new AccountResponse(
                 account.getUserId().toString(),
                 account.getFullName(),
                 account.getUsername(),

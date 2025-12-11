@@ -46,8 +46,6 @@ public class LoginUserUseCase {
         UserIdentity user = users.findByEmailIgnoreCase(email)
                 .orElseThrow(InvalidCredentialsException::new);
 
-        if (!user.isActive()) throw new InvalidCredentialsException();
-
         LocalCredential cred = credentials.findById(user.getId())
                 .orElseThrow(InvalidCredentialsException::new);
 
