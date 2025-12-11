@@ -1,6 +1,7 @@
 package com.diogotoporcov.authservice.token;
 
 import com.diogotoporcov.authservice.config.JwtProperties;
+import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.*;
 import org.springframework.stereotype.Service;
 
@@ -34,7 +35,14 @@ public class JwtTokenService {
                 .claim("sid", sessionId.toString())
                 .build();
 
-        String tokenValue = jwtEncoder.encode(JwtEncoderParameters.from(claims)).getTokenValue();
+        JwsHeader header = JwsHeader.with(MacAlgorithm.HS256)
+                .type("JWT")
+                .build();
+
+        String tokenValue = jwtEncoder
+                .encode(JwtEncoderParameters.from(header, claims))
+                .getTokenValue();
+
         long expiresInSeconds = props.accessTokenTtl().toSeconds();
 
         return new TokenPair(tokenValue, "Bearer", expiresInSeconds);
