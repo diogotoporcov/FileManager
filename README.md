@@ -11,4 +11,4 @@ FileManager is a full rearchitecture of [Finder v2](https://github.com/diogotopo
 
 ## License
 
-This project is licensed under the MIT License - See [LICENSE](LICENSE) for more information.
+This project is licensed under the MIT License - See [LICENSE](LICENSE) for more information. 
