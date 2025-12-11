@@ -1,6 +1,6 @@
 package com.diogotoporcov.accountservice.config;
 
-import com.diogotoporcov.accountservice.application.GetMyAccountUseCase;
+import com.diogotoporcov.accountservice.application.GetAccountUseCase;
 import com.diogotoporcov.accountservice.security.AccountStatusGuardFilter;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
@@ -42,7 +42,7 @@ public class SecurityConfig {
 
     @Bean
     public AccountStatusGuardFilter accountStatusGuardFilter(
-            GetMyAccountUseCase accountUseCase,
+            GetAccountUseCase accountUseCase,
             List<HandlerMapping> handlerMappings,
             @Qualifier("handlerExceptionResolver") HandlerExceptionResolver exceptionResolver
     ) {

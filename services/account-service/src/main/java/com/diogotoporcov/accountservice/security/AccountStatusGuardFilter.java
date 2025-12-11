@@ -1,6 +1,6 @@
 package com.diogotoporcov.accountservice.security;
 
-import com.diogotoporcov.accountservice.application.GetMyAccountUseCase;
+import com.diogotoporcov.accountservice.application.GetAccountUseCase;
 import com.diogotoporcov.accountservice.error.AccountInactiveException;
 import com.diogotoporcov.accountservice.account.entity.AccountStatus;
 import com.diogotoporcov.accountservice.account.entity.UserAccount;
@@ -22,11 +22,11 @@ import java.util.UUID;
 
 public class AccountStatusGuardFilter extends OncePerRequestFilter {
 
-    private final GetMyAccountUseCase getMyAccount;
+    private final GetAccountUseCase getMyAccount;
     private final List<HandlerMapping> handlerMappings;
     private final HandlerExceptionResolver exceptionResolver;
 
-    public AccountStatusGuardFilter(GetMyAccountUseCase getMyAccount,
+    public AccountStatusGuardFilter(GetAccountUseCase getMyAccount,
                                     List<HandlerMapping> handlerMappings,
                                     HandlerExceptionResolver exceptionResolver) {
         this.getMyAccount = getMyAccount;
