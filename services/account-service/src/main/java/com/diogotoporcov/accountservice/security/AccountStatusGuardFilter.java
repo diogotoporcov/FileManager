@@ -1,6 +1,7 @@
 package com.diogotoporcov.accountservice.security;
 
 import com.diogotoporcov.accountservice.application.GetMyProfileUseCase;
+import com.diogotoporcov.accountservice.error.AccountInactiveException;
 import com.diogotoporcov.accountservice.profile.entity.AccountStatus;
 import com.diogotoporcov.accountservice.profile.entity.UserProfile;
 import jakarta.servlet.FilterChain;
@@ -8,43 +9,59 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.jspecify.annotations.NonNull;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
-import org.springframework.http.ProblemDetail;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.security.web.util.matcher.RequestMatcher;
-import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
-import org.springframework.security.web.util.matcher.OrRequestMatcher;
 import org.springframework.web.filter.OncePerRequestFilter;
-import tools.jackson.databind.ObjectMapper;
+import org.springframework.web.method.HandlerMethod;
+import org.springframework.web.servlet.HandlerExecutionChain;
+import org.springframework.web.servlet.HandlerMapping;
 
 import java.io.IOException;
-import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 public class AccountStatusGuardFilter extends OncePerRequestFilter {
 
     private final GetMyProfileUseCase getMyProfile;
-    private final ObjectMapper objectMapper;
+    private final List<HandlerMapping> handlerMappings;
 
-    private final RequestMatcher skip = new OrRequestMatcher(
-            PathPatternRequestMatcher.withDefaults().matcher("/actuator/**"),
-            PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.GET, "/account/me"),
-            PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.PATCH, "/account/me"),
-            PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.DELETE, "/account/me")
-    );
-
-    public AccountStatusGuardFilter(GetMyProfileUseCase getMyProfile, ObjectMapper objectMapper) {
+    public AccountStatusGuardFilter(GetMyProfileUseCase getMyProfile, List<HandlerMapping> handlerMappings) {
         this.getMyProfile = getMyProfile;
-        this.objectMapper = objectMapper;
+        this.handlerMappings = handlerMappings;
     }
 
     @Override
     protected boolean shouldNotFilter(@NonNull HttpServletRequest request) {
-        return skip.matches(request);
+
+        if (request.getRequestURI().startsWith("/actuator/")) {
+            return true;
+        }
+
+        HandlerExecutionChain handler;
+        try {
+            handler = getHandler(request);
+        } catch (Exception e) {
+            return false;
+        }
+
+        if (handler == null) {
+            return false;
+        }
+
+        Object handlerObject = handler.getHandler();
+
+        if (handlerObject instanceof HandlerMethod hm) {
+            if (hm.hasMethodAnnotation(AllowInactive.class)) {
+                return true;
+            }
+
+            if (hm.getBeanType().isAnnotationPresent(AllowInactive.class)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     @Override
@@ -53,7 +70,9 @@ public class AccountStatusGuardFilter extends OncePerRequestFilter {
             @NonNull HttpServletResponse response,
             @NonNull FilterChain filterChain
     ) throws ServletException, IOException {
+
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+
         if (auth == null || !auth.isAuthenticated() || !(auth.getPrincipal() instanceof Jwt jwt)) {
             filterChain.doFilter(request, response);
             return;
@@ -63,34 +82,30 @@ public class AccountStatusGuardFilter extends OncePerRequestFilter {
         try {
             userId = UUID.fromString(jwt.getSubject());
         } catch (Exception e) {
-            writeProblem(response, request, HttpStatus.UNAUTHORIZED, "Invalid token subject");
-            return;
+            throw new IllegalArgumentException("Invalid token subject");
         }
 
         String email = jwt.getClaimAsString("email");
         if (email == null || email.isBlank()) {
-            writeProblem(response, request, HttpStatus.UNAUTHORIZED, "Invalid token: missing email claim");
-            return;
+            throw new IllegalArgumentException("Invalid token: missing email claim");
         }
 
         UserProfile profile = getMyProfile.execute(userId, email);
 
         if (profile.getStatus() == AccountStatus.INACTIVE) {
-            writeProblem(response, request, HttpStatus.FORBIDDEN, "Account is inactive");
-            return;
+            throw new AccountInactiveException("Account is inactive");
         }
 
         filterChain.doFilter(request, response);
     }
 
-    private void writeProblem(HttpServletResponse response, HttpServletRequest request, HttpStatus status, String detail) throws IOException {
-        ProblemDetail pd = ProblemDetail.forStatusAndDetail(status, detail);
-        pd.setTitle(status.getReasonPhrase());
-        pd.setProperty("timestamp", Instant.now().toString());
-        pd.setProperty("path", request.getRequestURI());
-
-        response.setStatus(status.value());
-        response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
-        objectMapper.writeValue(response.getOutputStream(), pd);
+    private HandlerExecutionChain getHandler(HttpServletRequest request) throws Exception {
+        for (HandlerMapping mapping : handlerMappings) {
+            HandlerExecutionChain handler = mapping.getHandler(request);
+            if (handler != null) {
+                return handler;
+            }
+        }
+        return null;
     }
 }
