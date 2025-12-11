@@ -57,7 +57,6 @@ services:
       JWT_AUDIENCE: ${JWT_AUDIENCE}
 
       SERVER_PORT: ${SERVER_PORT}
-
     ports:
       - "8081:8080"
     restart: unless-stopped
@@ -74,9 +73,51 @@ services:
       timeout: 5s
       retries: 5
       start_period: 25s
-
     volumes:
-      - ./data:/app/data
+      - ./data/auth-service:/app/data
+
+  account-service:
+    build:
+      context: ./services/account-service
+      dockerfile: Dockerfile
+    container_name: account-service
+    env_file:
+      - .env
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+
+      RABBIT_HOST: rabbitmq
+      RABBIT_PORT: 5672
+      RABBIT_USER: ${RABBITMQ_USERNAME}
+      RABBIT_PASSWORD: ${RABBITMQ_PASSWORD}
+
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_ISSUER: ${JWT_ISSUER}
+      JWT_AUDIENCE: ${JWT_AUDIENCE}
+
+      SERVER_PORT: 8080
+    ports:
+      - "8082:8080"
+    restart: unless-stopped
+    networks:
+      - file-manager-net
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health | grep UP || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 25s
+    volumes:
+      - ./data/account-service:/app/data
 
 networks:
   file-manager-net:
