@@ -55,11 +55,11 @@ public class RegisterUserUseCase {
         }
 
         UUID userId = UUID.randomUUID();
-        UserIdentity user = new UserIdentity(userId, email, UserStatus.ACTIVE);
-        users.save(user);
+
+        UserIdentity managedUser = users.save(new UserIdentity(userId, email, UserStatus.ACTIVE));
 
         String hash = passwordEncoder.encode(req.password());
-        credentials.save(new LocalCredential(user, hash));
+        credentials.save(new LocalCredential(managedUser, hash));
 
         appEvents.publishEvent(new UserRegisteredInternalEvent(userId, email));
 
