@@ -13,8 +13,8 @@ public class RequestContextExtractor {
     }
 
     private static String header(HttpServletRequest req) {
-        String v = req.getHeader("User-Agent");
-        return (v == null || v.isBlank()) ? null : v;
+        String value = req.getHeader("User-Agent");
+        return (value == null || value.isBlank()) ? null : value;
     }
 
     private static String resolveIp(HttpServletRequest req) {
