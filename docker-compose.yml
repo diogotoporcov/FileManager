@@ -1,0 +1,52 @@
+services:
+  keycloak-db:
+    image: postgres:16
+    container_name: keycloak-postgres
+    environment:
+      POSTGRES_DB: ${KC_POSTGRES_DB}
+      POSTGRES_USER: ${KC_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${KC_POSTGRES_PASSWORD}
+    volumes:
+      - keycloak_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${KC_POSTGRES_USER} -d ${KC_POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - file-manager-net
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.4
+    container_name: keycloak
+    command:
+      - start-dev
+      - --import-realm
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/${KC_POSTGRES_DB}
+      KC_DB_USERNAME: ${KC_POSTGRES_USER}
+      KC_DB_PASSWORD: ${KC_POSTGRES_PASSWORD}
+
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN_USER}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+
+      KC_HTTP_ENABLED: "true"
+      KC_HTTP_PORT: 8080
+    ports:
+      - "${KEYCLOAK_HTTP_PORT}:8080"
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+    volumes:
+      - ./keycloak/import:/opt/keycloak/data/import
+    networks:
+      - file-manager-net
+
+volumes:
+  keycloak_pgdata:
+  minio_data:
+
+networks:
+  file-manager-net:
+    driver: bridge
