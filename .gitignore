@@ -1,5 +1,4 @@
 .idea/
 FileManager.iml
 .env
-minio/
-**/minio/
+minio/data
