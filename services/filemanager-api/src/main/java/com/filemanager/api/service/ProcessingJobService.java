@@ -27,6 +27,7 @@ public class ProcessingJobService {
     private final FileFingerprintRepository fileFingerprintRepository;
     private final ImageFingerprintRepository imageFingerprintRepository;
     private final DuplicateCandidateRepository duplicateCandidateRepository;
+    private final FileManagerMetrics fileManagerMetrics;
 
     @Value("${app.phash.threshold:10}")
     private int phashThreshold;
@@ -45,6 +46,8 @@ public class ProcessingJobService {
         job.setStatus(ProcessingJob.JobStatus.FAILED);
         job.setErrorMessage(errorMessage);
         processingJobRepository.save(job);
+
+        fileManagerMetrics.recordJobFailed(job.getJobType().name());
     }
 
     @Transactional
@@ -106,25 +109,27 @@ public class ProcessingJobService {
                     || duplicateCandidateRepository.existsBySourceFileIdAndCandidateFileIdAndDetectionMethod(
                     candidateFile.getId(), file.getId(), DuplicateCandidate.DetectionMethod.EXACT);
 
-            if (!exists) {
-                DuplicateCandidate candidate = DuplicateCandidate.builder()
-                        .sourceFile(file)
-                        .candidateFile(candidateFile)
-                        .detectionMethod(DuplicateCandidate.DetectionMethod.EXACT)
-                        .distance(0.0)
-                        .confidenceScore(1.0)
-                        .status(DuplicateCandidate.CandidateStatus.PENDING)
-                        .build();
+                if (!exists) {
+                    DuplicateCandidate candidate = DuplicateCandidate.builder()
+                            .sourceFile(file)
+                            .candidateFile(candidateFile)
+                            .detectionMethod(DuplicateCandidate.DetectionMethod.EXACT)
+                            .distance(0.0)
+                            .confidenceScore(1.0)
+                            .status(DuplicateCandidate.CandidateStatus.PENDING)
+                            .build();
 
-                duplicateCandidateRepository.save(candidate);
-                log.info("Created exact duplicate candidate: {} and {}", file.getId(), candidateFile.getId());
-            }
+                    duplicateCandidateRepository.save(candidate);
+                    fileManagerMetrics.recordDuplicateCandidateCreated(DuplicateCandidate.DetectionMethod.EXACT.name());
+                    log.info("Created exact duplicate candidate: {} and {}", file.getId(), candidateFile.getId());
+                }
         }
 
         // 3. Mark job as COMPLETED
         job.setStatus(ProcessingJob.JobStatus.COMPLETED);
         job.setErrorMessage(null);
         processingJobRepository.save(job);
+        fileManagerMetrics.recordJobCompleted(job.getJobType().name());
     }
 
     @Transactional
@@ -199,6 +204,7 @@ public class ProcessingJobService {
                             .build();
 
                     duplicateCandidateRepository.save(candidate);
+                    fileManagerMetrics.recordDuplicateCandidateCreated(DuplicateCandidate.DetectionMethod.PHASH.name());
                     log.info("Created pHash duplicate candidate: {} and {} (distance: {})", file.getId(), candidateFile.getId(), distance);
                 }
             }
@@ -208,6 +214,7 @@ public class ProcessingJobService {
         job.setStatus(ProcessingJob.JobStatus.COMPLETED);
         job.setErrorMessage(null);
         processingJobRepository.save(job);
+        fileManagerMetrics.recordJobCompleted(job.getJobType().name());
     }
 
     private int calculateHammingDistance(String h1, String h2) {

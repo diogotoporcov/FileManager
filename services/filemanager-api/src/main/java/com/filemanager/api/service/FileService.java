@@ -39,6 +39,7 @@ public class FileService {
     private final ObjectStoragePort objectStoragePort;
     private final ApplicationEventPublisher applicationEventPublisher;
     private final AccessControlService accessControlService;
+    private final FileManagerMetrics fileManagerMetrics;
 
     @Transactional
     public FileEntity uploadFile(String fileName, String contentType, long size, InputStream content, UUID ownerUserId, UUID ownerOrganizationId, UUID actorUserId) {
@@ -79,6 +80,9 @@ public class FileService {
 
             FileEntity savedFile = fileRepository.save(fileEntity);
 
+            String ownerType = ownerUserId != null ? "USER" : "ORGANIZATION";
+            fileManagerMetrics.recordFileUpload(size, ownerType);
+
             List<ProcessingJob.JobType> plannedJobs = processingJobPlanner.planJobs(effectiveContentType);
 
             for (ProcessingJob.JobType jobType : plannedJobs) {
@@ -89,6 +93,8 @@ public class FileService {
                         .build();
 
                 ProcessingJob savedJob = processingJobRepository.save(job);
+
+                fileManagerMetrics.recordJobCreated(jobType.name());
 
                 FileProcessingRequestedEvent event = FileProcessingRequestedEvent.builder()
                         .eventId(UUID.randomUUID())
@@ -153,6 +159,7 @@ public class FileService {
         accessControlService.assertCanAccessFile(actorUserId, fileId, Permission.FILE_VIEW);
         FileEntity file = fileRepository.findByIdAndDeletedAtIsNull(fileId)
                 .orElseThrow(() -> new ResourceNotFoundException("File not found: " + fileId));
+        fileManagerMetrics.recordFileDownload();
         return objectStoragePort.getObject(file.getStoragePath());
     }
 

@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     metadata_api_base_url: str = "http://localhost:8081"
     internal_api_token: str = Field(min_length=1)
 
+    # Metrics
+    metrics_enabled: bool = True
+
     # Logging
     log_level: str = "INFO"
 

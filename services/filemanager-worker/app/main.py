@@ -1,7 +1,8 @@
 import logging
 import asyncio
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Response, HTTPException, status, Request
+from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 from app.config import settings
 from app.processors.impl import ChecksumProcessor, PHashProcessor
 from app.storage.s3 import S3ObjectStorageReader
@@ -59,6 +60,29 @@ async def health():
         "version": "0.1.0",
         "processors": [p.name for p in processors]
     }
+
+@app.get("/metrics")
+async def metrics(request: Request):
+    if not settings.metrics_enabled:
+        return Response(status_code=404)
+    
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing or invalid authentication credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    token = auth_header[7:]
+    if token != settings.internal_api_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+        
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 if __name__ == "__main__":
     import uvicorn

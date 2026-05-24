@@ -125,6 +125,13 @@ class GatewayRoutingTest {
     }
 
     @Test
+    void metricsEndpointIsNotExposed() {
+        webClient.get().uri("/actuator/metrics")
+                .exchange()
+                .expectStatus().isNotFound();
+    }
+
+    @Test
     void routesApiV1FilesToBackendFiles() {
         stubFor(get(urlEqualTo("/files"))
                 .willReturn(aResponse()

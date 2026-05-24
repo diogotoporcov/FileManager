@@ -161,6 +161,12 @@ class SecurityIntegrationTest {
     }
 
     @Test
+    void metricsEndpoint_IsForbiddenOrNotFound() throws Exception {
+        mockMvc.perform(get("/actuator/metrics"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void internalEndpoint_WithoutToken_Returns401() throws Exception {
         mockMvc.perform(post("/internal/processing/jobs/" + UUID.randomUUID() + "/checksum-result")
                         .contentType(MediaType.APPLICATION_JSON)

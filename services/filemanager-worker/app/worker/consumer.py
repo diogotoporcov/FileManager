@@ -30,6 +30,9 @@ class EventConsumer:
                     
                 logger.info(f"Received message from Kafka (offset: {msg.offset})")
                 
+                from app import metrics
+                metrics.EVENTS_RECEIVED.inc()
+                
                 try:
                     handled = await self.handler.handle_message(msg)
                     

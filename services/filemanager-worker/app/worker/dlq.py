@@ -75,6 +75,8 @@ class KafkaDeadLetterPublisher(DeadLetterPublisher):
                 self.topic,
                 json.dumps(payload).encode('utf-8')
             )
+            from app import metrics
+            metrics.DLQ_MESSAGES.inc()
             logger.info(f"Published message to DLQ topic {self.topic}")
         except Exception as e:
             logger.error(f"Failed to publish to DLQ: {e}")

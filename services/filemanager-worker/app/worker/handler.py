@@ -55,8 +55,13 @@ class WorkerMessageHandler:
         
         while attempts < max_attempts:
             attempts += 1
+            if attempts > 1:
+                from app import metrics
+                metrics.RETRIES.inc()
             try:
                 await self.flow.run(event)
+                from app import metrics
+                metrics.EVENTS_PROCESSED.labels(status="success").inc()
                 return True
             except NonRetryableProcessingError as e:
                 logger.warning(f"Non-retryable error on attempt {attempts} for job {event.processing_job_id}: {e}")
@@ -79,6 +84,10 @@ class WorkerMessageHandler:
 
         # 3. Handle failure after retries or non-retryable error
         logger.info(f"Reporting failure to API for job {event.processing_job_id} after {attempts} attempts")
+        from app import metrics
+        error_class = last_error.__class__.__name__ if last_error else "UnknownError"
+        metrics.EVENTS_FAILED.labels(error_class=error_class).inc()
+        metrics.EVENTS_PROCESSED.labels(status="failure").inc()
         try:
             await self.flow.report_failure(event, str(last_error))
             return True

@@ -47,6 +47,8 @@ class FileServiceTest {
     private ApplicationEventPublisher applicationEventPublisher;
     @Mock
     private AccessControlService accessControlService;
+    @Mock
+    private FileManagerMetrics fileManagerMetrics;
 
     @InjectMocks
     private FileService fileService;
@@ -94,6 +96,9 @@ class FileServiceTest {
         verify(fileRepository).save(any(FileEntity.class));
         verify(processingJobRepository).save(any(ProcessingJob.class));
         
+        verify(fileManagerMetrics).recordFileUpload(size, "USER");
+        verify(fileManagerMetrics).recordJobCreated("CHECKSUM");
+
         ArgumentCaptor<FileProcessingRequestedEvent> eventCaptor = ArgumentCaptor.forClass(FileProcessingRequestedEvent.class);
         verify(applicationEventPublisher).publishEvent(eventCaptor.capture());
         
@@ -139,6 +144,10 @@ class FileServiceTest {
         assertNotNull(result);
         verify(processingJobRepository, times(2)).save(any(ProcessingJob.class));
         
+        verify(fileManagerMetrics).recordFileUpload(size, "USER");
+        verify(fileManagerMetrics).recordJobCreated("CHECKSUM");
+        verify(fileManagerMetrics).recordJobCreated("PHASH");
+
         ArgumentCaptor<FileProcessingRequestedEvent> eventCaptor = ArgumentCaptor.forClass(FileProcessingRequestedEvent.class);
         verify(applicationEventPublisher, times(2)).publishEvent(eventCaptor.capture());
         
@@ -147,5 +156,56 @@ class FileServiceTest {
         
         assertTrue(events.stream().anyMatch(e -> e.jobType().equals("CHECKSUM")));
         assertTrue(events.stream().anyMatch(e -> e.jobType().equals("PHASH")));
+    }
+
+    @Test
+    void uploadFile_OrganizationOwned_ShouldRecordOrganizationMetrics() {
+        // Arrange
+        String fileName = "org.txt";
+        String contentType = "text/plain";
+        long size = 50L;
+        ByteArrayInputStream content = new ByteArrayInputStream(new byte[50]);
+        UUID orgId = UUID.randomUUID();
+        Organization org = new Organization();
+        org.setId(orgId);
+
+        when(organizationRepository.findById(orgId)).thenReturn(Optional.of(org));
+
+        FileEntity fileEntity = new FileEntity();
+        fileEntity.setId(UUID.randomUUID());
+        fileEntity.setStoragePath("storage-path");
+        fileEntity.setMimeType(contentType);
+        fileEntity.setSize(size);
+        fileEntity.setOwnerOrganization(org);
+
+        when(fileRepository.save(any(FileEntity.class))).thenReturn(fileEntity);
+        when(processingJobPlanner.planJobs(contentType)).thenReturn(List.of(ProcessingJob.JobType.CHECKSUM));
+        
+        ProcessingJob job = ProcessingJob.builder().id(UUID.randomUUID()).jobType(ProcessingJob.JobType.CHECKSUM).build();
+        when(processingJobRepository.save(any(ProcessingJob.class))).thenReturn(job);
+
+        // Act
+        fileService.uploadFile(fileName, contentType, size, content, null, orgId, userId);
+
+        // Assert
+        verify(fileManagerMetrics).recordFileUpload(size, "ORGANIZATION");
+    }
+
+    @Test
+    void downloadFile_ShouldRecordDownloadMetrics() {
+        // Arrange
+        UUID fileId = UUID.randomUUID();
+        FileEntity file = new FileEntity();
+        file.setId(fileId);
+        file.setStoragePath("path/to/file");
+
+        when(fileRepository.findByIdAndDeletedAtIsNull(fileId)).thenReturn(Optional.of(file));
+        when(objectStoragePort.getObject("path/to/file")).thenReturn(new ByteArrayInputStream("data".getBytes()));
+
+        // Act
+        fileService.downloadFile(fileId, userId);
+
+        // Assert
+        verify(fileManagerMetrics).recordFileDownload();
     }
 }

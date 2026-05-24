@@ -36,6 +36,8 @@ class ProcessingJobServiceTest {
     private ImageFingerprintRepository imageFingerprintRepository;
     @Mock
     private DuplicateCandidateRepository duplicateCandidateRepository;
+    @Mock
+    private FileManagerMetrics fileManagerMetrics;
 
     @InjectMocks
     private ProcessingJobService processingJobService;
@@ -99,6 +101,9 @@ class ProcessingJobServiceTest {
 
         assertEquals(ProcessingJob.JobStatus.COMPLETED, job.getStatus());
         verify(processingJobRepository).save(job);
+        
+        verify(fileManagerMetrics).recordJobCompleted("CHECKSUM");
+        verify(fileManagerMetrics).recordDuplicateCandidateCreated("EXACT");
     }
 
     @Test
@@ -165,6 +170,7 @@ class ProcessingJobServiceTest {
         ProcessingJob job = new ProcessingJob();
         job.setId(jobId);
         job.setFile(file);
+        job.setJobType(ProcessingJob.JobType.CHECKSUM);
         job.setStatus(ProcessingJob.JobStatus.PENDING);
 
         when(processingJobRepository.findById(jobId)).thenReturn(Optional.of(job));
@@ -176,6 +182,8 @@ class ProcessingJobServiceTest {
         assertEquals(ProcessingJob.JobStatus.FAILED, job.getStatus());
         assertEquals(error, job.getErrorMessage());
         verify(processingJobRepository).save(job);
+        
+        verify(fileManagerMetrics).recordJobFailed("CHECKSUM");
     }
 
     @Test
@@ -191,6 +199,7 @@ class ProcessingJobServiceTest {
         ProcessingJob job = new ProcessingJob();
         job.setId(jobId);
         job.setFile(file);
+        job.setJobType(ProcessingJob.JobType.CHECKSUM);
 
         when(processingJobRepository.findById(jobId)).thenReturn(Optional.of(job));
 
@@ -302,6 +311,9 @@ class ProcessingJobServiceTest {
 
         assertEquals(ProcessingJob.JobStatus.COMPLETED, job.getStatus());
         verify(processingJobRepository).save(job);
+        
+        verify(fileManagerMetrics).recordJobCompleted("PHASH");
+        verify(fileManagerMetrics).recordDuplicateCandidateCreated("PHASH");
     }
 
     @Test
