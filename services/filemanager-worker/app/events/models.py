@@ -4,17 +4,17 @@ from typing import Optional, Self
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 class FileProcessingRequestedEvent(BaseModel):
-    event_id: UUID = Field(alias="eventId")
-    event_type: str = Field(alias="eventType")
-    occurred_at: datetime = Field(alias="occurredAt")
-    file_id: UUID = Field(alias="fileId")
-    processing_job_id: UUID = Field(alias="processingJobId")
-    job_type: str = Field(alias="jobType")
-    storage_path: str = Field(alias="storagePath")
-    mime_type: str = Field(alias="mimeType")
-    size: int = Field(alias="size")
-    owner_user_id: Optional[UUID] = Field(default=None, alias="ownerUserId")
-    owner_organization_id: Optional[UUID] = Field(default=None, alias="ownerOrganizationId")
+    event_id: UUID = Field(validation_alias="eventId", serialization_alias="eventId")
+    event_type: str = Field(validation_alias="eventType", serialization_alias="eventType")
+    occurred_at: datetime = Field(validation_alias="occurredAt", serialization_alias="occurredAt")
+    file_id: UUID = Field(validation_alias="fileId", serialization_alias="fileId")
+    processing_job_id: UUID = Field(validation_alias="processingJobId", serialization_alias="processingJobId")
+    job_type: str = Field(validation_alias="jobType", serialization_alias="jobType")
+    storage_path: str = Field(validation_alias="storagePath", serialization_alias="storagePath")
+    mime_type: str = Field(validation_alias="mimeType", serialization_alias="mimeType")
+    size: int = Field(validation_alias="size")
+    owner_user_id: Optional[UUID] = Field(default=None, validation_alias="ownerUserId", serialization_alias="ownerUserId")
+    owner_organization_id: Optional[UUID] = Field(default=None, validation_alias="ownerOrganizationId", serialization_alias="ownerOrganizationId")
 
     model_config = ConfigDict(populate_by_name=True)
 

@@ -63,17 +63,19 @@ def test_histograms_observe():
 
 @pytest.fixture
 def sample_event():
+    import uuid
+    from datetime import datetime, timezone
     return FileProcessingRequestedEvent(
-        event_id="00000000-0000-0000-0000-000000000001",
+        event_id=uuid.UUID("00000000-0000-0000-0000-000000000001"),
         event_type="test.type",
-        occurred_at="2024-01-01T00:00:00Z",
-        file_id="00000000-0000-0000-0000-000000000002",
-        processing_job_id="00000000-0000-0000-0000-000000000003",
+        occurred_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
+        file_id=uuid.UUID("00000000-0000-0000-0000-000000000002"),
+        processing_job_id=uuid.UUID("00000000-0000-0000-0000-000000000003"),
         job_type="CHECKSUM",
         storage_path="test/path",
         mime_type="text/plain",
         size=100,
-        owner_user_id="00000000-0000-0000-0000-000000000004"
+        owner_user_id=uuid.UUID("00000000-0000-0000-0000-000000000004")
     )
 
 @pytest.mark.asyncio

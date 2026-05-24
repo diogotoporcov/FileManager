@@ -42,7 +42,8 @@ class ProcessingFlow:
         
         return processor
 
-    async def _execute_processor(self, processor: Processor, event: FileProcessingRequestedEvent) -> Dict[str, Any]:
+    @staticmethod
+    async def _execute_processor(processor: Processor, event: FileProcessingRequestedEvent) -> Dict[str, Any]:
         from app import metrics
         import time
         proc_start = time.perf_counter()
@@ -85,7 +86,8 @@ class ProcessingFlow:
         except Exception as e:
             raise RetryableProcessingError(f"Failed to report success: {e}")
 
-    def _extract_result(self, result: Dict[str, Any], key: str, expected_length: int, processor_name: str) -> str:
+    @staticmethod
+    def _extract_result(result: Dict[str, Any], key: str, expected_length: int, processor_name: str) -> str:
         if key not in result:
             raise NonRetryableProcessingError(f"Processor {processor_name} did not produce required '{key}' output")
         

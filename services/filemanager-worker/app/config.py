@@ -37,7 +37,10 @@ class Settings(BaseSettings):
 
     # API
     metadata_api_base_url: AnyHttpUrl = Field(default="http://localhost:8081")
-    internal_api_token: NonBlankString
+    internal_api_token: NonBlankString = Field(
+        default=...,
+        validation_alias=AliasChoices("internal_api_token", "INTERNAL_API_TOKEN")
+    )
 
     # Metrics
     metrics_enabled: bool = True

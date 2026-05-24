@@ -30,7 +30,7 @@ handler = WorkerMessageHandler(flow, dlq_publisher)
 consumer = EventConsumer(handler)
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(_app: FastAPI):
     logger.info("Starting worker lifespan")
     consumer_task = None
     if settings.worker_consumer_enabled:

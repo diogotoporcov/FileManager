@@ -44,12 +44,13 @@ def test_internal_api_token_validation(monkeypatch):
     monkeypatch.delenv("INTERNAL_API_TOKEN", raising=False)
     # We need to make sure we don't accidentally get it from any other source
     with pytest.raises(ValidationError):
+        # noinspection PyArgumentList
         Settings()
 
 def test_s3_validation():
     # Invalid S3 endpoint
     with pytest.raises(ValidationError):
-        Settings(internal_api_token="test-token", s3_endpoint="not-a-url")
+        Settings(internal_api_token="test-token", s3_endpoint="not-a-url")  # type: ignore
 
     # Blank S3 bucket
     with pytest.raises(ValidationError):
@@ -91,13 +92,13 @@ def test_kafka_validation():
 def test_log_level_validation():
     # Invalid log level
     with pytest.raises(ValidationError):
-        Settings(internal_api_token="test-token", log_level="INVALID")
+        Settings(internal_api_token="test-token", log_level="INVALID")  # type: ignore
 
 def test_metadata_api_validation():
     # Invalid metadata API URL
     with pytest.raises(ValidationError):
-        Settings(internal_api_token="test-token", metadata_api_base_url="not-a-url")
+        Settings(internal_api_token="test-token", metadata_api_base_url="not-a-url")  # type: ignore
     
     # Blank metadata API URL
     with pytest.raises(ValidationError):
-        Settings(internal_api_token="test-token", metadata_api_base_url=" ")
+        Settings(internal_api_token="test-token", metadata_api_base_url=" ")  # type: ignore

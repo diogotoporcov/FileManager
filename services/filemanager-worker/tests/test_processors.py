@@ -1,15 +1,16 @@
-import pytest
-import uuid
 import hashlib
-import base64
-import io
+import uuid
 from datetime import datetime, timezone
 from typing import AsyncIterator
+
+import pytest
+
 from app.events.models import FileProcessingRequestedEvent
 from app.processors.impl import ChecksumProcessor, PHashProcessor
-from app.worker.flow import ProcessingFlow
-from app.storage.base import ObjectStorageReader
 from app.sinks.base import ProcessingResultSink
+from app.storage.base import ObjectStorageReader
+from app.worker.flow import ProcessingFlow
+
 
 class FakeStorageReader(ObjectStorageReader):
     async def read_object(self, storage_path: str) -> AsyncIterator[bytes]:
@@ -28,7 +29,9 @@ class ImageStorageReader(ObjectStorageReader):
 class FakeResultSink(ProcessingResultSink):
     def __init__(self):
         self.checksum_reported = False
+        self.reported_sha256 = None
         self.phash_reported = False
+        self.reported_phash = None
         self.failure_reported = False
 
     async def report_checksum_success(self, job_id: uuid.UUID, file_id: uuid.UUID, sha256: str):
@@ -88,7 +91,7 @@ async def test_phash_processor_real_hash(sample_event):
     assert "phash" in result
     assert len(result["phash"]) == 16
     assert result["phash"] == result["phash"].lower()
-    # Check if it's valid hex
+    # Check if it's a valid hex
     int(result["phash"], 16)
 
 @pytest.mark.asyncio

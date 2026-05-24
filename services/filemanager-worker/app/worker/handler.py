@@ -1,13 +1,13 @@
 import asyncio
-import logging
 import json
+import logging
 from typing import Any, Optional
-from pydantic import ValidationError
+
 from app.config import settings
 from app.events.models import FileProcessingRequestedEvent
-from app.worker.flow import ProcessingFlow
 from app.worker.dlq import DeadLetterPublisher
 from app.worker.errors import FailureCategory, ProcessingError, RetryableProcessingError, NonRetryableProcessingError
+from app.worker.flow import ProcessingFlow
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,8 @@ class WorkerMessageHandler:
         # Execute processing flow with retry logic.
         return await self._process_with_retries(msg, event)
 
-    def _parse_event(self, msg: Any) -> FileProcessingRequestedEvent:
+    @staticmethod
+    def _parse_event(msg: Any) -> FileProcessingRequestedEvent:
         raw_value = msg.value
         if isinstance(raw_value, bytes):
             data = json.loads(raw_value.decode("utf-8"))

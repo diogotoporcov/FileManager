@@ -1,9 +1,10 @@
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from app.worker.consumer import EventConsumer
-from app.worker.flow import ProcessingFlow
 
+import pytest
+
+from app.worker.consumer import EventConsumer
 from app.worker.handler import WorkerMessageHandler
+
 
 @pytest.mark.asyncio
 async def test_consumer_manual_commit_on_success():
