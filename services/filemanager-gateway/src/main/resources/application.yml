@@ -1,0 +1,39 @@
+server:
+  port: ${PORT_GATEWAY:8080}
+
+filemanager:
+  api:
+    base-url: ${FILEMANAGER_API_BASE_URL:http://localhost:8081}
+
+spring:
+  application:
+    name: filemanager-gateway
+  cloud:
+    gateway:
+      server:
+        webflux:
+          routes:
+            # 1. Block access to internal endpoints
+            - id: internal_stop
+              uri: "forward:/not-found"
+              predicates:
+                - Path=/api/v1/internal/**, /internal/**
+              filters:
+                - SetStatus=404
+
+            # 2. Route public API v1 to backend
+            - id: filemanager_api_v1
+              uri: ${filemanager.api.base-url}
+              predicates:
+                - Path=/api/v1/**
+              filters:
+                - RewritePath=/api/v1/(?<segment>.*), /${segment}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: always

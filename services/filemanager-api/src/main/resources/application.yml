@@ -32,7 +32,7 @@ app:
     threshold: ${PHASH_THRESHOLD:10}
 
 server:
-  port: ${PORT_API:8080}
+  port: ${PORT_API:8081}
 
 minio:
   endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
