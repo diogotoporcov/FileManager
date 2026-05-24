@@ -8,6 +8,8 @@ from app.storage.s3 import S3ObjectStorageReader
 from app.sinks.http import HttpProcessingResultSink
 from app.worker.flow import ProcessingFlow
 from app.worker.consumer import EventConsumer
+from app.worker.dlq import KafkaDeadLetterPublisher
+from app.worker.handler import WorkerMessageHandler
 
 logging.basicConfig(level=getattr(logging, settings.log_level.upper()))
 logger = logging.getLogger(__name__)
@@ -15,6 +17,7 @@ logger = logging.getLogger(__name__)
 # Wire dependencies
 storage_reader = S3ObjectStorageReader()
 result_sink = HttpProcessingResultSink()
+dlq_publisher = KafkaDeadLetterPublisher()
 
 processors = [
     ChecksumProcessor(storage_reader),
@@ -22,7 +25,8 @@ processors = [
 ]
 
 flow = ProcessingFlow(processors, result_sink)
-consumer = EventConsumer(flow)
+handler = WorkerMessageHandler(flow, dlq_publisher)
+consumer = EventConsumer(handler)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -44,6 +48,7 @@ async def lifespan(app: FastAPI):
             await consumer_task
         except asyncio.CancelledError:
             pass
+    await dlq_publisher.stop()
 
 app = FastAPI(title="FileManager Worker", lifespan=lifespan)
 

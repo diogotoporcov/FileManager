@@ -7,6 +7,11 @@ from app.worker.flow import ProcessingFlow
 from app.processors.base import Processor
 from app.sinks.base import ProcessingResultSink
 
+from app.worker.errors import NonRetryableProcessingError
+
+VALID_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+VALID_PHASH = "1234567890abcdef"
+
 @pytest.fixture
 def sample_event():
     return FileProcessingRequestedEvent(
@@ -33,7 +38,7 @@ async def test_flow_success_handled(sample_event):
     processor = MagicMock(spec=Processor)
     processor.name = "checksum"
     processor.should_process.return_value = True
-    processor.process = AsyncMock(return_value={"sha256": "fake-hash"})
+    processor.process = AsyncMock(return_value={"sha256": VALID_SHA256})
     
     flow = ProcessingFlow(processors=[processor], result_sink=sink)
     
@@ -41,7 +46,7 @@ async def test_flow_success_handled(sample_event):
     derived_data = await flow.run(sample_event)
     
     # Assert
-    assert derived_data == {"sha256": "fake-hash"}
+    assert derived_data == {"sha256": VALID_SHA256}
     sink.report_checksum_success.assert_called_once()
     sink.report_failure.assert_not_called()
 
@@ -55,7 +60,7 @@ async def test_flow_phash_success(sample_event):
     processor = MagicMock(spec=Processor)
     processor.name = "phash"
     processor.should_process.return_value = True
-    processor.process = AsyncMock(return_value={"phash": "fake-phash"})
+    processor.process = AsyncMock(return_value={"phash": VALID_PHASH})
     
     flow = ProcessingFlow(processors=[processor], result_sink=sink)
     
@@ -63,11 +68,11 @@ async def test_flow_phash_success(sample_event):
     derived_data = await flow.run(sample_event)
     
     # Assert
-    assert derived_data == {"phash": "fake-phash"}
+    assert derived_data == {"phash": VALID_PHASH}
     sink.report_phash_success.assert_called_once_with(
         sample_event.processing_job_id,
         sample_event.file_id,
-        "fake-phash"
+        VALID_PHASH
     )
 
 @pytest.mark.asyncio
@@ -83,16 +88,28 @@ async def test_flow_processor_failure_handled(sample_event):
     
     flow = ProcessingFlow(processors=[processor], result_sink=sink)
     
+    # Act & Assert
+    with pytest.raises(Exception, match="Processing failed"):
+        await flow.run(sample_event)
+    
+    sink.report_failure.assert_not_called()
+
+@pytest.mark.asyncio
+async def test_flow_report_failure_works(sample_event):
+    # Arrange
+    sink = MagicMock(spec=ProcessingResultSink)
+    sink.report_failure = AsyncMock()
+    
+    flow = ProcessingFlow(processors=[], result_sink=sink)
+    
     # Act
-    derived_data = await flow.run(sample_event)
+    await flow.report_failure(sample_event, "Test error")
     
     # Assert
-    # If handled, it returns empty result instead of raising
-    assert derived_data == {}
     sink.report_failure.assert_called_once_with(
         sample_event.processing_job_id,
         sample_event.file_id,
-        "Processing failed"
+        "Test error"
     )
 
 @pytest.mark.asyncio
@@ -101,18 +118,12 @@ async def test_flow_report_failure_fails_propagates(sample_event):
     sink = MagicMock(spec=ProcessingResultSink)
     sink.report_failure = AsyncMock(side_effect=Exception("API unreachable"))
     
-    processor = MagicMock(spec=Processor)
-    processor.name = "checksum"
-    processor.should_process.return_value = True
-    processor.process = AsyncMock(side_effect=Exception("Processing failed"))
-    
-    flow = ProcessingFlow(processors=[processor], result_sink=sink)
+    flow = ProcessingFlow(processors=[], result_sink=sink)
     
     # Act & Assert
-    with pytest.raises(Exception, match="API unreachable"):
-        await flow.run(sample_event)
-    
-    sink.report_failure.assert_called_once()
+    from app.worker.errors import RetryableProcessingError
+    with pytest.raises(RetryableProcessingError):
+        await flow.report_failure(sample_event, "Test error")
 
 @pytest.mark.asyncio
 async def test_flow_unsupported_job_type_reports_failure(sample_event):
@@ -124,12 +135,12 @@ async def test_flow_unsupported_job_type_reports_failure(sample_event):
     # No embedding processor registered
     flow = ProcessingFlow(processors=[], result_sink=sink)
     
-    # Act
-    await flow.run(sample_event)
+    # Act & Assert
+    with pytest.raises(NonRetryableProcessingError):
+        await flow.run(sample_event)
     
     # Assert
-    sink.report_failure.assert_called_once()
-    assert "No processor found" in sink.report_failure.call_args[0][2]
+    sink.report_failure.assert_not_called()
 
 @pytest.mark.asyncio
 async def test_flow_missing_required_output_reports_failure(sample_event):
@@ -144,9 +155,101 @@ async def test_flow_missing_required_output_reports_failure(sample_event):
     
     flow = ProcessingFlow(processors=[processor], result_sink=sink)
     
-    # Act
-    await flow.run(sample_event)
+    # Act & Assert
+    with pytest.raises(NonRetryableProcessingError):
+        await flow.run(sample_event)
     
     # Assert
-    sink.report_failure.assert_called_once()
-    assert "did not produce required 'sha256'" in sink.report_failure.call_args[0][2]
+    sink.report_failure.assert_not_called()
+
+@pytest.mark.asyncio
+async def test_flow_processor_returns_none_fails(sample_event):
+    sink = MagicMock(spec=ProcessingResultSink)
+    processor = MagicMock(spec=Processor)
+    processor.name = "checksum"
+    processor.should_process.return_value = True
+    processor.process = AsyncMock(return_value=None)
+    
+    flow = ProcessingFlow(processors=[processor], result_sink=sink)
+    
+    with pytest.raises(NonRetryableProcessingError, match="returned invalid result type: NoneType"):
+        await flow.run(sample_event)
+
+@pytest.mark.asyncio
+async def test_flow_processor_returns_list_fails(sample_event):
+    sink = MagicMock(spec=ProcessingResultSink)
+    processor = MagicMock(spec=Processor)
+    processor.name = "checksum"
+    processor.should_process.return_value = True
+    processor.process = AsyncMock(return_value=["item1"])
+    
+    flow = ProcessingFlow(processors=[processor], result_sink=sink)
+    
+    with pytest.raises(NonRetryableProcessingError, match="returned invalid result type: list"):
+        await flow.run(sample_event)
+
+@pytest.mark.asyncio
+async def test_flow_processor_returns_string_fails(sample_event):
+    sink = MagicMock(spec=ProcessingResultSink)
+    processor = MagicMock(spec=Processor)
+    processor.name = "checksum"
+    processor.should_process.return_value = True
+    processor.process = AsyncMock(return_value="not-a-dict")
+    
+    flow = ProcessingFlow(processors=[processor], result_sink=sink)
+    
+    with pytest.raises(NonRetryableProcessingError, match="returned invalid result type: str"):
+        await flow.run(sample_event)
+
+@pytest.mark.asyncio
+async def test_flow_phash_missing_required_output_fails(sample_event):
+    sample_event.job_type = "PHASH"
+    sink = MagicMock(spec=ProcessingResultSink)
+    processor = MagicMock(spec=Processor)
+    processor.name = "phash"
+    processor.should_process.return_value = True
+    processor.process = AsyncMock(return_value={}) # Missing 'phash'
+    
+    flow = ProcessingFlow(processors=[processor], result_sink=sink)
+    
+    with pytest.raises(NonRetryableProcessingError, match="did not produce required 'phash' output"):
+        await flow.run(sample_event)
+
+@pytest.mark.asyncio
+async def test_flow_checksum_invalid_value_fails(sample_event):
+    sink = MagicMock(spec=ProcessingResultSink)
+    processor = MagicMock(spec=Processor)
+    processor.name = "checksum"
+    processor.should_process.return_value = True
+    
+    flow = ProcessingFlow(processors=[processor], result_sink=sink)
+    
+    # None value
+    processor.process = AsyncMock(return_value={"sha256": None})
+    with pytest.raises(NonRetryableProcessingError, match="produced invalid 'sha256' format"):
+        await flow.run(sample_event)
+        
+    # Too short
+    processor.process = AsyncMock(return_value={"sha256": "bad"})
+    with pytest.raises(NonRetryableProcessingError, match="produced invalid 'sha256' format"):
+        await flow.run(sample_event)
+
+@pytest.mark.asyncio
+async def test_flow_phash_invalid_value_fails(sample_event):
+    sample_event.job_type = "PHASH"
+    sink = MagicMock(spec=ProcessingResultSink)
+    processor = MagicMock(spec=Processor)
+    processor.name = "phash"
+    processor.should_process.return_value = True
+    
+    flow = ProcessingFlow(processors=[processor], result_sink=sink)
+    
+    # None value
+    processor.process = AsyncMock(return_value={"phash": None})
+    with pytest.raises(NonRetryableProcessingError, match="produced invalid 'phash' format"):
+        await flow.run(sample_event)
+        
+    # Too short
+    processor.process = AsyncMock(return_value={"phash": "bad"})
+    with pytest.raises(NonRetryableProcessingError, match="produced invalid 'phash' format"):
+        await flow.run(sample_event)

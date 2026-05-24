@@ -1,16 +1,14 @@
-import json
 import logging
 from typing import Optional, Any
 from aiokafka import AIOKafkaConsumer
 from app.config import settings
-from app.events.models import FileProcessingRequestedEvent
-from app.worker.flow import ProcessingFlow
+from app.worker.handler import WorkerMessageHandler
 
 logger = logging.getLogger(__name__)
 
 class EventConsumer:
-    def __init__(self, flow: ProcessingFlow):
-        self.flow = flow
+    def __init__(self, handler: WorkerMessageHandler):
+        self.handler = handler
         self.consumer: Optional[Any] = None
         self._should_stop = False
 
@@ -19,7 +17,7 @@ class EventConsumer:
             settings.kafka_topic_file_processing,
             bootstrap_servers=settings.kafka_bootstrap_servers,
             group_id=settings.kafka_consumer_group_id,
-            value_deserializer=lambda x: json.loads(x.decode('utf-8')),
+            # We handle deserialization in WorkerMessageHandler for better poison message handling
             enable_auto_commit=False
         )
         await self.consumer.start()
@@ -30,14 +28,19 @@ class EventConsumer:
                 if self._should_stop:
                     break
                     
-                logger.info(f"Received event: {msg.value}")
+                logger.info(f"Received message from Kafka (offset: {msg.offset})")
+                
                 try:
-                    event = FileProcessingRequestedEvent.model_validate(msg.value)
-                    await self.flow.run(event)
-                    await self.consumer.commit()
-                    logger.debug(f"Committed offset for file {event.file_id}")
+                    handled = await self.handler.handle_message(msg)
+                    
+                    if handled:
+                        await self.consumer.commit()
+                        logger.debug(f"Committed offset {msg.offset}")
+                    else:
+                        logger.error(f"Message at offset {msg.offset} was NOT handled successfully and will NOT be committed.")
                 except Exception as e:
-                    logger.error(f"Failed to process message or commit offset: {e}")
+                    logger.exception(f"Unexpected error in message handler for offset {msg.offset}: {e}")
+                    # Do not commit, loop continues to next poll
         finally:
             await self.consumer.stop()
 

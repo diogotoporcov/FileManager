@@ -3,30 +3,22 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from app.worker.consumer import EventConsumer
 from app.worker.flow import ProcessingFlow
 
+from app.worker.handler import WorkerMessageHandler
+
 @pytest.mark.asyncio
 async def test_consumer_manual_commit_on_success():
     # Arrange
-    flow = MagicMock(spec=ProcessingFlow)
-    flow.run = AsyncMock()
+    handler = MagicMock(spec=WorkerMessageHandler)
+    handler.handle_message = AsyncMock(return_value=True)
     
-    consumer = EventConsumer(flow)
+    consumer = EventConsumer(handler)
     
     # Mock AIOKafkaConsumer
     mock_kafka_consumer = AsyncMock()
     # Mock the iterator behavior of the consumer
     mock_msg = MagicMock()
-    mock_msg.value = {
-        "eventId": "00000000-0000-0000-0000-000000000001",
-        "eventType": "file.processing.requested",
-        "occurredAt": "2024-01-01T00:00:00Z",
-        "fileId": "00000000-0000-0000-0000-000000000002",
-        "processingJobId": "00000000-0000-0000-0000-000000000003",
-        "jobType": "CHECKSUM",
-        "storagePath": "test.jpg",
-        "mimeType": "image/jpeg",
-        "size": 100,
-        "ownerUserId": "00000000-0000-0000-0000-000000000004"
-    }
+    mock_msg.value = b'{"eventId": "..."}' # Raw bytes since we moved deserialization
+    mock_msg.offset = 123
 
     mock_kafka_consumer.__aiter__.return_value = [mock_msg]
     
@@ -34,37 +26,48 @@ async def test_consumer_manual_commit_on_success():
         await consumer.start()
     
     # Assert
-    flow.run.assert_called_once()
+    handler.handle_message.assert_called_once_with(mock_msg)
     mock_kafka_consumer.commit.assert_called_once()
 
 @pytest.mark.asyncio
-async def test_consumer_no_commit_on_flow_failure():
+async def test_consumer_no_commit_on_handler_failure():
     # Arrange
-    flow = MagicMock(spec=ProcessingFlow)
-    # Simulate a flow failure that propagates (e.g. reporting failed)
-    flow.run = AsyncMock(side_effect=Exception("Unrecoverable"))
+    handler = MagicMock(spec=WorkerMessageHandler)
+    handler.handle_message = AsyncMock(return_value=False)
     
-    consumer = EventConsumer(flow)
+    consumer = EventConsumer(handler)
     
     # Mock AIOKafkaConsumer
     mock_kafka_consumer = AsyncMock()
     mock_msg = MagicMock()
-    mock_msg.value = {
-        "eventId": "00000000-0000-0000-0000-000000000001",
-        "eventType": "file.processing.requested",
-        "occurredAt": "2024-01-01T00:00:00Z",
-        "fileId": "00000000-0000-0000-0000-000000000002",
-        "processingJobId": "00000000-0000-0000-0000-000000000003",
-        "jobType": "CHECKSUM",
-        "storagePath": "test.jpg",
-        "mimeType": "image/jpeg",
-        "size": 100,
-        "ownerUserId": "00000000-0000-0000-0000-000000000004"
-    }
+    mock_msg.value = b'{"eventId": "..."}'
+    mock_msg.offset = 124
     mock_kafka_consumer.__aiter__.return_value = [mock_msg]
     
     with patch("app.worker.consumer.AIOKafkaConsumer", return_value=mock_kafka_consumer):
         await consumer.start()
 
-    flow.run.assert_called_once()
+    handler.handle_message.assert_called_once()
+    mock_kafka_consumer.commit.assert_not_called()
+
+@pytest.mark.asyncio
+async def test_consumer_no_commit_on_unexpected_handler_exception():
+    # Arrange
+    handler = MagicMock(spec=WorkerMessageHandler)
+    # Simulate an unexpected bug in the handler
+    handler.handle_message = AsyncMock(side_effect=RuntimeError("Unexpected bug"))
+    
+    consumer = EventConsumer(handler)
+    
+    # Mock AIOKafkaConsumer
+    mock_kafka_consumer = AsyncMock()
+    mock_msg = MagicMock()
+    mock_msg.value = b'{"eventId": "..."}'
+    mock_msg.offset = 125
+    mock_kafka_consumer.__aiter__.return_value = [mock_msg]
+    
+    with patch("app.worker.consumer.AIOKafkaConsumer", return_value=mock_kafka_consumer):
+        await consumer.start()
+
+    handler.handle_message.assert_called_once()
     mock_kafka_consumer.commit.assert_not_called()
