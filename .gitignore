@@ -1,11 +1,17 @@
-.idea/
-FileManager.iml
+# Local / Machine-specific files
+/.local/
+*.log
+
+# Environment files
 **/.env*
 !**/.env.example
-minio/data
-/.local/
+
+# AI / Assistant files
 .aiignore
 .aiassistant
+
+# Application data
+minio/data
 
 # Java / Build Tools
 target/
@@ -15,24 +21,19 @@ build/
 *.jar
 *.war
 *.ear
-*.log
-
-# Maven specific
-.mvn/
-mvnw
-mvnw.cmd
-.factorypath
 
 # Gradle specific
 !**/gradle/wrapper/gradle-wrapper.jar
 
 # IDEs
-.project
-.settings/
-.classpath
 .idea/
 *.iml
 *.iws
+.project
+.settings/
+.classpath
 out/
+
+# Project-specific merge files
 merger.ignore
 merger.txt
