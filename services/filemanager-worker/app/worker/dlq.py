@@ -45,6 +45,7 @@ class KafkaDeadLetterPublisher(DeadLetterPublisher):
         job_type: Optional[str] = None
     ):
         await self._ensure_producer()
+        assert self.producer is not None
         
         try:
             original_value = original_msg.value.decode('utf-8') if isinstance(original_msg.value, bytes) else str(original_msg.value)

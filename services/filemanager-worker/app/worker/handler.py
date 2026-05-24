@@ -57,7 +57,7 @@ class WorkerMessageHandler:
         attempts = 0
         max_attempts = settings.worker_max_attempts
         backoff = settings.worker_retry_backoff_seconds
-        last_error = None
+        last_error: Optional[Exception] = None
         
         from app import metrics
 

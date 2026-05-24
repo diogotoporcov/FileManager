@@ -1,4 +1,4 @@
-from typing import Literal, Annotated
+from typing import Literal, Annotated, Any
 from pydantic import Field, AnyHttpUrl, field_validator, StringConstraints, AliasChoices
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     worker_retry_backoff_multiplier: float = Field(default=2.0, ge=1)
 
     # MinIO/S3
-    s3_endpoint: AnyHttpUrl = Field(
+    s3_endpoint: AnyHttpUrl = Field(  # type: ignore
         default="http://localhost:9000",
         validation_alias=AliasChoices("s3_endpoint", "MINIO_ENDPOINT")
     )
@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     )
 
     # API
-    metadata_api_base_url: AnyHttpUrl = Field(default="http://localhost:8081")
+    metadata_api_base_url: AnyHttpUrl = Field(default="http://localhost:8081")  # type: ignore
     internal_api_token: NonBlankString = Field(
         default=...,
         validation_alias=AliasChoices("internal_api_token", "INTERNAL_API_TOKEN")
@@ -50,7 +50,7 @@ class Settings(BaseSettings):
 
     @field_validator("s3_endpoint", "metadata_api_base_url", mode="before")
     @classmethod
-    def validate_url(cls, v: str) -> str:
+    def validate_url(cls, v: Any) -> Any:
         if isinstance(v, str) and not v.strip():
             raise ValueError("URL cannot be blank")
         return v
