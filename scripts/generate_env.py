@@ -74,17 +74,6 @@ class UuidGenerator(BaseSecretGenerator):
         return str(uuid.uuid4())
 
 # Registry
-DEFAULT_REGISTRY = {
-    SecretAlgorithm.HEX: HexGenerator(),
-    SecretAlgorithm.URLSAFE: UrlsafeGenerator(),
-    SecretAlgorithm.ALPHANUMERIC: AlphanumericGenerator(),
-    SecretAlgorithm.LETTERS: LettersGenerator(),
-    SecretAlgorithm.NUMERIC: NumericGenerator(),
-    SecretAlgorithm.PASSWORD: PasswordGenerator(),
-    SecretAlgorithm.UUID: UuidGenerator(),
-}
-
-# Classes
 class SecretGenerator:
     """
     Utility class to generate secure random strings for environment variables.
@@ -92,7 +81,15 @@ class SecretGenerator:
     DEFAULT_LENGTH = 24
 
     def __init__(self, registry: Optional[Dict[SecretAlgorithm, BaseSecretGenerator]] = None):
-        self._registry = registry or DEFAULT_REGISTRY
+        self._registry = registry or {
+            SecretAlgorithm.HEX: HexGenerator(),
+            SecretAlgorithm.URLSAFE: UrlsafeGenerator(),
+            SecretAlgorithm.ALPHANUMERIC: AlphanumericGenerator(),
+            SecretAlgorithm.LETTERS: LettersGenerator(),
+            SecretAlgorithm.NUMERIC: NumericGenerator(),
+            SecretAlgorithm.PASSWORD: PasswordGenerator(),
+            SecretAlgorithm.UUID: UuidGenerator(),
+        }
 
     def generate(self, config_str: str) -> str:
         """
@@ -103,58 +100,110 @@ class SecretGenerator:
         if not parts:
             return ""
         
+        algo = self._parse_algo(parts[0])
+        instance = self._get_instance(algo)
+        params = instance.get_params()
+        kwargs = self._parse_kwargs(algo, params, parts[1:])
+
+        return instance.generate(**kwargs)
+
+    def _parse_algo(self, name: str) -> SecretAlgorithm:
+        """Parses the algorithm name into a SecretAlgorithm enum."""
         try:
-            algo = SecretAlgorithm(parts[0].lower())
+            return SecretAlgorithm(name.lower())
+
         except ValueError:
-            raise ValueError(f"Unknown algorithm: {parts[0]}")
-            
+            raise ValueError(f"Unknown algorithm: {name}")
+
+    def _get_instance(self, algo: SecretAlgorithm) -> BaseSecretGenerator:
+        """Retrieves the generator instance from the registry."""
         instance = self._registry.get(algo)
         if not instance:
             raise ValueError(f"No generator registered for algorithm: {algo}")
 
-        params = instance.get_params()
+        return instance
+
+    def _parse_kwargs(self, algo: SecretAlgorithm, params: List[str], options: List[str]) -> Dict[str, Any]:
+        """Parses positional and named options into a keyword argument dictionary."""
         kwargs = {"length": self.DEFAULT_LENGTH} if "length" in params else {}
         
-        for i, opt in enumerate(parts[1:]):
+        for i, opt in enumerate(options):
             if "=" in opt:
                 key, val = opt.split("=", 1)
                 if key not in params:
                     raise ValueError(f"Unknown option '{key}' for algorithm '{algo}'. Valid options: {params}")
 
                 kwargs[key] = self._cast_value(val, key)
+                continue
 
-            elif i < len(params):
-                param_name = params[i]
-                kwargs[param_name] = self._cast_value(opt, param_name)
-
-            else:
+            if i >= len(params):
                 raise ValueError(
                     f"Too many positional options for algorithm '{algo}'. "
-                    f"Expected at most {len(params)}, got {len(parts[1:])}."
+                    f"Expected at most {len(params)}, got {len(options)}."
                 )
 
-        return instance.generate(**kwargs)
+            param_name = params[i]
+            kwargs[param_name] = self._cast_value(opt, param_name)
+            
+        return kwargs
 
     @staticmethod
     def _cast_value(val: str, param_name: str = "") -> Any:
         """Helper to cast string options to appropriate types."""
-        if param_name == "length" or val.isdigit():
-            try:
-                return int(val)
+        if param_name == "length":
+            if not val.isdigit():
+                raise ValueError(f"Invalid length value: {val}")
 
-            except ValueError:
-                if param_name == "length":
-                    raise ValueError(f"Invalid length value: {val}")
+            return int(val)
+
+        if val.isdigit():
+            return int(val)
         
-        normalized_val = val.lower()
+        return {"true": True, "false": False}.get(val.lower(), val)
 
-        if normalized_val == "true":
-            return True
+class EnvTemplateProcessor:
+    """
+    Parses .env files and replaces placeholders in values while preserving structure and comments.
+    """
+    def __init__(self, generator: SecretGenerator):
+        self.generator = generator
+        # Regex to identify environment variable assignments
+        # Group 1: Leading space and optional 'export'
+        # Group 2: The key name
+        # Group 3: The equals sign and surrounding whitespace
+        # Group 4: The value part (handles optional quotes and avoids trailing comments)
+        # Group 5: The rest of the line (trailing comments)
+        self.assignment_pattern = re.compile(
+            r"^(\s*(?:export\s+)?)([A-Za-z0-9_]+)(\s*=\s*)((?:'[^']*'|\"[^\"]*\"|[^#])+)?(.*)$"
+        )
+        self.placeholder_pattern = re.compile(r"replace_me:([a-zA-Z0-9_:=]+)")
 
-        if normalized_val == "false":
-            return False
-            
-        return val
+    def process(self, content: str) -> str:
+        """Process the content of a .env file line by line."""
+        lines = content.splitlines(keepends=True)
+        new_lines = []
+
+        for line in lines:
+            line_content = line.rstrip('\r\n')
+            newline = line[len(line_content):]
+
+            match = self.assignment_pattern.match(line_content)
+            if not match:
+                new_lines.append(line)
+                continue
+
+            prefix, key, eq, value, suffix = match.groups()
+            if not value or "replace_me:" not in value:
+                new_lines.append(line)
+                continue
+
+            new_value = self.placeholder_pattern.sub(
+                lambda m: self.generator.generate(m.group(1)),
+                value
+            )
+            new_lines.append(f"{prefix}{key}{eq}{new_value}{suffix or ''}{newline}")
+
+        return "".join(new_lines)
 
 # Functions
 def process_env_file(source_path: Path, target_path: Path, force: bool = False) -> None:
@@ -169,26 +218,14 @@ def process_env_file(source_path: Path, target_path: Path, force: bool = False) 
         return
 
     try:
-        content = source_path.read_text(encoding="utf-8")
-
-    except Exception as e:
-        raise IOError(f"Failed to read source file: {e}")
-
-    generator = SecretGenerator()
-
-    def _replace(match: Match) -> str:
-        config = match.group(1)
-        return generator.generate(config)
-
-    pattern = r"replace_me:([a-zA-Z0-9_:=]+)"
-    new_content = re.sub(pattern, _replace, content)
-
-    try:
+        content = source_path.read_text(encoding="utf-8-sig")
+        processor = EnvTemplateProcessor(SecretGenerator())
+        new_content = processor.process(content)
         target_path.write_text(new_content, encoding="utf-8")
-        print(f"Successfully generated {target_path}")
+        print(f"Successfully generated: {target_path}")
 
     except Exception as e:
-        raise IOError(f"Failed to write target file: {e}")
+        raise RuntimeError(f"Failed to process environment file: {e}")
 
 # Main execution
 def main() -> int:
