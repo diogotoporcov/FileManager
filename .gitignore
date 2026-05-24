@@ -1,4 +1,36 @@
 .idea/
 FileManager.iml
-.env
+**/.env*
+!**/.env.example
 minio/data
+/.local/
+.aiignore
+.aiassistant
+
+# Java / Build Tools
+target/
+build/
+.gradle/
+*.class
+*.jar
+*.war
+*.ear
+*.log
+
+# Maven specific
+.mvn/
+mvnw
+mvnw.cmd
+.factorypath
+
+# Gradle specific
+!**/gradle/wrapper/gradle-wrapper.jar
+
+# IDEs
+.project
+.settings/
+.classpath
+.idea/
+*.iml
+*.iws
+out/

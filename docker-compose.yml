@@ -1,91 +1,71 @@
 services:
-  keycloak-db:
-    image: postgres:16
-    container_name: keycloak-postgres
+  filemanager-postgres:
+    image: pgvector/pgvector:pg16
+    container_name: filemanager-postgres
     environment:
-      POSTGRES_DB: ${KC_POSTGRES_DB}
-      POSTGRES_USER: ${KC_POSTGRES_USER}
-      POSTGRES_PASSWORD: ${KC_POSTGRES_PASSWORD}
-    volumes:
-      - keycloak_pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${KC_POSTGRES_USER} -d ${KC_POSTGRES_DB}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "${PORT_POSTGRES}:5432"
     networks:
-      - file-manager-net
+      - filemanager-network
+    restart: unless-stopped
 
-  keycloak:
-    image: quay.io/keycloak/keycloak:26.4
-    container_name: keycloak
+  filemanager-minio:
+    image: minio/minio
+    container_name: filemanager-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    ports:
+      - "${PORT_MINIO}:9000"
+      - "${PORT_MINIO_CONSOLE}:9001"
+    networks:
+      - filemanager-network
+    restart: unless-stopped
+
+  filemanager-redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:latest
+    container_name: filemanager-redpanda
     command:
-      - start-dev
-      - --import-realm
-    environment:
-      KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/${KC_POSTGRES_DB}
-      KC_DB_USERNAME: ${KC_POSTGRES_USER}
-      KC_DB_PASSWORD: ${KC_POSTGRES_PASSWORD}
+      - redpanda
+      - start
+      - --overprovisioned
+      - --smp
+      - "1"
+      - --memory
+      - "1G"
+      - --reserve-memory
+      - "0M"
+      - --node-id
+      - "0"
+      - --check=false
+      - --kafka-addr
+      - "PLAINTEXT://0.0.0.0:29092,OUTSIDE://0.0.0.0:9092"
+      - --advertise-kafka-addr
+      - "PLAINTEXT://filemanager-redpanda:29092,OUTSIDE://localhost:9092"
+    ports:
+      - "${PORT_REDPANDA}:9092"
+    networks:
+      - filemanager-network
+    restart: unless-stopped
 
-      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN_USER}
+  filemanager-keycloak:
+    image: quay.io/keycloak/keycloak:latest
+    container_name: filemanager-keycloak
+    command: start-dev
+    environment:
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
-
-      KC_HTTP_ENABLED: "true"
-      KC_HTTP_PORT: ${KEYCLOAK_HTTP_PORT}
     ports:
-      - "${KEYCLOAK_HTTP_PORT}:8080"
-    depends_on:
-      keycloak-db:
-        condition: service_healthy
-    volumes:
-      - ./keycloak/import:/opt/keycloak/data/import
+      - "${PORT_KEYCLOAK}:8080"
     networks:
-      - file-manager-net
-
-  minio:
-    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
-    container_name: minio
-    command: >
-      server /data
-      --console-address ":${MINIO_CONSOLE_PORT}"
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
-      MINIO_REGION: ${MINIO_REGION}
-    ports:
-      - "${MINIO_API_PORT}:9000"
-      - "${MINIO_CONSOLE_PORT}:9001"
-    volumes:
-      - ./minio/data:/data
-    healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - file-manager-net
-
-  minio-init:
-    image: minio/mc:latest
-    container_name: minio-init
-    restart: "no"
-    depends_on:
-      minio:
-        condition: service_healthy
-    entrypoint: [ "/bin/sh", "/init/init.sh" ]
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
-      MINIO_BUCKET: ${MINIO_BUCKET}
-    volumes:
-      - ./minio/init/init.sh:/init/init.sh:ro
-    networks:
-      - file-manager-net
-
-volumes:
-  keycloak_pgdata:
+      - filemanager-network
+    restart: unless-stopped
 
 networks:
-  file-manager-net:
+  filemanager-network:
+    name: filemanager-network
     driver: bridge
