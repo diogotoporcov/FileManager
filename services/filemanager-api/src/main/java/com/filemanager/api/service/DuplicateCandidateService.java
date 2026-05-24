@@ -2,7 +2,9 @@ package com.filemanager.api.service;
 
 import com.filemanager.api.auth.AccessControlService;
 import com.filemanager.api.auth.Permission;
-import com.filemanager.api.dto.*;
+import com.filemanager.api.dto.DuplicateCandidateResponse;
+import com.filemanager.api.dto.FileDuplicateResponse;
+import com.filemanager.api.dto.FileSummaryResponse;
 import com.filemanager.api.entity.DuplicateCandidate;
 import com.filemanager.api.entity.DuplicateCandidate.CandidateStatus;
 import com.filemanager.api.entity.DuplicateCandidate.DetectionMethod;
@@ -110,6 +112,7 @@ public class DuplicateCandidateService {
         if (fileId != null) {
             spec = spec.and(DuplicateCandidateSpecifications.hasFileId(fileId));
         }
+
         return spec;
     }
 
@@ -117,6 +120,7 @@ public class DuplicateCandidateService {
         if (ownerUserId != null) {
             return spec.and(DuplicateCandidateSpecifications.hasOwnerUserId(ownerUserId));
         }
+
         return spec.and(DuplicateCandidateSpecifications.hasOwnerOrganizationId(ownerOrganizationId));
     }
 
@@ -125,6 +129,7 @@ public class DuplicateCandidateService {
             return isFileOwnedByUser(dc.getSourceFile(), ownerUserId) &&
                    isFileOwnedByUser(dc.getCandidateFile(), ownerUserId);
         }
+
         return isFileOwnedByOrganization(dc.getSourceFile(), ownerOrganizationId) &&
                isFileOwnedByOrganization(dc.getCandidateFile(), ownerOrganizationId);
     }

@@ -1,7 +1,8 @@
 package com.filemanager.api.service;
 
 import com.filemanager.api.auth.AccessControlService;
-import com.filemanager.api.dto.*;
+import com.filemanager.api.dto.DuplicateCandidateResponse;
+import com.filemanager.api.dto.FileDuplicateResponse;
 import com.filemanager.api.entity.DuplicateCandidate;
 import com.filemanager.api.entity.DuplicateCandidate.CandidateStatus;
 import com.filemanager.api.entity.DuplicateCandidate.DetectionMethod;
@@ -14,6 +15,7 @@ import org.springframework.data.jpa.domain.Specification;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentMatchers;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -26,7 +28,10 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class DuplicateCandidateServiceTest {
@@ -76,29 +81,29 @@ class DuplicateCandidateServiceTest {
     @Test
     void getDuplicatesForFile_Success() {
         when(fileRepository.findByIdAndDeletedAtIsNull(file1.getId())).thenReturn(Optional.of(file1));
-        when(duplicateCandidateRepository.findAll(any(Specification.class)))
+        when(duplicateCandidateRepository.findAll(ArgumentMatchers.<Specification<DuplicateCandidate>>any()))
                 .thenReturn(List.of(candidate));
 
         List<FileDuplicateResponse> result = duplicateCandidateService.getDuplicatesForFile(
                 file1.getId(), owner.getId(), null, null, null, owner.getId());
 
         assertThat(result).hasSize(1);
-        assertThat(result.get(0).getRequestedFile().getId()).isEqualTo(file1.getId());
-        assertThat(result.get(0).getDuplicateFile().getId()).isEqualTo(file2.getId());
+        assertThat(result.getFirst().getRequestedFile().getId()).isEqualTo(file1.getId());
+        assertThat(result.getFirst().getDuplicateFile().getId()).isEqualTo(file2.getId());
     }
 
     @Test
     void getDuplicatesForFile_Bidirectional_Success() {
         when(fileRepository.findByIdAndDeletedAtIsNull(file2.getId())).thenReturn(Optional.of(file2));
-        when(duplicateCandidateRepository.findAll(any(Specification.class)))
+        when(duplicateCandidateRepository.findAll(ArgumentMatchers.<Specification<DuplicateCandidate>>any()))
                 .thenReturn(List.of(candidate));
 
         List<FileDuplicateResponse> result = duplicateCandidateService.getDuplicatesForFile(
                 file2.getId(), owner.getId(), null, null, null, owner.getId());
 
         assertThat(result).hasSize(1);
-        assertThat(result.get(0).getRequestedFile().getId()).isEqualTo(file2.getId());
-        assertThat(result.get(0).getDuplicateFile().getId()).isEqualTo(file1.getId());
+        assertThat(result.getFirst().getRequestedFile().getId()).isEqualTo(file2.getId());
+        assertThat(result.getFirst().getDuplicateFile().getId()).isEqualTo(file1.getId());
     }
 
     @Test
@@ -113,14 +118,14 @@ class DuplicateCandidateServiceTest {
 
     @Test
     void getDuplicatesForOwner_Success() {
-        when(duplicateCandidateRepository.findAll(any(Specification.class)))
+        when(duplicateCandidateRepository.findAll(ArgumentMatchers.<Specification<DuplicateCandidate>>any()))
                 .thenReturn(List.of(candidate));
 
         List<DuplicateCandidateResponse> result = duplicateCandidateService.getDuplicatesForOwner(
                 owner.getId(), null, null, null, owner.getId());
 
         assertThat(result).hasSize(1);
-        assertThat(result.get(0).getSourceFile().getId()).isEqualTo(file1.getId());
+        assertThat(result.getFirst().getSourceFile().getId()).isEqualTo(file1.getId());
     }
 
     @Test

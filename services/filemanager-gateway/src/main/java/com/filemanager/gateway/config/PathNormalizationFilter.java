@@ -1,5 +1,7 @@
 package com.filemanager.gateway.config;
 
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
@@ -9,6 +11,7 @@ import org.springframework.web.server.WebFilter;
 import org.springframework.web.server.WebFilterChain;
 import reactor.core.publisher.Mono;
 
+@NullMarked
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public class PathNormalizationFilter implements WebFilter {
@@ -21,11 +24,15 @@ public class PathNormalizationFilter implements WebFilter {
             exchange.getResponse().setStatusCode(HttpStatus.NOT_FOUND);
             return exchange.getResponse().setComplete();
         }
+
         return chain.filter(exchange);
     }
 
-    private boolean isTraversal(String p) {
-        if (p == null) return false;
+    private boolean isTraversal(@Nullable String p) {
+        if (p == null) {
+            return false;
+        }
+
         return p.contains("/../") || p.contains("/%2e%2e/") || p.contains("/%2E%2E/") ||
                p.endsWith("/..") || p.endsWith("/%2e%2e") || p.endsWith("/%2E%2E") ||
                p.contains("../") || p.contains("%2e%2e/") || p.contains("%2E%2E/");

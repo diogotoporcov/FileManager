@@ -76,6 +76,7 @@ public class FileProcessingStatusService {
 
         boolean anyPendingOrInProgress = jobs.stream()
                 .anyMatch(j -> j.getStatus() == ProcessingJob.JobStatus.PENDING || j.getStatus() == ProcessingJob.JobStatus.IN_PROGRESS);
+
         if (anyPendingOrInProgress) {
             return AggregateStatus.PROCESSING;
         }
@@ -100,6 +101,7 @@ public class FileProcessingStatusService {
         if (method != null) {
             spec = spec.and(DuplicateCandidateSpecifications.hasDetectionMethod(method));
         }
+
         if (status != null) {
             spec = spec.and(DuplicateCandidateSpecifications.hasStatus(status));
         }

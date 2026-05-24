@@ -1,8 +1,24 @@
 package com.filemanager.api.entity;
 
-import jakarta.persistence.*;
-import lombok.*;
-import org.hibernate.annotations.Check;
+import jakarta.persistence.CheckConstraint;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Index;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.OffsetDateTime;
@@ -14,13 +30,14 @@ import java.util.UUID;
     @Index(name = "idx_duplicate_candidate", columnList = "candidate_file_id")
 }, uniqueConstraints = {
     @UniqueConstraint(name = "uk_duplicate_source_candidate_method", columnNames = {"source_file_id", "candidate_file_id", "detection_method"})
+}, check = {
+    @CheckConstraint(name = "chk_source_not_candidate", constraint = "source_file_id <> candidate_file_id")
 })
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-@Check(constraints = "source_file_id <> candidate_file_id")
 public class DuplicateCandidate {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)

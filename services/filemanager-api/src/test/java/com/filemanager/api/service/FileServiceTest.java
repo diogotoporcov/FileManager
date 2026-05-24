@@ -1,12 +1,14 @@
 package com.filemanager.api.service;
 
 import com.filemanager.api.auth.AccessControlService;
+import com.filemanager.api.auth.Permission;
 import com.filemanager.api.event.FileProcessingRequestedEvent;
 import com.filemanager.api.entity.FileEntity;
 import com.filemanager.api.entity.Organization;
 import com.filemanager.api.entity.ProcessingJob;
 import com.filemanager.api.entity.User;
 import com.filemanager.api.port.ObjectStoragePort;
+import com.filemanager.api.port.StoreObjectResponse;
 import com.filemanager.api.repository.FileRepository;
 import com.filemanager.api.repository.OrganizationRepository;
 import com.filemanager.api.repository.ProcessingJobRepository;
@@ -21,13 +23,18 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 
 import java.io.ByteArrayInputStream;
+import java.io.InputStream;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class FileServiceTest {
@@ -64,11 +71,10 @@ class FileServiceTest {
     }
 
     @Test
-    void uploadFile_ShouldCreateJobAndPublishEvent() {
+    void uploadFile_ShouldCreateJobAndPublishEvent() throws java.io.IOException {
         String fileName = "test.txt";
         String contentType = "text/plain";
         long size = 10L;
-        ByteArrayInputStream content = new ByteArrayInputStream("hello world".getBytes());
         
         when(userRepository.findById(userId)).thenReturn(Optional.of(user));
         
@@ -79,6 +85,11 @@ class FileServiceTest {
         fileEntity.setSize(size);
         
         when(fileRepository.save(any(FileEntity.class))).thenReturn(fileEntity);
+
+        when(objectStoragePort.putObject(any())).thenReturn(StoreObjectResponse.builder()
+                .storagePath("storage-path")
+                .etag("test-etag")
+                .build());
         
         when(processingJobPlanner.planJobs(contentType)).thenReturn(List.of(ProcessingJob.JobType.CHECKSUM));
 
@@ -87,9 +98,13 @@ class FileServiceTest {
         processingJob.setJobType(ProcessingJob.JobType.CHECKSUM);
         when(processingJobRepository.save(any(ProcessingJob.class))).thenReturn(processingJob);
 
-        FileEntity result = fileService.uploadFile(fileName, contentType, size, content, userId, null, userId);
+        FileEntity result;
+        try (ByteArrayInputStream content = new ByteArrayInputStream("hello world".getBytes())) {
+            result = fileService.uploadFile(fileName, contentType, size, content, userId, null, userId);
+        }
 
         assertNotNull(result);
+        verify(accessControlService).assertCanUploadToContext(userId, userId, null);
         verify(fileRepository).save(any(FileEntity.class));
         verify(processingJobRepository).save(any(ProcessingJob.class));
         
@@ -108,11 +123,10 @@ class FileServiceTest {
     }
 
     @Test
-    void uploadFile_Image_ShouldCreateMultipleJobsAndPublishEvents() {
+    void uploadFile_Image_ShouldCreateMultipleJobsAndPublishEvents() throws java.io.IOException {
         String fileName = "test.png";
         String contentType = "image/png";
         long size = 100L;
-        ByteArrayInputStream content = new ByteArrayInputStream(new byte[100]);
         
         when(userRepository.findById(userId)).thenReturn(Optional.of(user));
         
@@ -124,6 +138,11 @@ class FileServiceTest {
         
         when(fileRepository.save(any(FileEntity.class))).thenReturn(fileEntity);
         
+        when(objectStoragePort.putObject(any())).thenReturn(StoreObjectResponse.builder()
+                .storagePath("storage-path")
+                .etag("test-etag")
+                .build());
+
         when(processingJobPlanner.planJobs(contentType)).thenReturn(List.of(ProcessingJob.JobType.CHECKSUM, ProcessingJob.JobType.PHASH));
 
         ProcessingJob checksumJob = ProcessingJob.builder().id(UUID.randomUUID()).jobType(ProcessingJob.JobType.CHECKSUM).build();
@@ -133,9 +152,13 @@ class FileServiceTest {
                 .thenReturn(checksumJob)
                 .thenReturn(phashJob);
 
-        FileEntity result = fileService.uploadFile(fileName, contentType, size, content, userId, null, userId);
+        FileEntity result;
+        try (ByteArrayInputStream content = new ByteArrayInputStream(new byte[100])) {
+            result = fileService.uploadFile(fileName, contentType, size, content, userId, null, userId);
+        }
 
         assertNotNull(result);
+        verify(accessControlService).assertCanUploadToContext(userId, userId, null);
         verify(processingJobRepository, times(2)).save(any(ProcessingJob.class));
         
         verify(fileManagerMetrics).recordFileUpload(size, "USER");
@@ -153,11 +176,10 @@ class FileServiceTest {
     }
 
     @Test
-    void uploadFile_OrganizationOwned_ShouldRecordOrganizationMetrics() {
+    void uploadFile_OrganizationOwned_ShouldRecordOrganizationMetrics() throws java.io.IOException {
         String fileName = "org.txt";
         String contentType = "text/plain";
         long size = 50L;
-        ByteArrayInputStream content = new ByteArrayInputStream(new byte[50]);
         UUID orgId = UUID.randomUUID();
         Organization org = new Organization();
         org.setId(orgId);
@@ -172,18 +194,27 @@ class FileServiceTest {
         fileEntity.setOwnerOrganization(org);
 
         when(fileRepository.save(any(FileEntity.class))).thenReturn(fileEntity);
+
+        when(objectStoragePort.putObject(any())).thenReturn(StoreObjectResponse.builder()
+                .storagePath("storage-path")
+                .etag("test-etag")
+                .build());
+
         when(processingJobPlanner.planJobs(contentType)).thenReturn(List.of(ProcessingJob.JobType.CHECKSUM));
         
         ProcessingJob job = ProcessingJob.builder().id(UUID.randomUUID()).jobType(ProcessingJob.JobType.CHECKSUM).build();
         when(processingJobRepository.save(any(ProcessingJob.class))).thenReturn(job);
 
-        fileService.uploadFile(fileName, contentType, size, content, null, orgId, userId);
+        try (ByteArrayInputStream content = new ByteArrayInputStream(new byte[50])) {
+            fileService.uploadFile(fileName, contentType, size, content, null, orgId, userId);
+        }
 
+        verify(accessControlService).assertCanUploadToContext(userId, null, orgId);
         verify(fileManagerMetrics).recordFileUpload(size, "ORGANIZATION");
     }
 
     @Test
-    void downloadFile_ShouldRecordDownloadMetrics() {
+    void downloadFile_ShouldRecordDownloadMetrics() throws java.io.IOException {
         UUID fileId = UUID.randomUUID();
         FileEntity file = new FileEntity();
         file.setId(fileId);
@@ -192,8 +223,11 @@ class FileServiceTest {
         when(fileRepository.findByIdAndDeletedAtIsNull(fileId)).thenReturn(Optional.of(file));
         when(objectStoragePort.getObject("path/to/file")).thenReturn(new ByteArrayInputStream("data".getBytes()));
 
-        fileService.downloadFile(fileId, userId);
+        try (InputStream is = fileService.downloadFile(fileId, userId)) {
+            assertNotNull(is);
+        }
 
+        verify(accessControlService).assertCanAccessFile(userId, fileId, Permission.FILE_VIEW);
         verify(fileManagerMetrics).recordFileDownload();
     }
 }

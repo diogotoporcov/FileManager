@@ -1,9 +1,11 @@
 package com.filemanager.api.auth;
 
-import com.filemanager.api.entity.*;
+import com.filemanager.api.entity.DuplicateCandidate;
+import com.filemanager.api.entity.FileEntity;
+import com.filemanager.api.entity.Organization;
+import com.filemanager.api.entity.OrganizationMember;
 import com.filemanager.api.exception.AccessDeniedException;
 import com.filemanager.api.repository.DuplicateCandidateRepository;
-import com.filemanager.api.repository.FileRepository;
 import com.filemanager.api.repository.OrganizationMemberRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -21,8 +23,6 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class DuplicatePermissionReproTest {
 
-    @Mock
-    private FileRepository fileRepository;
     @Mock
     private DuplicateCandidateRepository duplicateCandidateRepository;
     @Mock

@@ -7,7 +7,15 @@ import java.util.EnumSet;
 import java.util.Map;
 import java.util.Set;
 
-import static com.filemanager.api.auth.Permission.*;
+import static com.filemanager.api.auth.Permission.DUPLICATE_MANAGE;
+import static com.filemanager.api.auth.Permission.DUPLICATE_VIEW;
+import static com.filemanager.api.auth.Permission.FILE_DELETE;
+import static com.filemanager.api.auth.Permission.FILE_MODIFY;
+import static com.filemanager.api.auth.Permission.FILE_SHARE;
+import static com.filemanager.api.auth.Permission.FILE_UPLOAD;
+import static com.filemanager.api.auth.Permission.FILE_VIEW;
+import static com.filemanager.api.auth.Permission.ORGANIZATION_MANAGE_MEMBERS;
+import static com.filemanager.api.auth.Permission.ORGANIZATION_MANAGE_ROLES;
 
 @Component
 public class RolePermissionResolver {

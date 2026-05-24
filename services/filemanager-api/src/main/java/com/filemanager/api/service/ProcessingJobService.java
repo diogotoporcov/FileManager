@@ -1,7 +1,11 @@
 package com.filemanager.api.service;
 
 import com.filemanager.api.config.AppProperties;
-import com.filemanager.api.entity.*;
+import com.filemanager.api.entity.DuplicateCandidate;
+import com.filemanager.api.entity.FileEntity;
+import com.filemanager.api.entity.FileFingerprint;
+import com.filemanager.api.entity.ImageFingerprint;
+import com.filemanager.api.entity.ProcessingJob;
 import com.filemanager.api.exception.ResourceNotFoundException;
 import com.filemanager.api.repository.DuplicateCandidateRepository;
 import com.filemanager.api.repository.FileFingerprintRepository;
@@ -11,6 +15,7 @@ import com.filemanager.api.repository.ProcessingJobRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
@@ -29,6 +34,15 @@ public class ProcessingJobService {
     private final DuplicateCandidateRepository duplicateCandidateRepository;
     private final FileManagerMetrics fileManagerMetrics;
     private final AppProperties appProperties;
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void updateExternalJobId(UUID jobId, String externalJobId) {
+        processingJobRepository.findById(jobId).ifPresent(job -> {
+            job.setExternalJobId(externalJobId);
+            processingJobRepository.save(job);
+            log.info("Updated job {} with external ID: {}", jobId, externalJobId);
+        });
+    }
 
     @Transactional
     public void handleProcessingFailure(UUID jobId, UUID fileId, String errorMessage) {

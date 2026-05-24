@@ -38,6 +38,7 @@ CREATE TABLE files (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name VARCHAR(255) NOT NULL,
     storage_path VARCHAR(1024) NOT NULL UNIQUE,
+    etag VARCHAR(255),
     mime_type VARCHAR(255) NOT NULL,
     size BIGINT NOT NULL,
     owner_user_id UUID REFERENCES users(id),
@@ -90,6 +91,7 @@ CREATE TABLE processing_jobs (
     file_id UUID NOT NULL REFERENCES files(id),
     job_type VARCHAR(255) NOT NULL CHECK (job_type IN ('CHECKSUM', 'PHASH', 'EMBEDDING')),
     status VARCHAR(50) NOT NULL CHECK (status IN ('PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED')),
+    external_job_id VARCHAR(255),
     error_message TEXT,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP

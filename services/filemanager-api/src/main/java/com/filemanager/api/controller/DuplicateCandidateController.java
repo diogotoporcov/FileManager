@@ -1,7 +1,9 @@
 package com.filemanager.api.controller;
 
 import com.filemanager.api.auth.CurrentUserService;
-import com.filemanager.api.dto.*;
+import com.filemanager.api.dto.DuplicateCandidateResponse;
+import com.filemanager.api.dto.DuplicateStatusUpdateRequest;
+import com.filemanager.api.dto.FileDuplicateResponse;
 import com.filemanager.api.entity.DuplicateCandidate.CandidateStatus;
 import com.filemanager.api.entity.DuplicateCandidate.DetectionMethod;
 import com.filemanager.api.service.DuplicateCandidateService;
@@ -13,7 +15,12 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 import java.util.UUID;

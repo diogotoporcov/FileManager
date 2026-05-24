@@ -93,6 +93,7 @@ public class AccessControlService {
             if (!ownerUserId.equals(actorUserId)) {
                 throw new AccessDeniedException(userDeniedMessage);
             }
+
             return;
         }
 

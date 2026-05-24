@@ -11,6 +11,7 @@ import com.filemanager.api.exception.AccessDeniedException;
 import com.filemanager.api.exception.ResourceNotFoundException;
 import com.filemanager.api.port.ObjectStoragePort;
 import com.filemanager.api.port.StoreObjectRequest;
+import com.filemanager.api.port.StoreObjectResponse;
 import com.filemanager.api.repository.FileRepository;
 import com.filemanager.api.repository.OrganizationRepository;
 import com.filemanager.api.repository.ProcessingJobRepository;
@@ -61,7 +62,7 @@ public class FileService {
         String effectiveContentType = (contentType == null || contentType.isBlank()) ? "application/octet-stream" : contentType;
         String storagePath = UUID.randomUUID().toString();
 
-        objectStoragePort.putObject(StoreObjectRequest.builder()
+        StoreObjectResponse response = objectStoragePort.putObject(StoreObjectRequest.builder()
                 .storagePath(storagePath)
                 .content(content)
                 .size(size)
@@ -72,6 +73,7 @@ public class FileService {
             FileEntity fileEntity = FileEntity.builder()
                     .name(fileName)
                     .storagePath(storagePath)
+                    .etag(response.getEtag())
                     .mimeType(effectiveContentType)
                     .size(size)
                     .ownerUser(ownerUser)
@@ -134,6 +136,7 @@ public class FileService {
             if (!ownerUserId.equals(actorUserId)) {
                 throw new AccessDeniedException("You can only list your own files.");
             }
+
             User user = userRepository.findById(ownerUserId)
                     .orElseThrow(() -> new ResourceNotFoundException("User not found: " + ownerUserId));
             return fileRepository.findAllByOwnerUserAndDeletedAtIsNull(user);

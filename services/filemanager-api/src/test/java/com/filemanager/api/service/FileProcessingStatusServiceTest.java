@@ -12,6 +12,7 @@ import com.filemanager.api.repository.ProcessingJobRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentMatchers;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -21,9 +22,12 @@ import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class FileProcessingStatusServiceTest {
@@ -50,7 +54,6 @@ class FileProcessingStatusServiceTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     void getProcessingJobs_ShouldReturnJobs_WhenActorHasAccess() {
         ProcessingJob job = ProcessingJob.builder()
                 .id(UUID.randomUUID())
@@ -63,12 +66,11 @@ class FileProcessingStatusServiceTest {
         List<ProcessingJobResponse> result = fileProcessingStatusService.getProcessingJobs(actorUserId, fileId);
 
         assertEquals(1, result.size());
-        assertEquals(job.getId(), result.get(0).getId());
+        assertEquals(job.getId(), result.getFirst().getId());
         verify(accessControlService).assertCanAccessFile(actorUserId, fileId, Permission.FILE_VIEW);
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     void getFileProcessingStatus_ShouldReturnNotStarted_WhenNoJobs() {
         when(processingJobRepository.findAllByFile_IdOrderByCreatedAtAsc(fileId)).thenReturn(Collections.emptyList());
 
@@ -79,7 +81,6 @@ class FileProcessingStatusServiceTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     void getFileProcessingStatus_ShouldReturnProcessing_WhenAnyJobPending() {
         ProcessingJob job1 = ProcessingJob.builder().status(ProcessingJob.JobStatus.COMPLETED).file(fileEntity).build();
         ProcessingJob job2 = ProcessingJob.builder().status(ProcessingJob.JobStatus.PENDING).file(fileEntity).build();
@@ -91,7 +92,6 @@ class FileProcessingStatusServiceTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     void getFileProcessingStatus_ShouldReturnCompleted_WhenAllJobsCompleted() {
         ProcessingJob job1 = ProcessingJob.builder().status(ProcessingJob.JobStatus.COMPLETED).file(fileEntity).build();
         when(processingJobRepository.findAllByFile_IdOrderByCreatedAtAsc(fileId)).thenReturn(List.of(job1));
@@ -102,7 +102,6 @@ class FileProcessingStatusServiceTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     void getFileProcessingStatus_ShouldReturnFailed_WhenAllJobsFailed() {
         ProcessingJob job1 = ProcessingJob.builder().status(ProcessingJob.JobStatus.FAILED).file(fileEntity).build();
         when(processingJobRepository.findAllByFile_IdOrderByCreatedAtAsc(fileId)).thenReturn(List.of(job1));
@@ -113,7 +112,6 @@ class FileProcessingStatusServiceTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     void getFileProcessingStatus_ShouldReturnPartialFailure_WhenMixed() {
         ProcessingJob job1 = ProcessingJob.builder().status(ProcessingJob.JobStatus.COMPLETED).file(fileEntity).build();
         ProcessingJob job2 = ProcessingJob.builder().status(ProcessingJob.JobStatus.FAILED).file(fileEntity).build();
@@ -125,10 +123,9 @@ class FileProcessingStatusServiceTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     void getFileProcessingStatus_ShouldIncludeCounts() {
         when(processingJobRepository.findAllByFile_IdOrderByCreatedAtAsc(fileId)).thenReturn(Collections.emptyList());
-        when(duplicateCandidateRepository.count(any(Specification.class))).thenReturn(5L);
+        when(duplicateCandidateRepository.count(ArgumentMatchers.<Specification<com.filemanager.api.entity.DuplicateCandidate>>any())).thenReturn(5L);
 
         FileProcessingStatusResponse result = fileProcessingStatusService.getFileProcessingStatus(actorUserId, fileId);
 

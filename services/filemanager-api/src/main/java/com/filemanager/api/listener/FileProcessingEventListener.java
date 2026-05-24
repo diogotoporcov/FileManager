@@ -9,6 +9,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
+import com.filemanager.api.port.PublishEventResponse;
+
 @Component
 @RequiredArgsConstructor
 @Slf4j
@@ -21,7 +23,8 @@ public class FileProcessingEventListener {
     public void handleFileProcessingRequested(FileProcessingRequestedEvent event) {
         log.info("Handling file processing requested event for file {} after transaction commit", event.fileId());
         try {
-            eventPublisherPort.publishFileProcessingRequested(event);
+            PublishEventResponse response = eventPublisherPort.publishFileProcessingRequested(event);
+            processingJobService.updateExternalJobId(event.processingJobId(), response.getMessageId());
         } catch (Exception e) {
             log.error("Failed to publish event to Kafka after commit. Marking job {} as FAILED", event.processingJobId(), e);
             processingJobService.handleProcessingFailure(event.processingJobId(), event.fileId(), e.getMessage());

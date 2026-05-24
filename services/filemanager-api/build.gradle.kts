@@ -2,6 +2,7 @@ plugins {
     java
     id("org.springframework.boot") version "4.0.6"
     id("io.spring.dependency-management") version "1.1.7"
+    checkstyle
 }
 
 group = "com.filemanager"
@@ -37,7 +38,7 @@ dependencies {
 
     runtimeOnly("org.postgresql:postgresql")
     implementation("org.hibernate.orm:hibernate-vector:7.1.0.Final")
-    implementation("io.minio:minio:8.5.17")
+    implementation("io.minio:minio:8.6.0")
 
     compileOnly("org.projectlombok:lombok")
     annotationProcessor("org.projectlombok:lombok")

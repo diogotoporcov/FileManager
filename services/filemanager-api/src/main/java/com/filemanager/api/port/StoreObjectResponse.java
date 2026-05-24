@@ -5,7 +5,8 @@ import lombok.Value;
 
 @Value
 @Builder
-public class StoredObject {
+public class StoreObjectResponse {
     String storagePath;
-    String bucket;
+    String etag;
+    String versionId;
 }

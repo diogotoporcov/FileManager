@@ -21,7 +21,7 @@ public class SecurityConfig {
 
     @Bean
     @Order(1)
-    public SecurityFilterChain internalSecurityFilterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain internalSecurityFilterChain(HttpSecurity http) {
         http
                 .securityMatcher("/internal/**")
                 .csrf(AbstractHttpConfigurer::disable)
@@ -36,7 +36,7 @@ public class SecurityConfig {
 
     @Bean
     @Order(2)
-    public SecurityFilterChain apiSecurityFilterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain apiSecurityFilterChain(HttpSecurity http) {
         http
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -46,7 +46,7 @@ public class SecurityConfig {
                         .anyRequest().authenticated()
                 )
                 .oauth2ResourceServer(oauth2 -> oauth2
-                        .jwt(_ -> {})
+                        .jwt(_ -> { })
                 );
 
         return http.build();

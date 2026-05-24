@@ -6,8 +6,7 @@ import org.junit.jupiter.api.Test;
 import java.util.Set;
 
 import static com.filemanager.api.auth.Permission.*;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 class RolePermissionResolverTest {
 
@@ -18,25 +17,25 @@ class RolePermissionResolverTest {
         Set<Permission> permissions = resolver.resolvePermissions(MemberRole.VIEWER);
         assertTrue(permissions.contains(FILE_VIEW));
         assertTrue(permissions.contains(DUPLICATE_VIEW));
-        assertTrue(!permissions.contains(FILE_UPLOAD));
-        assertTrue(!permissions.contains(FILE_DELETE));
-        assertTrue(!permissions.contains(DUPLICATE_MANAGE));
+        assertFalse(permissions.contains(FILE_UPLOAD));
+        assertFalse(permissions.contains(FILE_DELETE));
+        assertFalse(permissions.contains(DUPLICATE_MANAGE));
     }
 
     @Test
     void contributor_ShouldHaveCorrectPermissions() {
         Set<Permission> permissions = resolver.resolvePermissions(MemberRole.CONTRIBUTOR);
         assertTrue(permissions.contains(FILE_UPLOAD));
-        assertTrue(!permissions.contains(FILE_MODIFY));
-        assertTrue(!permissions.contains(FILE_DELETE));
+        assertFalse(permissions.contains(FILE_MODIFY));
+        assertFalse(permissions.contains(FILE_DELETE));
     }
 
     @Test
     void editor_ShouldHaveCorrectPermissions() {
         Set<Permission> permissions = resolver.resolvePermissions(MemberRole.EDITOR);
         assertTrue(permissions.contains(FILE_MODIFY));
-        assertTrue(!permissions.contains(FILE_DELETE));
-        assertTrue(!permissions.contains(DUPLICATE_MANAGE));
+        assertFalse(permissions.contains(FILE_DELETE));
+        assertFalse(permissions.contains(DUPLICATE_MANAGE));
     }
 
     @Test
@@ -45,8 +44,8 @@ class RolePermissionResolverTest {
         assertTrue(permissions.contains(FILE_DELETE));
         assertTrue(permissions.contains(FILE_SHARE));
         assertTrue(permissions.contains(DUPLICATE_MANAGE));
-        assertTrue(!permissions.contains(ORGANIZATION_MANAGE_MEMBERS));
-        assertTrue(!permissions.contains(ORGANIZATION_MANAGE_ROLES));
+        assertFalse(permissions.contains(ORGANIZATION_MANAGE_MEMBERS));
+        assertFalse(permissions.contains(ORGANIZATION_MANAGE_ROLES));
     }
 
     @Test

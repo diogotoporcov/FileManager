@@ -6,7 +6,10 @@ import com.filemanager.api.port.EventPublisherPort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.support.SendResult;
 import org.springframework.stereotype.Component;
+
+import com.filemanager.api.port.PublishEventResponse;
 
 @Component
 @RequiredArgsConstructor
@@ -17,12 +20,25 @@ public class KafkaEventPublisherAdapter implements EventPublisherPort {
     private final AppProperties appProperties;
 
     @Override
-    public void publishFileProcessingRequested(FileProcessingRequestedEvent event) {
+    public PublishEventResponse publishFileProcessingRequested(FileProcessingRequestedEvent event) {
         String topic = appProperties.getKafka().getTopics().getFileProcessingRequested();
         log.info("Publishing file processing requested event for file {}: job {}", event.fileId(), event.processingJobId());
         try {
             // Blocking call to ensure event delivery success before continuing.
-            kafkaTemplate.send(topic, event.fileId().toString(), event).get();
+            SendResult<String, FileProcessingRequestedEvent> result = 
+                    kafkaTemplate.send(topic, event.fileId().toString(), event).get();
+            
+            log.info("Successfully published event to topic {} partition {} offset {}", 
+                    result.getRecordMetadata().topic(), 
+                    result.getRecordMetadata().partition(), 
+                    result.getRecordMetadata().offset());
+
+            return PublishEventResponse.builder()
+                    .messageId(event.eventId().toString())
+                    .topic(result.getRecordMetadata().topic())
+                    .partition(result.getRecordMetadata().partition())
+                    .offset(result.getRecordMetadata().offset())
+                    .build();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new RuntimeException("Interrupted while publishing event to Kafka", e);

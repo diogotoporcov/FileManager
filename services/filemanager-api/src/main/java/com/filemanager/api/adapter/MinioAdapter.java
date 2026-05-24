@@ -4,8 +4,14 @@ import com.filemanager.api.config.MinioProperties;
 import com.filemanager.api.exception.StorageException;
 import com.filemanager.api.port.ObjectStoragePort;
 import com.filemanager.api.port.StoreObjectRequest;
-import com.filemanager.api.port.StoredObject;
-import io.minio.*;
+import com.filemanager.api.port.StoreObjectResponse;
+import io.minio.BucketExistsArgs;
+import io.minio.GetObjectArgs;
+import io.minio.MakeBucketArgs;
+import io.minio.MinioClient;
+import io.minio.ObjectWriteResponse;
+import io.minio.PutObjectArgs;
+import io.minio.RemoveObjectArgs;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.stereotype.Component;
@@ -26,6 +32,7 @@ public class MinioAdapter implements ObjectStoragePort, InitializingBean {
             boolean found = minioClient.bucketExists(BucketExistsArgs.builder()
                     .bucket(properties.getBucketName())
                     .build());
+
             if (!found) {
                 minioClient.makeBucket(MakeBucketArgs.builder()
                         .bucket(properties.getBucketName())
@@ -37,9 +44,9 @@ public class MinioAdapter implements ObjectStoragePort, InitializingBean {
     }
 
     @Override
-    public StoredObject putObject(StoreObjectRequest request) {
+    public StoreObjectResponse putObject(StoreObjectRequest request) {
         try {
-            minioClient.putObject(
+            ObjectWriteResponse response = minioClient.putObject(
                     PutObjectArgs.builder()
                             .bucket(properties.getBucketName())
                             .object(request.getStoragePath())
@@ -48,9 +55,10 @@ public class MinioAdapter implements ObjectStoragePort, InitializingBean {
                             .build()
             );
 
-            return StoredObject.builder()
-                    .storagePath(request.getStoragePath())
-                    .bucket(properties.getBucketName())
+            return StoreObjectResponse.builder()
+                    .storagePath(response.object())
+                    .etag(response.etag())
+                    .versionId(response.versionId())
                     .build();
         } catch (Exception e) {
             throw new StorageException("Failed to store object: " + request.getStoragePath(), e);

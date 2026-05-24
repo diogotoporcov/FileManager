@@ -1,7 +1,12 @@
 package com.filemanager.api.service;
 
 import com.filemanager.api.config.AppProperties;
-import com.filemanager.api.entity.*;
+import com.filemanager.api.entity.FileEntity;
+import com.filemanager.api.entity.FileFingerprint;
+import com.filemanager.api.entity.ImageFingerprint;
+import com.filemanager.api.entity.Organization;
+import com.filemanager.api.entity.ProcessingJob;
+import com.filemanager.api.entity.User;
 import com.filemanager.api.repository.DuplicateCandidateRepository;
 import com.filemanager.api.repository.FileFingerprintRepository;
 import com.filemanager.api.repository.FileRepository;
@@ -20,7 +25,11 @@ import java.util.UUID;
 
 import static com.filemanager.api.entity.FileFingerprint.FingerprintAlgorithm.SHA256;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class DuplicateScopingTest {
@@ -36,17 +45,13 @@ class DuplicateScopingTest {
     @Mock
     private DuplicateCandidateRepository duplicateCandidateRepository;
     @Mock
-    private FileManagerMetrics fileManagerMetrics;
-    @Mock
     private AppProperties appProperties;
 
     @InjectMocks
     private ProcessingJobService processingJobService;
 
     private User user1;
-    private User user2;
     private Organization org1;
-    private Organization org2;
 
     @BeforeEach
     void setup() {
@@ -55,16 +60,13 @@ class DuplicateScopingTest {
         lenient().when(appProperties.getPhash()).thenReturn(phash);
 
         user1 = new User(); user1.setId(UUID.randomUUID());
-        user2 = new User(); user2.setId(UUID.randomUUID());
         org1 = new Organization(); org1.setId(UUID.randomUUID());
-        org2 = new Organization(); org2.setId(UUID.randomUUID());
     }
 
     @Test
     void handleChecksumResult_DifferentUsers_ShouldNotDetectDuplicate() {
         UUID jobId = UUID.randomUUID();
         UUID file1Id = UUID.randomUUID();
-        UUID file2Id = UUID.randomUUID();
         String sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 
         FileEntity file1 = FileEntity.builder().id(file1Id).ownerUser(user1).build();
