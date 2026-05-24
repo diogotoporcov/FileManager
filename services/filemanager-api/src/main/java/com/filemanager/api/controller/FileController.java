@@ -4,6 +4,12 @@ import com.filemanager.api.auth.CurrentUserService;
 import com.filemanager.api.dto.FileResponse;
 import com.filemanager.api.entity.FileEntity;
 import com.filemanager.api.service.FileService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
@@ -22,17 +28,28 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/files")
 @RequiredArgsConstructor
+@Tag(name = "File Management", description = "Endpoints for uploading, listing, and managing files")
+@ApiResponses({
+        @ApiResponse(responseCode = "401", description = "Unauthenticated - Invalid or missing JWT", content = @Content),
+        @ApiResponse(responseCode = "403", description = "Forbidden - Insufficient permissions", content = @Content),
+        @ApiResponse(responseCode = "500", description = "Internal server error", content = @Content)
+})
 public class FileController {
 
     private final FileService fileService;
     private final CurrentUserService currentUserService;
 
+    @Operation(summary = "Upload a file", description = "Uploads a new file to the storage. Actor is derived from JWT.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "File uploaded successfully"),
+            @ApiResponse(responseCode = "400", description = "Invalid input or empty file", content = @Content)
+    })
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
     public FileResponse uploadFile(
-            @RequestParam("file") MultipartFile file,
-            @RequestParam(value = "ownerUserId", required = false) UUID ownerUserId,
-            @RequestParam(value = "ownerOrganizationId", required = false) UUID ownerOrganizationId
+            @Parameter(description = "The file to upload") @RequestParam("file") MultipartFile file,
+            @Parameter(description = "Owner user ID. For user-owned uploads, this must match the authenticated user. Exactly one ownership context should be provided.") @RequestParam(value = "ownerUserId", required = false) UUID ownerUserId,
+            @Parameter(description = "Owner organization ID. For organization-owned uploads, authenticated user must have upload permission. Exactly one ownership context should be provided.") @RequestParam(value = "ownerOrganizationId", required = false) UUID ownerOrganizationId
     ) throws IOException {
         if (file.isEmpty()) {
             throw new IllegalArgumentException("Upload file is missing or empty");
@@ -54,10 +71,12 @@ public class FileController {
         return mapToResponse(entity);
     }
 
+    @Operation(summary = "List files", description = "Lists files based on ownership/organization filters. Actor is derived from JWT.")
+    @ApiResponse(responseCode = "200", description = "List of files")
     @GetMapping
     public List<FileResponse> listFiles(
-            @RequestParam(value = "ownerUserId", required = false) UUID ownerUserId,
-            @RequestParam(value = "ownerOrganizationId", required = false) UUID ownerOrganizationId
+            @Parameter(description = "Filter by owner User ID") @RequestParam(value = "ownerUserId", required = false) UUID ownerUserId,
+            @Parameter(description = "Filter by owner Organization ID") @RequestParam(value = "ownerOrganizationId", required = false) UUID ownerOrganizationId
     ) {
         UUID actorUserId = currentUserService.getCurrentUserId();
         return fileService.listFiles(ownerUserId, ownerOrganizationId, actorUserId)
@@ -66,15 +85,25 @@ public class FileController {
                 .collect(Collectors.toList());
     }
 
+    @Operation(summary = "Get file metadata", description = "Retrieves metadata for a specific file.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "File metadata found"),
+            @ApiResponse(responseCode = "404", description = "File not found", content = @Content)
+    })
     @GetMapping("/{fileId}")
-    public FileResponse getFileMetadata(@PathVariable UUID fileId) {
+    public FileResponse getFileMetadata(@Parameter(description = "ID of the file") @PathVariable UUID fileId) {
         UUID actorUserId = currentUserService.getCurrentUserId();
         FileEntity entity = fileService.getFileMetadata(fileId, actorUserId);
         return mapToResponse(entity);
     }
 
-    @GetMapping("/{fileId}/download")
-    public ResponseEntity<Resource> downloadFile(@PathVariable UUID fileId) {
+    @Operation(summary = "Download file", description = "Downloads the content of a specific file.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "File content stream"),
+            @ApiResponse(responseCode = "404", description = "File not found", content = @Content)
+    })
+    @GetMapping(value = "/{fileId}/download", produces = MediaType.APPLICATION_OCTET_STREAM_VALUE)
+    public ResponseEntity<Resource> downloadFile(@Parameter(description = "ID of the file") @PathVariable UUID fileId) {
         UUID actorUserId = currentUserService.getCurrentUserId();
         FileEntity entity = fileService.getFileMetadata(fileId, actorUserId);
         Resource resource = new InputStreamResource(fileService.downloadFile(fileId, actorUserId));
@@ -85,9 +114,14 @@ public class FileController {
                 .body(resource);
     }
 
+    @Operation(summary = "Delete file", description = "Deletes a specific file.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "File deleted successfully"),
+            @ApiResponse(responseCode = "404", description = "File not found", content = @Content)
+    })
     @DeleteMapping("/{fileId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void deleteFile(@PathVariable UUID fileId) {
+    public void deleteFile(@Parameter(description = "ID of the file") @PathVariable UUID fileId) {
         UUID actorUserId = currentUserService.getCurrentUserId();
         fileService.deleteFile(fileId, actorUserId);
     }

@@ -4,6 +4,7 @@ import com.filemanager.api.dto.internal.ChecksumResultRequest;
 import com.filemanager.api.dto.internal.PhashResultRequest;
 import com.filemanager.api.dto.internal.ProcessingFailureRequest;
 import com.filemanager.api.service.ProcessingJobService;
+import io.swagger.v3.oas.annotations.Hidden;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -14,6 +15,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/internal/processing/jobs")
 @RequiredArgsConstructor
+@Hidden
 public class InternalProcessingController {
 
     private final ProcessingJobService processingJobService;
