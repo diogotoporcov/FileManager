@@ -10,6 +10,7 @@ import com.filemanager.api.repository.FileRepository;
 import com.filemanager.api.repository.OrganizationRepository;
 import com.filemanager.api.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,6 +21,7 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class FileService {
 
     private final FileRepository fileRepository;
@@ -45,38 +47,51 @@ public class FileService {
                     .orElseThrow(() -> new ResourceNotFoundException("Organization not found: " + ownerOrganizationId));
         }
 
+        String effectiveContentType = (contentType == null || contentType.isBlank()) ? "application/octet-stream" : contentType;
         String storagePath = UUID.randomUUID().toString();
 
         objectStoragePort.putObject(StoreObjectRequest.builder()
                 .storagePath(storagePath)
                 .content(content)
                 .size(size)
-                .contentType(contentType)
+                .contentType(effectiveContentType)
                 .build());
 
-        FileEntity fileEntity = FileEntity.builder()
-                .name(fileName)
-                .storagePath(storagePath)
-                .mimeType(contentType)
-                .size(size)
-                .ownerUser(ownerUser)
-                .ownerOrganization(ownerOrganization)
-                .build();
+        try {
+            FileEntity fileEntity = FileEntity.builder()
+                    .name(fileName)
+                    .storagePath(storagePath)
+                    .mimeType(effectiveContentType)
+                    .size(size)
+                    .ownerUser(ownerUser)
+                    .ownerOrganization(ownerOrganization)
+                    .build();
 
-        return fileRepository.save(fileEntity);
+            return fileRepository.save(fileEntity);
+        } catch (Exception e) {
+            log.error("Failed to save file metadata to database. Cleaning up object from storage: {}", storagePath, e);
+            try {
+                objectStoragePort.deleteObject(storagePath);
+            } catch (Exception cleanupEx) {
+                log.error("Failed to cleanup orphaned object from storage: {}", storagePath, cleanupEx);
+            }
+            throw e;
+        }
     }
 
     public List<FileEntity> listFiles(UUID ownerUserId, UUID ownerOrganizationId) {
+        if ((ownerUserId != null && ownerOrganizationId != null) || (ownerUserId == null && ownerOrganizationId == null)) {
+            throw new IllegalArgumentException("Exactly one owner (user or organization) must be provided");
+        }
+
         if (ownerUserId != null) {
             User user = userRepository.findById(ownerUserId)
                     .orElseThrow(() -> new ResourceNotFoundException("User not found: " + ownerUserId));
             return fileRepository.findAllByOwnerUserAndDeletedAtIsNull(user);
-        } else if (ownerOrganizationId != null) {
+        } else {
             Organization org = organizationRepository.findById(ownerOrganizationId)
                     .orElseThrow(() -> new ResourceNotFoundException("Organization not found: " + ownerOrganizationId));
             return fileRepository.findAllByOwnerOrganizationAndDeletedAtIsNull(org);
-        } else {
-            throw new IllegalArgumentException("Either ownerUserId or ownerOrganizationId must be provided");
         }
     }
 

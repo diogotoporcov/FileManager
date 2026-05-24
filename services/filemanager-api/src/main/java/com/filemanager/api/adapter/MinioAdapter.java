@@ -1,63 +1,86 @@
 package com.filemanager.api.adapter;
 
 import com.filemanager.api.config.MinioProperties;
+import com.filemanager.api.exception.StorageException;
 import com.filemanager.api.port.ObjectStoragePort;
 import com.filemanager.api.port.StoreObjectRequest;
 import com.filemanager.api.port.StoredObject;
-import io.minio.GetObjectArgs;
-import io.minio.MinioClient;
-import io.minio.PutObjectArgs;
-import io.minio.RemoveObjectArgs;
+import io.minio.*;
 import lombok.RequiredArgsConstructor;
-import lombok.SneakyThrows;
+import org.springframework.beans.factory.InitializingBean;
 import org.springframework.stereotype.Component;
 
 import java.io.InputStream;
 
 @Component
 @RequiredArgsConstructor
-public class MinioAdapter implements ObjectStoragePort {
+public class MinioAdapter implements ObjectStoragePort, InitializingBean {
 
     private final MinioClient minioClient;
     private final MinioProperties properties;
 
     @Override
-    @SneakyThrows
+    public void afterPropertiesSet() {
+        try {
+            boolean found = minioClient.bucketExists(BucketExistsArgs.builder()
+                    .bucket(properties.getBucketName())
+                    .build());
+            if (!found) {
+                minioClient.makeBucket(MakeBucketArgs.builder()
+                        .bucket(properties.getBucketName())
+                        .build());
+            }
+        } catch (Exception e) {
+            throw new StorageException("Failed to initialize MinIO bucket: " + properties.getBucketName(), e);
+        }
+    }
+
+    @Override
     public StoredObject putObject(StoreObjectRequest request) {
-        minioClient.putObject(
-                PutObjectArgs.builder()
-                        .bucket(properties.getBucketName())
-                        .object(request.getStoragePath())
-                        .stream(request.getContent(), request.getSize(), -1)
-                        .contentType(request.getContentType())
-                        .build()
-        );
+        try {
+            minioClient.putObject(
+                    PutObjectArgs.builder()
+                            .bucket(properties.getBucketName())
+                            .object(request.getStoragePath())
+                            .stream(request.getContent(), request.getSize(), -1)
+                            .contentType(request.getContentType())
+                            .build()
+            );
 
-        return StoredObject.builder()
-                .storagePath(request.getStoragePath())
-                .bucket(properties.getBucketName())
-                .build();
+            return StoredObject.builder()
+                    .storagePath(request.getStoragePath())
+                    .bucket(properties.getBucketName())
+                    .build();
+        } catch (Exception e) {
+            throw new StorageException("Failed to store object: " + request.getStoragePath(), e);
+        }
     }
 
     @Override
-    @SneakyThrows
     public InputStream getObject(String storagePath) {
-        return minioClient.getObject(
-                GetObjectArgs.builder()
-                        .bucket(properties.getBucketName())
-                        .object(storagePath)
-                        .build()
-        );
+        try {
+            return minioClient.getObject(
+                    GetObjectArgs.builder()
+                            .bucket(properties.getBucketName())
+                            .object(storagePath)
+                            .build()
+            );
+        } catch (Exception e) {
+            throw new StorageException("Failed to retrieve object: " + storagePath, e);
+        }
     }
 
     @Override
-    @SneakyThrows
     public void deleteObject(String storagePath) {
-        minioClient.removeObject(
-                RemoveObjectArgs.builder()
-                        .bucket(properties.getBucketName())
-                        .object(storagePath)
-                        .build()
-        );
+        try {
+            minioClient.removeObject(
+                    RemoveObjectArgs.builder()
+                            .bucket(properties.getBucketName())
+                            .object(storagePath)
+                            .build()
+            );
+        } catch (Exception e) {
+            throw new StorageException("Failed to delete object: " + storagePath, e);
+        }
     }
 }
