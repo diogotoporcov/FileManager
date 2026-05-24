@@ -25,8 +25,11 @@ class HttpProcessingResultSink(ProcessingResultSink):
                 response = await client.post(url, json=payload, headers=self.headers)
                 response.raise_for_status()
                 logger.info(f"Reported checksum success for job {job_id}")
+            except httpx.HTTPStatusError as e:
+                logger.error(f"Failed to report checksum success for job {job_id}: status {e.response.status_code}")
+                raise
             except httpx.HTTPError as e:
-                logger.error(f"Failed to report checksum success for job {job_id}: {e}")
+                logger.error(f"Failed to report checksum success for job {job_id}: {type(e).__name__}")
                 raise
 
     async def report_phash_success(self, job_id: UUID, file_id: UUID, phash: str):
@@ -40,8 +43,11 @@ class HttpProcessingResultSink(ProcessingResultSink):
                 response = await client.post(url, json=payload, headers=self.headers)
                 response.raise_for_status()
                 logger.info(f"Reported pHash success for job {job_id}")
+            except httpx.HTTPStatusError as e:
+                logger.error(f"Failed to report pHash success for job {job_id}: status {e.response.status_code}")
+                raise
             except httpx.HTTPError as e:
-                logger.error(f"Failed to report pHash success for job {job_id}: {e}")
+                logger.error(f"Failed to report pHash success for job {job_id}: {type(e).__name__}")
                 raise
 
     async def report_failure(self, job_id: UUID, file_id: UUID, error_message: str):
@@ -55,6 +61,9 @@ class HttpProcessingResultSink(ProcessingResultSink):
                 response = await client.post(url, json=payload, headers=self.headers)
                 response.raise_for_status()
                 logger.info(f"Reported failure for job {job_id}")
+            except httpx.HTTPStatusError as e:
+                logger.error(f"Failed to report failure for job {job_id}: status {e.response.status_code}")
+                raise
             except httpx.HTTPError as e:
-                logger.error(f"Failed to report failure for job {job_id}: {e}")
+                logger.error(f"Failed to report failure for job {job_id}: {type(e).__name__}")
                 raise
