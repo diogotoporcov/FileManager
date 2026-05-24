@@ -29,7 +29,7 @@ CREATE TABLE user_identities (
 CREATE TABLE organization_members (
     organization_id UUID NOT NULL REFERENCES organizations(id),
     user_id UUID NOT NULL REFERENCES users(id),
-    role VARCHAR(50) NOT NULL CHECK (role IN ('OWNER', 'ADMIN', 'MEMBER')),
+    role VARCHAR(50) NOT NULL CHECK (role IN ('VIEWER', 'CONTRIBUTOR', 'EDITOR', 'MANAGER', 'ADMIN', 'OWNER')),
     joined_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (organization_id, user_id)
 );

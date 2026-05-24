@@ -23,9 +23,10 @@ public class DuplicateCandidateController {
             @RequestParam(required = false) UUID ownerUserId,
             @RequestParam(required = false) UUID ownerOrganizationId,
             @RequestParam(required = false) DetectionMethod detectionMethod,
-            @RequestParam(required = false) CandidateStatus status) {
+            @RequestParam(required = false) CandidateStatus status,
+            @RequestParam UUID actorUserId) {
         return duplicateCandidateService.getDuplicatesForFile(
-                fileId, ownerUserId, ownerOrganizationId, detectionMethod, status);
+                fileId, ownerUserId, ownerOrganizationId, detectionMethod, status, actorUserId);
     }
 
     @GetMapping("/duplicate-candidates")
@@ -33,9 +34,10 @@ public class DuplicateCandidateController {
             @RequestParam(required = false) UUID ownerUserId,
             @RequestParam(required = false) UUID ownerOrganizationId,
             @RequestParam(required = false) DetectionMethod detectionMethod,
-            @RequestParam(required = false) CandidateStatus status) {
+            @RequestParam(required = false) CandidateStatus status,
+            @RequestParam UUID actorUserId) {
         return duplicateCandidateService.getDuplicatesForOwner(
-                ownerUserId, ownerOrganizationId, detectionMethod, status);
+                ownerUserId, ownerOrganizationId, detectionMethod, status, actorUserId);
     }
 
     @PatchMapping("/duplicate-candidates/{candidateId}/status")
@@ -43,8 +45,9 @@ public class DuplicateCandidateController {
             @PathVariable UUID candidateId,
             @RequestParam(required = false) UUID ownerUserId,
             @RequestParam(required = false) UUID ownerOrganizationId,
+            @RequestParam UUID actorUserId,
             @Valid @RequestBody DuplicateStatusUpdateRequest request) {
         return duplicateCandidateService.updateStatus(
-                candidateId, ownerUserId, ownerOrganizationId, request.getStatus());
+                candidateId, ownerUserId, ownerOrganizationId, request.getStatus(), actorUserId);
     }
 }

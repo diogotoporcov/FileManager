@@ -38,9 +38,12 @@ public class OrganizationMember {
     private OffsetDateTime joinedAt;
 
     public enum MemberRole {
-        OWNER,
+        VIEWER,
+        CONTRIBUTOR,
+        EDITOR,
+        MANAGER,
         ADMIN,
-        MEMBER
+        OWNER
     }
 
     @Embeddable

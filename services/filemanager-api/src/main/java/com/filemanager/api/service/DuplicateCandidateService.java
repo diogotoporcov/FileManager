@@ -1,5 +1,7 @@
 package com.filemanager.api.service;
 
+import com.filemanager.api.auth.AccessControlService;
+import com.filemanager.api.auth.Permission;
 import com.filemanager.api.dto.*;
 import com.filemanager.api.entity.DuplicateCandidate;
 import com.filemanager.api.entity.DuplicateCandidate.CandidateStatus;
@@ -24,11 +26,15 @@ public class DuplicateCandidateService {
 
     private final DuplicateCandidateRepository duplicateCandidateRepository;
     private final FileRepository fileRepository;
+    private final AccessControlService accessControlService;
 
     @Transactional(readOnly = true)
     public List<FileDuplicateResponse> getDuplicatesForFile(
             UUID fileId, UUID ownerUserId, UUID ownerOrganizationId,
-            DetectionMethod method, CandidateStatus status) {
+            DetectionMethod method, CandidateStatus status, UUID actorUserId) {
+        
+        accessControlService.assertCanViewDuplicates(actorUserId, ownerUserId, ownerOrganizationId);
+        accessControlService.assertCanAccessFile(actorUserId, fileId, Permission.DUPLICATE_VIEW);
         
         validateOwnerContext(ownerUserId, ownerOrganizationId);
         
@@ -52,8 +58,9 @@ public class DuplicateCandidateService {
     @Transactional(readOnly = true)
     public List<DuplicateCandidateResponse> getDuplicatesForOwner(
             UUID ownerUserId, UUID ownerOrganizationId,
-            DetectionMethod method, CandidateStatus status) {
+            DetectionMethod method, CandidateStatus status, UUID actorUserId) {
         
+        accessControlService.assertCanViewDuplicates(actorUserId, ownerUserId, ownerOrganizationId);
         validateOwnerContext(ownerUserId, ownerOrganizationId);
 
         Specification<DuplicateCandidate> spec = Specification.where(DuplicateCandidateSpecifications.isNotDeleted())
@@ -75,24 +82,15 @@ public class DuplicateCandidateService {
 
     @Transactional
     public DuplicateCandidateResponse updateStatus(
-            UUID candidateId, UUID ownerUserId, UUID ownerOrganizationId, CandidateStatus status) {
+            UUID candidateId, UUID ownerUserId, UUID ownerOrganizationId, CandidateStatus status, UUID actorUserId) {
         
+        accessControlService.assertCanManageDuplicate(actorUserId, candidateId);
         validateOwnerContext(ownerUserId, ownerOrganizationId);
 
         DuplicateCandidate dc = duplicateCandidateRepository.findById(candidateId)
                 .orElseThrow(() -> new ResourceNotFoundException("Duplicate candidate not found: " + candidateId));
 
-        // Verify that the owner has access to at least one of the files in the pair
-        boolean hasAccess = false;
-        if (ownerUserId != null) {
-            hasAccess = (dc.getSourceFile().getOwnerUser() != null && dc.getSourceFile().getOwnerUser().getId().equals(ownerUserId)) ||
-                        (dc.getCandidateFile().getOwnerUser() != null && dc.getCandidateFile().getOwnerUser().getId().equals(ownerUserId));
-        } else {
-            hasAccess = (dc.getSourceFile().getOwnerOrganization() != null && dc.getSourceFile().getOwnerOrganization().getId().equals(ownerOrganizationId)) ||
-                        (dc.getCandidateFile().getOwnerOrganization() != null && dc.getCandidateFile().getOwnerOrganization().getId().equals(ownerOrganizationId));
-        }
-
-        if (!hasAccess) {
+        if (!hasOwnershipOfCandidate(dc, ownerUserId, ownerOrganizationId)) {
             throw new ResourceNotFoundException("Duplicate candidate not found: " + candidateId);
         }
 
@@ -108,14 +106,31 @@ public class DuplicateCandidateService {
 
     private void verifyFileOwnership(FileEntity file, UUID ownerUserId, UUID ownerOrganizationId) {
         if (ownerUserId != null) {
-            if (file.getOwnerUser() == null || !file.getOwnerUser().getId().equals(ownerUserId)) {
+            if (!isFileOwnedByUser(file, ownerUserId)) {
                 throw new ResourceNotFoundException("File not found: " + file.getId());
             }
-        } else {
-            if (file.getOwnerOrganization() == null || !file.getOwnerOrganization().getId().equals(ownerOrganizationId)) {
-                throw new ResourceNotFoundException("File not found: " + file.getId());
-            }
+            return;
         }
+        if (!isFileOwnedByOrganization(file, ownerOrganizationId)) {
+            throw new ResourceNotFoundException("File not found: " + file.getId());
+        }
+    }
+
+    private boolean hasOwnershipOfCandidate(DuplicateCandidate dc, UUID ownerUserId, UUID ownerOrganizationId) {
+        if (ownerUserId != null) {
+            return isFileOwnedByUser(dc.getSourceFile(), ownerUserId) ||
+                   isFileOwnedByUser(dc.getCandidateFile(), ownerUserId);
+        }
+        return isFileOwnedByOrganization(dc.getSourceFile(), ownerOrganizationId) ||
+               isFileOwnedByOrganization(dc.getCandidateFile(), ownerOrganizationId);
+    }
+
+    private boolean isFileOwnedByUser(FileEntity file, UUID userId) {
+        return file.getOwnerUser() != null && file.getOwnerUser().getId().equals(userId);
+    }
+
+    private boolean isFileOwnedByOrganization(FileEntity file, UUID organizationId) {
+        return file.getOwnerOrganization() != null && file.getOwnerOrganization().getId().equals(organizationId);
     }
 
     private FileDuplicateResponse mapToFileDuplicateResponse(DuplicateCandidate dc, UUID requestedFileId) {

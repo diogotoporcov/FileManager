@@ -33,11 +33,11 @@ class DuplicateCandidateControllerTest {
         UUID fileId = UUID.randomUUID();
         UUID ownerId = UUID.randomUUID();
 
-        when(duplicateCandidateService.getDuplicatesForFile(eq(fileId), eq(ownerId), eq(null), any(), any()))
+        when(duplicateCandidateService.getDuplicatesForFile(eq(fileId), eq(ownerId), eq(null), any(), any(), eq(ownerId)))
                 .thenReturn(List.of());
 
         List<FileDuplicateResponse> result = duplicateCandidateController.getDuplicatesForFile(
-                fileId, ownerId, null, null, null);
+                fileId, ownerId, null, null, null, ownerId);
         
         assertThat(result).isNotNull();
     }
@@ -46,11 +46,11 @@ class DuplicateCandidateControllerTest {
     void getDuplicatesForOwner_ReturnsOk() {
         UUID ownerId = UUID.randomUUID();
 
-        when(duplicateCandidateService.getDuplicatesForOwner(eq(ownerId), eq(null), any(), any()))
+        when(duplicateCandidateService.getDuplicatesForOwner(eq(ownerId), eq(null), any(), any(), eq(ownerId)))
                 .thenReturn(List.of());
 
         List<DuplicateCandidateResponse> result = duplicateCandidateController.getDuplicatesForOwner(
-                ownerId, null, null, null);
+                ownerId, null, null, null, ownerId);
         
         assertThat(result).isNotNull();
     }
@@ -61,11 +61,11 @@ class DuplicateCandidateControllerTest {
         UUID ownerId = UUID.randomUUID();
         DuplicateStatusUpdateRequest request = new DuplicateStatusUpdateRequest(CandidateStatus.CONFIRMED);
 
-        when(duplicateCandidateService.updateStatus(eq(candidateId), eq(ownerId), eq(null), eq(CandidateStatus.CONFIRMED)))
+        when(duplicateCandidateService.updateStatus(eq(candidateId), eq(ownerId), eq(null), eq(CandidateStatus.CONFIRMED), eq(ownerId)))
                 .thenReturn(DuplicateCandidateResponse.builder().build());
 
         DuplicateCandidateResponse result = duplicateCandidateController.updateStatus(
-                candidateId, ownerId, null, request);
+                candidateId, ownerId, null, ownerId, request);
         
         assertThat(result).isNotNull();
     }

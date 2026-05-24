@@ -1,5 +1,6 @@
 package com.filemanager.api.service;
 
+import com.filemanager.api.auth.AccessControlService;
 import com.filemanager.api.event.FileProcessingRequestedEvent;
 import com.filemanager.api.entity.FileEntity;
 import com.filemanager.api.entity.Organization;
@@ -44,6 +45,8 @@ class FileServiceTest {
     private ObjectStoragePort objectStoragePort;
     @Mock
     private ApplicationEventPublisher applicationEventPublisher;
+    @Mock
+    private AccessControlService accessControlService;
 
     @InjectMocks
     private FileService fileService;
@@ -84,7 +87,7 @@ class FileServiceTest {
         when(processingJobRepository.save(any(ProcessingJob.class))).thenReturn(processingJob);
 
         // Act
-        FileEntity result = fileService.uploadFile(fileName, contentType, size, content, userId, null);
+        FileEntity result = fileService.uploadFile(fileName, contentType, size, content, userId, null, userId);
 
         // Assert
         assertNotNull(result);
@@ -130,7 +133,7 @@ class FileServiceTest {
                 .thenReturn(phashJob);
 
         // Act
-        FileEntity result = fileService.uploadFile(fileName, contentType, size, content, userId, null);
+        FileEntity result = fileService.uploadFile(fileName, contentType, size, content, userId, null, userId);
 
         // Assert
         assertNotNull(result);

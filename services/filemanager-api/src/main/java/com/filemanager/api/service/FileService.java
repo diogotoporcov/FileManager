@@ -1,10 +1,13 @@
 package com.filemanager.api.service;
 
+import com.filemanager.api.auth.AccessControlService;
+import com.filemanager.api.auth.Permission;
 import com.filemanager.api.event.FileProcessingRequestedEvent;
 import com.filemanager.api.entity.FileEntity;
 import com.filemanager.api.entity.Organization;
 import com.filemanager.api.entity.ProcessingJob;
 import com.filemanager.api.entity.User;
+import com.filemanager.api.exception.AccessDeniedException;
 import com.filemanager.api.exception.ResourceNotFoundException;
 import com.filemanager.api.port.ObjectStoragePort;
 import com.filemanager.api.port.StoreObjectRequest;
@@ -35,12 +38,12 @@ public class FileService {
     private final ProcessingJobPlanner processingJobPlanner;
     private final ObjectStoragePort objectStoragePort;
     private final ApplicationEventPublisher applicationEventPublisher;
+    private final AccessControlService accessControlService;
 
     @Transactional
-    public FileEntity uploadFile(String fileName, String contentType, long size, InputStream content, UUID ownerUserId, UUID ownerOrganizationId) {
-        if ((ownerUserId != null && ownerOrganizationId != null) || (ownerUserId == null && ownerOrganizationId == null)) {
-            throw new IllegalArgumentException("Exactly one owner (user or organization) must be provided");
-        }
+    public FileEntity uploadFile(String fileName, String contentType, long size, InputStream content, UUID ownerUserId, UUID ownerOrganizationId, UUID actorUserId) {
+        accessControlService.assertCanUploadToContext(actorUserId, ownerUserId, ownerOrganizationId);
+        validateExactlyOneOwner(ownerUserId, ownerOrganizationId);
 
         User ownerUser = null;
         if (ownerUserId != null) {
@@ -116,35 +119,48 @@ public class FileService {
         }
     }
 
-    public List<FileEntity> listFiles(UUID ownerUserId, UUID ownerOrganizationId) {
-        if ((ownerUserId != null && ownerOrganizationId != null) || (ownerUserId == null && ownerOrganizationId == null)) {
-            throw new IllegalArgumentException("Exactly one owner (user or organization) must be provided");
-        }
+    public List<FileEntity> listFiles(UUID ownerUserId, UUID ownerOrganizationId, UUID actorUserId) {
+        validateExactlyOneOwner(ownerUserId, ownerOrganizationId);
 
         if (ownerUserId != null) {
+            if (!ownerUserId.equals(actorUserId)) {
+                throw new AccessDeniedException("You can only list your own files.");
+            }
             User user = userRepository.findById(ownerUserId)
                     .orElseThrow(() -> new ResourceNotFoundException("User not found: " + ownerUserId));
             return fileRepository.findAllByOwnerUserAndDeletedAtIsNull(user);
-        } else {
-            Organization org = organizationRepository.findById(ownerOrganizationId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Organization not found: " + ownerOrganizationId));
-            return fileRepository.findAllByOwnerOrganizationAndDeletedAtIsNull(org);
+        }
+
+        accessControlService.assertOrganizationPermission(actorUserId, ownerOrganizationId, Permission.FILE_VIEW);
+        Organization org = organizationRepository.findById(ownerOrganizationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Organization not found: " + ownerOrganizationId));
+        return fileRepository.findAllByOwnerOrganizationAndDeletedAtIsNull(org);
+    }
+
+    private void validateExactlyOneOwner(UUID ownerUserId, UUID ownerOrganizationId) {
+        if ((ownerUserId != null && ownerOrganizationId != null) || (ownerUserId == null && ownerOrganizationId == null)) {
+            throw new IllegalArgumentException("Exactly one owner (user or organization) must be provided");
         }
     }
 
-    public FileEntity getFileMetadata(UUID fileId) {
+    public FileEntity getFileMetadata(UUID fileId, UUID actorUserId) {
+        accessControlService.assertCanAccessFile(actorUserId, fileId, Permission.FILE_VIEW);
         return fileRepository.findByIdAndDeletedAtIsNull(fileId)
                 .orElseThrow(() -> new ResourceNotFoundException("File not found: " + fileId));
     }
 
-    public InputStream downloadFile(UUID fileId) {
-        FileEntity file = getFileMetadata(fileId);
+    public InputStream downloadFile(UUID fileId, UUID actorUserId) {
+        accessControlService.assertCanAccessFile(actorUserId, fileId, Permission.FILE_VIEW);
+        FileEntity file = fileRepository.findByIdAndDeletedAtIsNull(fileId)
+                .orElseThrow(() -> new ResourceNotFoundException("File not found: " + fileId));
         return objectStoragePort.getObject(file.getStoragePath());
     }
 
     @Transactional
-    public void deleteFile(UUID fileId) {
-        FileEntity file = getFileMetadata(fileId);
+    public void deleteFile(UUID fileId, UUID actorUserId) {
+        accessControlService.assertCanAccessFile(actorUserId, fileId, Permission.FILE_DELETE);
+        FileEntity file = fileRepository.findByIdAndDeletedAtIsNull(fileId)
+                .orElseThrow(() -> new ResourceNotFoundException("File not found: " + fileId));
         file.setDeletedAt(OffsetDateTime.now());
         fileRepository.save(file);
     }

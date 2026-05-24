@@ -1,5 +1,6 @@
 package com.filemanager.api.service;
 
+import com.filemanager.api.auth.AccessControlService;
 import com.filemanager.api.dto.*;
 import com.filemanager.api.entity.DuplicateCandidate;
 import com.filemanager.api.entity.DuplicateCandidate.CandidateStatus;
@@ -35,6 +36,9 @@ class DuplicateCandidateServiceTest {
 
     @Mock
     private FileRepository fileRepository;
+
+    @Mock
+    private AccessControlService accessControlService;
 
     @InjectMocks
     private DuplicateCandidateService duplicateCandidateService;
@@ -76,7 +80,7 @@ class DuplicateCandidateServiceTest {
                 .thenReturn(List.of(candidate));
 
         List<FileDuplicateResponse> result = duplicateCandidateService.getDuplicatesForFile(
-                file1.getId(), owner.getId(), null, null, null);
+                file1.getId(), owner.getId(), null, null, null, owner.getId());
 
         assertThat(result).hasSize(1);
         assertThat(result.get(0).getRequestedFile().getId()).isEqualTo(file1.getId());
@@ -90,7 +94,7 @@ class DuplicateCandidateServiceTest {
                 .thenReturn(List.of(candidate));
 
         List<FileDuplicateResponse> result = duplicateCandidateService.getDuplicatesForFile(
-                file2.getId(), owner.getId(), null, null, null);
+                file2.getId(), owner.getId(), null, null, null, owner.getId());
 
         assertThat(result).hasSize(1);
         assertThat(result.get(0).getRequestedFile().getId()).isEqualTo(file2.getId());
@@ -103,7 +107,7 @@ class DuplicateCandidateServiceTest {
         UUID otherOwnerId = UUID.randomUUID();
 
         assertThatThrownBy(() -> duplicateCandidateService.getDuplicatesForFile(
-                file1.getId(), otherOwnerId, null, null, null))
+                file1.getId(), otherOwnerId, null, null, null, otherOwnerId))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
@@ -113,7 +117,7 @@ class DuplicateCandidateServiceTest {
                 .thenReturn(List.of(candidate));
 
         List<DuplicateCandidateResponse> result = duplicateCandidateService.getDuplicatesForOwner(
-                owner.getId(), null, null, null);
+                owner.getId(), null, null, null, owner.getId());
 
         assertThat(result).hasSize(1);
         assertThat(result.get(0).getSourceFile().getId()).isEqualTo(file1.getId());
@@ -125,7 +129,7 @@ class DuplicateCandidateServiceTest {
         when(duplicateCandidateRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         DuplicateCandidateResponse result = duplicateCandidateService.updateStatus(
-                candidate.getId(), owner.getId(), null, CandidateStatus.CONFIRMED);
+                candidate.getId(), owner.getId(), null, CandidateStatus.CONFIRMED, owner.getId());
 
         assertThat(result.getStatus()).isEqualTo(CandidateStatus.CONFIRMED);
         verify(duplicateCandidateRepository).save(candidate);
@@ -137,17 +141,17 @@ class DuplicateCandidateServiceTest {
         UUID otherOwnerId = UUID.randomUUID();
 
         assertThatThrownBy(() -> duplicateCandidateService.updateStatus(
-                candidate.getId(), otherOwnerId, null, CandidateStatus.CONFIRMED))
+                candidate.getId(), otherOwnerId, null, CandidateStatus.CONFIRMED, otherOwnerId))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
     @Test
     void validateOwnerContext_ThrowsException() {
-        assertThatThrownBy(() -> duplicateCandidateService.getDuplicatesForOwner(null, null, null, null))
+        assertThatThrownBy(() -> duplicateCandidateService.getDuplicatesForOwner(null, null, null, null, UUID.randomUUID()))
                 .isInstanceOf(IllegalArgumentException.class);
         
         UUID id = UUID.randomUUID();
-        assertThatThrownBy(() -> duplicateCandidateService.getDuplicatesForOwner(id, id, null, null))
+        assertThatThrownBy(() -> duplicateCandidateService.getDuplicatesForOwner(id, id, null, null, id))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 }
