@@ -1,16 +1,20 @@
 package com.filemanager.api.service;
 
+import com.filemanager.api.event.FileProcessingRequestedEvent;
 import com.filemanager.api.entity.FileEntity;
 import com.filemanager.api.entity.Organization;
+import com.filemanager.api.entity.ProcessingJob;
 import com.filemanager.api.entity.User;
 import com.filemanager.api.exception.ResourceNotFoundException;
 import com.filemanager.api.port.ObjectStoragePort;
 import com.filemanager.api.port.StoreObjectRequest;
 import com.filemanager.api.repository.FileRepository;
 import com.filemanager.api.repository.OrganizationRepository;
+import com.filemanager.api.repository.ProcessingJobRepository;
 import com.filemanager.api.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,7 +31,9 @@ public class FileService {
     private final FileRepository fileRepository;
     private final UserRepository userRepository;
     private final OrganizationRepository organizationRepository;
+    private final ProcessingJobRepository processingJobRepository;
     private final ObjectStoragePort objectStoragePort;
+    private final ApplicationEventPublisher applicationEventPublisher;
 
     @Transactional
     public FileEntity uploadFile(String fileName, String contentType, long size, InputStream content, UUID ownerUserId, UUID ownerOrganizationId) {
@@ -67,7 +73,32 @@ public class FileService {
                     .ownerOrganization(ownerOrganization)
                     .build();
 
-            return fileRepository.save(fileEntity);
+            FileEntity savedFile = fileRepository.save(fileEntity);
+
+            ProcessingJob job = ProcessingJob.builder()
+                    .file(savedFile)
+                    .jobType(ProcessingJob.JobType.CHECKSUM)
+                    .status(ProcessingJob.JobStatus.PENDING)
+                    .build();
+
+            ProcessingJob savedJob = processingJobRepository.save(job);
+
+            FileProcessingRequestedEvent event = FileProcessingRequestedEvent.builder()
+                    .eventId(UUID.randomUUID())
+                    .eventType("file.processing.requested")
+                    .occurredAt(OffsetDateTime.now())
+                    .fileId(savedFile.getId())
+                    .processingJobId(savedJob.getId())
+                    .storagePath(savedFile.getStoragePath())
+                    .mimeType(savedFile.getMimeType())
+                    .size(savedFile.getSize())
+                    .ownerUserId(ownerUserId)
+                    .ownerOrganizationId(ownerOrganizationId)
+                    .build();
+
+            applicationEventPublisher.publishEvent(event);
+
+            return savedFile;
         } catch (Exception e) {
             log.error("Failed to save file metadata to database. Cleaning up object from storage: {}", storagePath, e);
             try {

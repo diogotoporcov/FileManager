@@ -18,6 +18,17 @@ spring:
     enabled: true
     locations: classpath:db/migration
     baseline-on-migrate: true
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+
+app:
+  kafka:
+    topics:
+      file-processing-requested: ${FILE_PROCESSING_REQUESTED_TOPIC:file.processing.requested}
+
 server:
   port: ${PORT_API:8080}
 
