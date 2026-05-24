@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     s3_secret_key: str = "minioadmin"
     s3_bucket_name: str = "filemanager"
 
+    # API
+    metadata_api_base_url: str = "http://localhost:8080"
+
     # Logging
     log_level: str = "INFO"
 

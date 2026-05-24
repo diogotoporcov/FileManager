@@ -4,26 +4,31 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from app.config import settings
 from app.processors.impl import ChecksumProcessor, PHashProcessor, EmbeddingProcessor
-from app.matchers.impl import ExactHashMatcher, PHashMatcher, EmbeddingMatcher
+from app.matchers.impl import PHashMatcher, EmbeddingMatcher
+from app.storage.s3 import S3ObjectStorageReader
+from app.sinks.http import HttpProcessingResultSink
 from app.worker.flow import ProcessingFlow
 from app.worker.consumer import EventConsumer
 
 logging.basicConfig(level=getattr(logging, settings.log_level.upper()))
 logger = logging.getLogger(__name__)
 
+# Wire dependencies
+storage_reader = S3ObjectStorageReader()
+result_sink = HttpProcessingResultSink()
+
 processors = [
-    ChecksumProcessor(),
+    ChecksumProcessor(storage_reader),
     PHashProcessor(),
     EmbeddingProcessor()
 ]
 
 matchers = [
-    ExactHashMatcher(),
     PHashMatcher(),
     EmbeddingMatcher()
 ]
 
-flow = ProcessingFlow(processors, matchers)
+flow = ProcessingFlow(processors, matchers, result_sink)
 consumer = EventConsumer(flow)
 
 @asynccontextmanager

@@ -1,6 +1,6 @@
 import json
 import logging
-import asyncio
+from typing import Optional, Any
 from aiokafka import AIOKafkaConsumer
 from app.config import settings
 from app.events.models import FileProcessingRequestedEvent
@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 class EventConsumer:
     def __init__(self, flow: ProcessingFlow):
         self.flow = flow
-        self.consumer = None
+        self.consumer: Optional[Any] = None
         self._should_stop = False
 
     async def start(self):

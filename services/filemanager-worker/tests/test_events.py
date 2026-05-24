@@ -1,5 +1,7 @@
 import uuid
+import pytest
 from datetime import datetime, timezone
+from pydantic import ValidationError
 from app.events.models import FileProcessingRequestedEvent
 
 def test_event_parsing():
@@ -7,7 +9,6 @@ def test_event_parsing():
     file_id = uuid.uuid4()
     job_id = uuid.uuid4()
     user_id = uuid.uuid4()
-    org_id = uuid.uuid4()
     occurred_at = datetime.now(timezone.utc).isoformat()
 
     json_data = {
@@ -72,9 +73,6 @@ def test_event_serialization_aliases():
     assert "eventId" in dump
     assert "fileId" in dump
     assert dump["mimeType"] == "text/plain"
-
-import pytest
-from pydantic import ValidationError
 
 def test_event_invalid_owners_both_present():
     json_data = {

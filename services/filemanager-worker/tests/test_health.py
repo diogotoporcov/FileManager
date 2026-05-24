@@ -9,4 +9,4 @@ def test_health():
     data = response.json()
     assert data["status"] == "UP"
     assert "checksum" in data["processors"]
-    assert "exact_hash" in data["matchers"]
+    assert "phash" in data["matchers"]

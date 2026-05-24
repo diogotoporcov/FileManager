@@ -24,7 +24,7 @@ public class FileProcessingEventListener {
             eventPublisherPort.publishFileProcessingRequested(event);
         } catch (Exception e) {
             log.error("Failed to publish event to Kafka after commit. Marking job {} as FAILED", event.processingJobId(), e);
-            processingJobService.markJobAsFailed(event.processingJobId(), e.getMessage());
+            processingJobService.handleProcessingFailure(event.processingJobId(), event.fileId(), e.getMessage());
         }
     }
 }
