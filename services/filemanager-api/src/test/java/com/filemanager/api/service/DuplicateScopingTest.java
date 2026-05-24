@@ -45,6 +45,8 @@ class DuplicateScopingTest {
     @Mock
     private DuplicateCandidateRepository duplicateCandidateRepository;
     @Mock
+    private FileManagerMetrics fileManagerMetrics;
+    @Mock
     private AppProperties appProperties;
 
     @InjectMocks
@@ -86,6 +88,7 @@ class DuplicateScopingTest {
         processingJobService.handleChecksumResult(jobId, file1Id, sha256);
 
         verify(duplicateCandidateRepository, never()).save(any());
+        verify(fileManagerMetrics).recordJobCompleted("CHECKSUM");
     }
 
     @Test
@@ -173,6 +176,8 @@ class DuplicateScopingTest {
         processingJobService.handlePhashResult(jobId, file1Id, phash);
 
         verify(duplicateCandidateRepository, times(1)).save(any());
+        verify(fileManagerMetrics).recordJobCompleted("PHASH");
+        verify(fileManagerMetrics).recordDuplicateCandidateCreated("PHASH");
     }
 
     @Test
