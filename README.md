@@ -7,4 +7,4 @@ FileManager is a file manager...
 
 ## License
 
-This project is licensed under the MIT License - See [LICENSE](LICENSE) for more information. 
+This project is licensed under the GPLv3 License — see [LICENSE](LICENSE) for details. 
