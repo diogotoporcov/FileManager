@@ -13,6 +13,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
+import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -21,6 +22,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -110,8 +112,21 @@ public class FileController {
 
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(entity.getMimeType()))
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + entity.getName() + "\"")
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
+                        .filename(safeDownloadFilename(entity.getName()), StandardCharsets.UTF_8)
+                        .build()
+                        .toString())
                 .body(resource);
+    }
+
+    private String safeDownloadFilename(String filename) {
+        if (filename == null || filename.isBlank()) {
+            return "download";
+        }
+        if (filename.contains("\r") || filename.contains("\n")) {
+            throw new IllegalArgumentException("Invalid filename");
+        }
+        return filename;
     }
 
     @Operation(summary = "Delete file", description = "Deletes a specific file.")

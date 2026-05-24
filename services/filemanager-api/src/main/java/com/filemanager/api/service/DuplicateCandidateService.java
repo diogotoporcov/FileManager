@@ -48,6 +48,12 @@ public class DuplicateCandidateService {
                 .and(DuplicateCandidateSpecifications.hasDetectionMethod(method))
                 .and(DuplicateCandidateSpecifications.hasStatus(status));
 
+        if (ownerUserId != null) {
+            spec = spec.and(DuplicateCandidateSpecifications.hasOwnerUserId(ownerUserId));
+        } else {
+            spec = spec.and(DuplicateCandidateSpecifications.hasOwnerOrganizationId(ownerOrganizationId));
+        }
+
         List<DuplicateCandidate> candidates = duplicateCandidateRepository.findAll(spec);
 
         return candidates.stream()
@@ -118,10 +124,10 @@ public class DuplicateCandidateService {
 
     private boolean hasOwnershipOfCandidate(DuplicateCandidate dc, UUID ownerUserId, UUID ownerOrganizationId) {
         if (ownerUserId != null) {
-            return isFileOwnedByUser(dc.getSourceFile(), ownerUserId) ||
+            return isFileOwnedByUser(dc.getSourceFile(), ownerUserId) &&
                    isFileOwnedByUser(dc.getCandidateFile(), ownerUserId);
         }
-        return isFileOwnedByOrganization(dc.getSourceFile(), ownerOrganizationId) ||
+        return isFileOwnedByOrganization(dc.getSourceFile(), ownerOrganizationId) &&
                isFileOwnedByOrganization(dc.getCandidateFile(), ownerOrganizationId);
     }
 

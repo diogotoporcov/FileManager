@@ -89,9 +89,8 @@ public class ProcessingJobService {
                         }
                 );
 
-        // 2. Search for existing files with the same SHA-256
-        List<FileFingerprint> existingFingerprints = fileFingerprintRepository.findByAlgorithmAndHashValue(
-                FileFingerprint.FingerprintAlgorithm.SHA256, normalizedSha256);
+        // 2. Search for existing files with the same SHA-256 within the same ownership boundary
+        List<FileFingerprint> existingFingerprints = findExistingChecksumDuplicates(file, normalizedSha256);
 
         for (FileFingerprint existing : existingFingerprints) {
             FileEntity candidateFile = existing.getFile();
@@ -170,8 +169,8 @@ public class ProcessingJobService {
                         }
                 );
 
-        // 2. Search for existing image fingerprints to compare
-        List<ImageFingerprint> allFingerprints = imageFingerprintRepository.findAll();
+        // 2. Search for existing image fingerprints to compare within the same ownership boundary
+        List<ImageFingerprint> allFingerprints = findExistingPhashDuplicates(file);
 
         for (ImageFingerprint existing : allFingerprints) {
             FileEntity candidateFile = existing.getFile();
@@ -213,6 +212,26 @@ public class ProcessingJobService {
         job.setErrorMessage(null);
         processingJobRepository.save(job);
         fileManagerMetrics.recordJobCompleted(job.getJobType().name());
+    }
+
+    private List<FileFingerprint> findExistingChecksumDuplicates(FileEntity file, String hashValue) {
+        if (file.getOwnerUser() != null) {
+            return fileFingerprintRepository.findByAlgorithmAndHashValueAndFileOwnerUserIdAndFileDeletedAtIsNull(
+                    FileFingerprint.FingerprintAlgorithm.SHA256, hashValue, file.getOwnerUser().getId());
+        } else if (file.getOwnerOrganization() != null) {
+            return fileFingerprintRepository.findByAlgorithmAndHashValueAndFileOwnerOrganizationIdAndFileDeletedAtIsNull(
+                    FileFingerprint.FingerprintAlgorithm.SHA256, hashValue, file.getOwnerOrganization().getId());
+        }
+        return List.of();
+    }
+
+    private List<ImageFingerprint> findExistingPhashDuplicates(FileEntity file) {
+        if (file.getOwnerUser() != null) {
+            return imageFingerprintRepository.findByFileOwnerUserIdAndFileDeletedAtIsNull(file.getOwnerUser().getId());
+        } else if (file.getOwnerOrganization() != null) {
+            return imageFingerprintRepository.findByFileOwnerOrganizationIdAndFileDeletedAtIsNull(file.getOwnerOrganization().getId());
+        }
+        return List.of();
     }
 
     private int calculateHammingDistance(String h1, String h2) {

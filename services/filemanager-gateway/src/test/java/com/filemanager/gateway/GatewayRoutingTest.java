@@ -249,6 +249,23 @@ class GatewayRoutingTest {
                 .exchange()
                 .expectStatus().isNotFound();
 
+        // Traversal attempts
+        webClient.get().uri("/api/v1/files/../internal/any")
+                .exchange()
+                .expectStatus().isNotFound();
+
+        webClient.get().uri("/api/v1/files/%2e%2e/internal/any")
+                .exchange()
+                .expectStatus().isNotFound();
+
+        webClient.get().uri("/api/v1/files/%2E%2E/internal/any")
+                .exchange()
+                .expectStatus().isNotFound();
+
+        webClient.get().uri("/api/v1/files/..")
+                .exchange()
+                .expectStatus().isNotFound();
+
         // Ensure nothing reached the backend
         verify(0, anyRequestedFor(anyUrl()));
     }

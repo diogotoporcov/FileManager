@@ -175,6 +175,39 @@ class SecurityIntegrationTest {
     }
 
     @Test
+    void internalEndpoint_WithValidTokenAndInvalidBody_Returns400() throws Exception {
+        UUID jobId = UUID.randomUUID();
+        UUID fileId = UUID.randomUUID();
+        // sha256 too short - fails @Pattern validation
+        String invalidContent = String.format("{\"fileId\":\"%s\", \"sha256\":\"too-short\"}", fileId);
+
+        mockMvc.perform(post("/internal/processing/jobs/" + jobId + "/checksum-result")
+                        .header("Authorization", "Bearer test-internal-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(invalidContent))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void internalEndpoint_WithEncodedTraversalBypass_Returns400() throws Exception {
+        // %2e is .
+        mockMvc.perform(post("/api/v1/files/%2e%2e/internal/processing/jobs/" + UUID.randomUUID() + "/checksum-result")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void internalEndpoint_WithDoubleSlash_Returns401() throws Exception {
+        // MockMvc/Spring Security normalizes // to /
+        // It should still require a token for /internal/...
+        mockMvc.perform(post("//internal/processing/jobs/" + UUID.randomUUID() + "/checksum-result")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void internalEndpoint_WithInvalidToken_Returns401() throws Exception {
         mockMvc.perform(post("/internal/processing/jobs/" + UUID.randomUUID() + "/checksum-result")
                         .header("Authorization", "Bearer wrong-token")

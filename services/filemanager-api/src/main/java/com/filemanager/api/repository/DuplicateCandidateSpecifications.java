@@ -24,7 +24,7 @@ public class DuplicateCandidateSpecifications {
     public static Specification<DuplicateCandidate> hasOwnerUserId(UUID userId) {
         return (root, query, cb) -> {
             if (userId == null) return null;
-            return cb.or(
+            return cb.and(
                     cb.equal(root.get("sourceFile").get("ownerUser").get("id"), userId),
                     cb.equal(root.get("candidateFile").get("ownerUser").get("id"), userId)
             );
@@ -34,7 +34,7 @@ public class DuplicateCandidateSpecifications {
     public static Specification<DuplicateCandidate> hasOwnerOrganizationId(UUID orgId) {
         return (root, query, cb) -> {
             if (orgId == null) return null;
-            return cb.or(
+            return cb.and(
                     cb.equal(root.get("sourceFile").get("ownerOrganization").get("id"), orgId),
                     cb.equal(root.get("candidateFile").get("ownerOrganization").get("id"), orgId)
             );

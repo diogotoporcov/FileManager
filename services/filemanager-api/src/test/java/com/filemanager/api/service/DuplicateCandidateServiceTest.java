@@ -133,6 +133,19 @@ class DuplicateCandidateServiceTest {
 
         assertThat(result.getStatus()).isEqualTo(CandidateStatus.CONFIRMED);
         verify(duplicateCandidateRepository).save(candidate);
+        verify(accessControlService).assertCanManageDuplicate(owner.getId(), candidate.getId());
+    }
+
+    @Test
+    void updateStatus_CrossUserDuplicate_ThrowsException() {
+        User otherUser = User.builder().id(UUID.randomUUID()).build();
+        file2.setOwnerUser(otherUser); // Cross-user duplicate row in DB
+        
+        when(duplicateCandidateRepository.findById(candidate.getId())).thenReturn(Optional.of(candidate));
+
+        assertThatThrownBy(() -> duplicateCandidateService.updateStatus(
+                candidate.getId(), owner.getId(), null, CandidateStatus.CONFIRMED, owner.getId()))
+                .isInstanceOf(ResourceNotFoundException.class);
     }
 
     @Test
@@ -143,6 +156,19 @@ class DuplicateCandidateServiceTest {
         assertThatThrownBy(() -> duplicateCandidateService.updateStatus(
                 candidate.getId(), otherOwnerId, null, CandidateStatus.CONFIRMED, otherOwnerId))
                 .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void updateStatus_AccessControlDenied_ThrowsExceptionAndDoesNotSave() {
+        doThrow(new com.filemanager.api.exception.AccessDeniedException("Denied"))
+                .when(accessControlService).assertCanManageDuplicate(owner.getId(), candidate.getId());
+
+        assertThatThrownBy(() -> duplicateCandidateService.updateStatus(
+                candidate.getId(), owner.getId(), null, CandidateStatus.CONFIRMED, owner.getId()))
+                .isInstanceOf(com.filemanager.api.exception.AccessDeniedException.class);
+
+        verify(duplicateCandidateRepository, never()).findById(any());
+        verify(duplicateCandidateRepository, never()).save(any());
     }
 
     @Test

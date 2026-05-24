@@ -11,6 +11,7 @@ import java.util.UUID;
 
 @Repository
 public interface FileFingerprintRepository extends JpaRepository<FileFingerprint, UUID> {
-    List<FileFingerprint> findByAlgorithmAndHashValue(FingerprintAlgorithm algorithm, String hashValue);
+    List<FileFingerprint> findByAlgorithmAndHashValueAndFileOwnerUserIdAndFileDeletedAtIsNull(FingerprintAlgorithm algorithm, String hashValue, UUID ownerUserId);
+    List<FileFingerprint> findByAlgorithmAndHashValueAndFileOwnerOrganizationIdAndFileDeletedAtIsNull(FingerprintAlgorithm algorithm, String hashValue, UUID ownerOrganizationId);
     Optional<FileFingerprint> findByFileIdAndAlgorithm(UUID fileId, FingerprintAlgorithm algorithm);
 }
