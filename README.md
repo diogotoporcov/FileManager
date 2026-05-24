@@ -9,7 +9,7 @@
 [![Redpanda](https://img.shields.io/badge/Redpanda-ED1E24?logo=redpanda&logoColor=white)](https://redpanda.com/)
 [![License: GPLv3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
-FileManager is a highly efficient and scalable file management system designed for organizing, storing, and preventing duplicate files in large databases. It leverages advanced techniques like visual feature extraction and semantic search to identify and manage duplicates across multiple layers.
+FileManager is a file management system designed for organizing, storing, and preventing duplicate files in large databases. It leverages advanced techniques like visual feature extraction and semantic search to identify and manage duplicates across multiple layers.
 
 ## Core Features
 
