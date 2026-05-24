@@ -21,7 +21,7 @@ public class KafkaEventPublisherAdapter implements EventPublisherPort {
         String topic = appProperties.getKafka().getTopics().getFileProcessingRequested();
         log.info("Publishing file processing requested event for file {}: job {}", event.fileId(), event.processingJobId());
         try {
-            // Using .get() to make it synchronous and catch async failures as requested
+            // Blocking call to ensure event delivery success before continuing.
             kafkaTemplate.send(topic, event.fileId().toString(), event).get();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();

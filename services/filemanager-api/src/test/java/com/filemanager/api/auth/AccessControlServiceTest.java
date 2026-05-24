@@ -146,7 +146,6 @@ class AccessControlServiceTest {
         UUID candidateId = UUID.randomUUID();
         User owner = new User();
         owner.setId(actorUserId);
-        // Actor is owner but file is deleted
         FileEntity sourceFile = FileEntity.builder().ownerUser(owner).deletedAt(OffsetDateTime.now()).build();
         FileEntity candidateFile = FileEntity.builder().ownerUser(new User()).build();
         DuplicateCandidate dc = DuplicateCandidate.builder()

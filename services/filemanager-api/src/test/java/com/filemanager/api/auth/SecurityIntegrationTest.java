@@ -15,7 +15,6 @@ import org.springframework.http.MediaType;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
-import org.springframework.security.oauth2.jwt.JwtException;
 import java.time.Instant;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -106,7 +105,6 @@ class SecurityIntegrationTest {
                         .with(jwt().jwt(builder -> builder.subject("sub-123"))))
                 .andExpect(status().isOk());
 
-        // Verify that the service receives actualUserId, not ignoredUserId
         verify(fileService).listFiles(any(), any(), eq(actualUserId));
         verify(fileService, never()).listFiles(any(), any(), eq(ignoredUserId));
     }
@@ -178,7 +176,6 @@ class SecurityIntegrationTest {
     void internalEndpoint_WithValidTokenAndInvalidBody_Returns400() throws Exception {
         UUID jobId = UUID.randomUUID();
         UUID fileId = UUID.randomUUID();
-        // sha256 too short - fails @Pattern validation
         String invalidContent = String.format("{\"fileId\":\"%s\", \"sha256\":\"too-short\"}", fileId);
 
         mockMvc.perform(post("/internal/processing/jobs/" + jobId + "/checksum-result")
@@ -190,7 +187,6 @@ class SecurityIntegrationTest {
 
     @Test
     void internalEndpoint_WithEncodedTraversalBypass_Returns400() throws Exception {
-        // %2e is .
         mockMvc.perform(post("/api/v1/files/%2e%2e/internal/processing/jobs/" + UUID.randomUUID() + "/checksum-result")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
@@ -199,8 +195,6 @@ class SecurityIntegrationTest {
 
     @Test
     void internalEndpoint_WithDoubleSlash_Returns401() throws Exception {
-        // MockMvc/Spring Security normalizes // to /
-        // It should still require a token for /internal/...
         mockMvc.perform(post("//internal/processing/jobs/" + UUID.randomUUID() + "/checksum-result")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))

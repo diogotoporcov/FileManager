@@ -59,7 +59,6 @@ class ProcessingJobServiceTest {
 
     @Test
     void handleChecksumResult_ShouldStoreFingerprintAndDetectDuplicate() {
-        // Arrange
         UUID jobId = UUID.randomUUID();
         UUID fileId = UUID.randomUUID();
         UUID otherFileId = UUID.randomUUID();
@@ -98,10 +97,8 @@ class ProcessingJobServiceTest {
         when(duplicateCandidateRepository.existsBySourceFileIdAndCandidateFileIdAndDetectionMethod(
                 otherFileId, fileId, DuplicateCandidate.DetectionMethod.EXACT)).thenReturn(false);
 
-        // Act
         processingJobService.handleChecksumResult(jobId, fileId, sha256);
 
-        // Assert
         ArgumentCaptor<FileFingerprint> fingerprintCaptor = ArgumentCaptor.forClass(FileFingerprint.class);
         verify(fileFingerprintRepository).save(fingerprintCaptor.capture());
         assertEquals(normalizedSha256, fingerprintCaptor.getValue().getHashValue());
@@ -112,7 +109,6 @@ class ProcessingJobServiceTest {
 
     @Test
     void handleChecksumResult_ShouldAvoidInverseDuplicates() {
-        // Arrange
         UUID jobId = UUID.randomUUID();
         UUID fileId = UUID.randomUUID();
         UUID otherFileId = UUID.randomUUID();
@@ -148,10 +144,8 @@ class ProcessingJobServiceTest {
         when(duplicateCandidateRepository.existsBySourceFileIdAndCandidateFileIdAndDetectionMethod(
                 otherFileId, fileId, DuplicateCandidate.DetectionMethod.EXACT)).thenReturn(true);
 
-        // Act
         processingJobService.handleChecksumResult(jobId, fileId, sha256);
 
-        // Assert
         verify(duplicateCandidateRepository, never()).save(any(DuplicateCandidate.class));
     }
 
@@ -178,7 +172,6 @@ class ProcessingJobServiceTest {
 
     @Test
     void handlePhashResult_ShouldStoreFingerprintAndDetectDuplicate() {
-        // Arrange
         UUID jobId = UUID.randomUUID();
         UUID fileId = UUID.randomUUID();
         UUID otherFileId = UUID.randomUUID();
@@ -214,17 +207,14 @@ class ProcessingJobServiceTest {
         when(duplicateCandidateRepository.existsBySourceFileIdAndCandidateFileIdAndDetectionMethod(
                 otherFileId, fileId, DuplicateCandidate.DetectionMethod.PHASH)).thenReturn(false);
 
-        // Act
         processingJobService.handlePhashResult(jobId, fileId, phash);
 
-        // Assert
         verify(imageFingerprintRepository).save(any(ImageFingerprint.class));
         verify(duplicateCandidateRepository).save(any(DuplicateCandidate.class));
     }
 
     @Test
     void handlePhashResult_ShouldNotCreateCandidateWhenOutsideThreshold() {
-        // Arrange
         UUID jobId = UUID.randomUUID();
         UUID fileId = UUID.randomUUID();
         UUID otherFileId = UUID.randomUUID();
@@ -255,10 +245,8 @@ class ProcessingJobServiceTest {
         when(imageFingerprintRepository.findByFileOwnerUserIdAndFileDeletedAtIsNull(testUser.getId()))
                 .thenReturn(List.of(otherFingerprint));
 
-        // Act
         processingJobService.handlePhashResult(jobId, fileId, phash);
 
-        // Assert
         verify(duplicateCandidateRepository, never()).save(any());
     }
 }

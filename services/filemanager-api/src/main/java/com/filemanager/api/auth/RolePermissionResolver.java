@@ -12,6 +12,7 @@ import static com.filemanager.api.auth.Permission.*;
 @Component
 public class RolePermissionResolver {
 
+    // Static mapping defining granular permissions for each organizational role.
     private static final Map<MemberRole, Set<Permission>> ROLE_PERMISSIONS = Map.of(
             MemberRole.VIEWER, EnumSet.of(FILE_VIEW, DUPLICATE_VIEW),
             MemberRole.CONTRIBUTOR, EnumSet.of(FILE_VIEW, FILE_UPLOAD, DUPLICATE_VIEW),

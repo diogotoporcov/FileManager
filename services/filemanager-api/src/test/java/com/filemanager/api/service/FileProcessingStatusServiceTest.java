@@ -52,7 +52,6 @@ class FileProcessingStatusServiceTest {
     @Test
     @SuppressWarnings("unchecked")
     void getProcessingJobs_ShouldReturnJobs_WhenActorHasAccess() {
-        // Arrange
         ProcessingJob job = ProcessingJob.builder()
                 .id(UUID.randomUUID())
                 .file(fileEntity)
@@ -61,10 +60,8 @@ class FileProcessingStatusServiceTest {
                 .build();
         when(processingJobRepository.findAllByFile_IdOrderByCreatedAtAsc(fileId)).thenReturn(List.of(job));
 
-        // Act
         List<ProcessingJobResponse> result = fileProcessingStatusService.getProcessingJobs(actorUserId, fileId);
 
-        // Assert
         assertEquals(1, result.size());
         assertEquals(job.getId(), result.get(0).getId());
         verify(accessControlService).assertCanAccessFile(actorUserId, fileId, Permission.FILE_VIEW);
@@ -73,13 +70,10 @@ class FileProcessingStatusServiceTest {
     @Test
     @SuppressWarnings("unchecked")
     void getFileProcessingStatus_ShouldReturnNotStarted_WhenNoJobs() {
-        // Arrange
         when(processingJobRepository.findAllByFile_IdOrderByCreatedAtAsc(fileId)).thenReturn(Collections.emptyList());
 
-        // Act
         FileProcessingStatusResponse result = fileProcessingStatusService.getFileProcessingStatus(actorUserId, fileId);
 
-        // Assert
         assertEquals(AggregateStatus.NOT_STARTED, result.getOverallStatus());
         assertTrue(result.getJobs().isEmpty());
     }
@@ -87,72 +81,57 @@ class FileProcessingStatusServiceTest {
     @Test
     @SuppressWarnings("unchecked")
     void getFileProcessingStatus_ShouldReturnProcessing_WhenAnyJobPending() {
-        // Arrange
         ProcessingJob job1 = ProcessingJob.builder().status(ProcessingJob.JobStatus.COMPLETED).file(fileEntity).build();
         ProcessingJob job2 = ProcessingJob.builder().status(ProcessingJob.JobStatus.PENDING).file(fileEntity).build();
         when(processingJobRepository.findAllByFile_IdOrderByCreatedAtAsc(fileId)).thenReturn(List.of(job1, job2));
 
-        // Act
         FileProcessingStatusResponse result = fileProcessingStatusService.getFileProcessingStatus(actorUserId, fileId);
 
-        // Assert
         assertEquals(AggregateStatus.PROCESSING, result.getOverallStatus());
     }
 
     @Test
     @SuppressWarnings("unchecked")
     void getFileProcessingStatus_ShouldReturnCompleted_WhenAllJobsCompleted() {
-        // Arrange
         ProcessingJob job1 = ProcessingJob.builder().status(ProcessingJob.JobStatus.COMPLETED).file(fileEntity).build();
         when(processingJobRepository.findAllByFile_IdOrderByCreatedAtAsc(fileId)).thenReturn(List.of(job1));
 
-        // Act
         FileProcessingStatusResponse result = fileProcessingStatusService.getFileProcessingStatus(actorUserId, fileId);
 
-        // Assert
         assertEquals(AggregateStatus.COMPLETED, result.getOverallStatus());
     }
 
     @Test
     @SuppressWarnings("unchecked")
     void getFileProcessingStatus_ShouldReturnFailed_WhenAllJobsFailed() {
-        // Arrange
         ProcessingJob job1 = ProcessingJob.builder().status(ProcessingJob.JobStatus.FAILED).file(fileEntity).build();
         when(processingJobRepository.findAllByFile_IdOrderByCreatedAtAsc(fileId)).thenReturn(List.of(job1));
 
-        // Act
         FileProcessingStatusResponse result = fileProcessingStatusService.getFileProcessingStatus(actorUserId, fileId);
 
-        // Assert
         assertEquals(AggregateStatus.FAILED, result.getOverallStatus());
     }
 
     @Test
     @SuppressWarnings("unchecked")
     void getFileProcessingStatus_ShouldReturnPartialFailure_WhenMixed() {
-        // Arrange
         ProcessingJob job1 = ProcessingJob.builder().status(ProcessingJob.JobStatus.COMPLETED).file(fileEntity).build();
         ProcessingJob job2 = ProcessingJob.builder().status(ProcessingJob.JobStatus.FAILED).file(fileEntity).build();
         when(processingJobRepository.findAllByFile_IdOrderByCreatedAtAsc(fileId)).thenReturn(List.of(job1, job2));
 
-        // Act
         FileProcessingStatusResponse result = fileProcessingStatusService.getFileProcessingStatus(actorUserId, fileId);
 
-        // Assert
         assertEquals(AggregateStatus.PARTIAL_FAILURE, result.getOverallStatus());
     }
 
     @Test
     @SuppressWarnings("unchecked")
     void getFileProcessingStatus_ShouldIncludeCounts() {
-        // Arrange
         when(processingJobRepository.findAllByFile_IdOrderByCreatedAtAsc(fileId)).thenReturn(Collections.emptyList());
         when(duplicateCandidateRepository.count(any(Specification.class))).thenReturn(5L);
 
-        // Act
         FileProcessingStatusResponse result = fileProcessingStatusService.getFileProcessingStatus(actorUserId, fileId);
 
-        // Assert
         assertEquals(5L, result.getTotalDuplicateCandidates());
         assertEquals(3, result.getDuplicateCandidatesByDetectionMethod().size());
         assertEquals(5L, result.getDuplicateCandidatesByDetectionMethod().get("EXACT"));
@@ -167,7 +146,6 @@ class FileProcessingStatusServiceTest {
 
     @Test
     void getProcessingJobs_ShouldPropagateAccessDenied() {
-        // Arrange
         doThrow(new com.filemanager.api.exception.AccessDeniedException("Denied"))
                 .when(accessControlService).assertCanAccessFile(actorUserId, fileId, Permission.FILE_VIEW);
 
@@ -178,7 +156,6 @@ class FileProcessingStatusServiceTest {
 
     @Test
     void getFileProcessingStatus_ShouldPropagateResourceNotFound() {
-        // Arrange
         doThrow(new com.filemanager.api.exception.ResourceNotFoundException("Not found"))
                 .when(accessControlService).assertCanAccessFile(actorUserId, fileId, Permission.FILE_VIEW);
 

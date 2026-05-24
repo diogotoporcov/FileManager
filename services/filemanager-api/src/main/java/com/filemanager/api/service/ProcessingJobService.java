@@ -58,10 +58,10 @@ public class ProcessingJobService {
         ProcessingJob job = getAndValidateJob(jobId, fileId, ProcessingJob.JobType.CHECKSUM);
         FileEntity file = getActiveFile(fileId);
 
-        // 1. Store or update SHA-256 fingerprint
+        // Record or update SHA-256 fingerprint.
         updateFileFingerprint(file, normalizedSha256);
 
-        // 2. Search for existing files with the same SHA-256 within the same ownership boundary
+        // Identify exact-match duplicates within the same ownership scope.
         List<FileFingerprint> existingFingerprints = findExistingChecksumDuplicates(file, normalizedSha256);
 
         for (FileFingerprint existing : existingFingerprints) {
@@ -85,10 +85,10 @@ public class ProcessingJobService {
         ProcessingJob job = getAndValidateJob(jobId, fileId, ProcessingJob.JobType.PHASH);
         FileEntity file = getActiveFile(fileId);
 
-        // 1. Store or update pHash fingerprint
+        // Record or update pHash fingerprint.
         updateImageFingerprint(file, normalizedPhash);
 
-        // 2. Search for existing image fingerprints to compare within the same ownership boundary
+        // Identify similar images within the same ownership scope.
         List<ImageFingerprint> allFingerprints = findExistingPhashDuplicates(file);
 
         for (ImageFingerprint existing : allFingerprints) {

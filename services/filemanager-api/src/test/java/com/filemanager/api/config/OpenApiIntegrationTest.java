@@ -62,7 +62,6 @@ public class OpenApiIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(content().contentType("application/json"))
                 .andExpect(jsonPath("$.info.title").value("FileManager API"))
-                // Verify all public paths
                 .andExpect(jsonPath("$.paths['/files']").exists())
                 .andExpect(jsonPath("$.paths['/files/{fileId}']").exists())
                 .andExpect(jsonPath("$.paths['/files/{fileId}/download']").exists())
@@ -70,12 +69,10 @@ public class OpenApiIntegrationTest {
                 .andExpect(jsonPath("$.paths['/duplicate-candidates']").exists())
                 .andExpect(jsonPath("$.paths['/files/{fileId}/processing-jobs']").exists())
                 .andExpect(jsonPath("$.paths['/files/{fileId}/processing-status']").exists())
-                // Verify security
                 .andExpect(jsonPath("$.components.securitySchemes.bearerAuth").exists())
                 .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.type").value("http"))
                 .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.scheme").value("bearer"))
                 .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.bearerFormat").value("JWT"))
-                // Verify internal path is NOT included in default/public docs
                 .andExpect(jsonPath("$.paths['/internal/processing/jobs']").doesNotExist())
                 .andExpect(jsonPath("$.paths['/internal/processing/jobs/{jobId}/checksum-result']").doesNotExist());
     }

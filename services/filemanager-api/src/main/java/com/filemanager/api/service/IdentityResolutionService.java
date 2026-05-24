@@ -45,6 +45,7 @@ public class IdentityResolutionService {
 
         return userRepository.findByEmail(email)
                 .map(user -> {
+                    // Safety check: ensure the external email is verified before linking to an existing internal account.
                     if (emailVerified != null && !emailVerified) {
                         throw new IllegalStateException("Cannot link identity to existing user with unverified email");
                     }

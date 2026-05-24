@@ -65,7 +65,6 @@ class FileServiceTest {
 
     @Test
     void uploadFile_ShouldCreateJobAndPublishEvent() {
-        // Arrange
         String fileName = "test.txt";
         String contentType = "text/plain";
         long size = 10L;
@@ -88,10 +87,8 @@ class FileServiceTest {
         processingJob.setJobType(ProcessingJob.JobType.CHECKSUM);
         when(processingJobRepository.save(any(ProcessingJob.class))).thenReturn(processingJob);
 
-        // Act
         FileEntity result = fileService.uploadFile(fileName, contentType, size, content, userId, null, userId);
 
-        // Assert
         assertNotNull(result);
         verify(fileRepository).save(any(FileEntity.class));
         verify(processingJobRepository).save(any(ProcessingJob.class));
@@ -112,7 +109,6 @@ class FileServiceTest {
 
     @Test
     void uploadFile_Image_ShouldCreateMultipleJobsAndPublishEvents() {
-        // Arrange
         String fileName = "test.png";
         String contentType = "image/png";
         long size = 100L;
@@ -137,10 +133,8 @@ class FileServiceTest {
                 .thenReturn(checksumJob)
                 .thenReturn(phashJob);
 
-        // Act
         FileEntity result = fileService.uploadFile(fileName, contentType, size, content, userId, null, userId);
 
-        // Assert
         assertNotNull(result);
         verify(processingJobRepository, times(2)).save(any(ProcessingJob.class));
         
@@ -160,7 +154,6 @@ class FileServiceTest {
 
     @Test
     void uploadFile_OrganizationOwned_ShouldRecordOrganizationMetrics() {
-        // Arrange
         String fileName = "org.txt";
         String contentType = "text/plain";
         long size = 50L;
@@ -184,16 +177,13 @@ class FileServiceTest {
         ProcessingJob job = ProcessingJob.builder().id(UUID.randomUUID()).jobType(ProcessingJob.JobType.CHECKSUM).build();
         when(processingJobRepository.save(any(ProcessingJob.class))).thenReturn(job);
 
-        // Act
         fileService.uploadFile(fileName, contentType, size, content, null, orgId, userId);
 
-        // Assert
         verify(fileManagerMetrics).recordFileUpload(size, "ORGANIZATION");
     }
 
     @Test
     void downloadFile_ShouldRecordDownloadMetrics() {
-        // Arrange
         UUID fileId = UUID.randomUUID();
         FileEntity file = new FileEntity();
         file.setId(fileId);
@@ -202,10 +192,8 @@ class FileServiceTest {
         when(fileRepository.findByIdAndDeletedAtIsNull(fileId)).thenReturn(Optional.of(file));
         when(objectStoragePort.getObject("path/to/file")).thenReturn(new ByteArrayInputStream("data".getBytes()));
 
-        // Act
         fileService.downloadFile(fileId, userId);
 
-        // Assert
         verify(fileManagerMetrics).recordFileDownload();
     }
 }

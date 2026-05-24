@@ -48,14 +48,17 @@ public class AccessControlService {
     }
 
     private boolean hasFilePermission(UUID actorUserId, FileEntity file, Permission permission) {
+        // Deny all access if the file is soft-deleted.
         if (file.getDeletedAt() != null) {
             return false;
         }
 
+        // For user-owned files, only the owner has access.
         if (file.getOwnerUser() != null) {
             return Objects.equals(file.getOwnerUser().getId(), actorUserId);
         }
 
+        // For organization-owned files, access depends on membership and assigned roles.
         if (file.getOwnerOrganization() != null) {
             return organizationMemberRepository.findByOrganizationIdAndUserId(file.getOwnerOrganization().getId(), actorUserId)
                     .map(member -> rolePermissionResolver.hasPermission(member.getRole(), permission))

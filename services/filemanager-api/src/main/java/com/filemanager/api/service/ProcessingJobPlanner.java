@@ -12,10 +12,10 @@ public class ProcessingJobPlanner {
     public List<ProcessingJob.JobType> planJobs(String mimeType) {
         List<ProcessingJob.JobType> jobs = new ArrayList<>();
         
-        // All files get CHECKSUM
+        // Mandatory checksum for integrity and exact duplicate detection.
         jobs.add(ProcessingJob.JobType.CHECKSUM);
         
-        // Image files get PHASH
+        // Perceptual hash for visual similarity detection in images.
         if (mimeType != null && mimeType.toLowerCase().startsWith("image/")) {
             jobs.add(ProcessingJob.JobType.PHASH);
         }

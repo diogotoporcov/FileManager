@@ -139,7 +139,7 @@ class DuplicateCandidateServiceTest {
     @Test
     void updateStatus_CrossUserDuplicate_ThrowsException() {
         User otherUser = User.builder().id(UUID.randomUUID()).build();
-        file2.setOwnerUser(otherUser); // Cross-user duplicate row in DB
+        file2.setOwnerUser(otherUser);
         
         when(duplicateCandidateRepository.findById(candidate.getId())).thenReturn(Optional.of(candidate));
 

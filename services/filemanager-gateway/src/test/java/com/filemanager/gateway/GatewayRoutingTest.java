@@ -52,7 +52,7 @@ class GatewayRoutingTest {
     void setup() {
         this.webClient = WebTestClient.bindToApplicationContext(this.context)
                 .configureClient()
-                .responseTimeout(java.time.Duration.ofSeconds(5)) // Client-side timeout
+                .responseTimeout(java.time.Duration.ofSeconds(5))
                 .build();
         wireMockServer.resetAll();
     }
@@ -61,12 +61,15 @@ class GatewayRoutingTest {
     void gatewaySafetyConfigIsExposed() {
         Environment env = context.getEnvironment();
 
+        // Connect timeout
         assertThat(env.getProperty("spring.cloud.gateway.server.webflux.httpclient.connect-timeout"))
                 .isEqualTo("5000");
 
+        // Response timeout
         assertThat(env.getProperty("spring.cloud.gateway.server.webflux.httpclient.response-timeout"))
                 .isEqualTo("1s");
 
+        // Max request size
         assertThat(env.getProperty("spring.cloud.gateway.server.webflux.default-filters[0].args.maxSize"))
                 .isEqualTo("1KB");
     }
@@ -104,7 +107,7 @@ class GatewayRoutingTest {
                 .expectStatus().isOk()
                 .expectBody()
                 .jsonPath("$.status").isEqualTo("UP")
-                .jsonPath("$.components").doesNotExist(); // Details should be hidden
+                .jsonPath("$.components").doesNotExist();
     }
 
     @Test
@@ -239,17 +242,14 @@ class GatewayRoutingTest {
 
     @Test
     void blocksInternalEndpoints() {
-        // Path /internal/**
         webClient.get().uri("/internal/any")
                 .exchange()
                 .expectStatus().isNotFound();
 
-        // Path /api/v1/internal/**
         webClient.get().uri("/api/v1/internal/any")
                 .exchange()
                 .expectStatus().isNotFound();
 
-        // Traversal attempts
         webClient.get().uri("/api/v1/files/../internal/any")
                 .exchange()
                 .expectStatus().isNotFound();
@@ -266,7 +266,6 @@ class GatewayRoutingTest {
                 .exchange()
                 .expectStatus().isNotFound();
 
-        // Ensure nothing reached the backend
         verify(0, anyRequestedFor(anyUrl()));
     }
 

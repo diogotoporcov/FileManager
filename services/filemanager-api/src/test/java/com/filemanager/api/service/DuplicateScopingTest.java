@@ -62,7 +62,6 @@ class DuplicateScopingTest {
 
     @Test
     void handleChecksumResult_DifferentUsers_ShouldNotDetectDuplicate() {
-        // Arrange
         UUID jobId = UUID.randomUUID();
         UUID file1Id = UUID.randomUUID();
         UUID file2Id = UUID.randomUUID();
@@ -82,16 +81,13 @@ class DuplicateScopingTest {
         when(fileFingerprintRepository.findByAlgorithmAndHashValueAndFileOwnerUserIdAndFileDeletedAtIsNull(SHA256, sha256, user1.getId()))
                 .thenReturn(List.of());
 
-        // Act
         processingJobService.handleChecksumResult(jobId, file1Id, sha256);
 
-        // Assert
         verify(duplicateCandidateRepository, never()).save(any());
     }
 
     @Test
     void handleChecksumResult_DifferentOrgs_ShouldNotDetectDuplicate() {
-        // Arrange
         UUID jobId = UUID.randomUUID();
         UUID file1Id = UUID.randomUUID();
         String sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
@@ -109,16 +105,13 @@ class DuplicateScopingTest {
         when(fileFingerprintRepository.findByAlgorithmAndHashValueAndFileOwnerOrganizationIdAndFileDeletedAtIsNull(SHA256, sha256, org1.getId()))
                 .thenReturn(List.of());
 
-        // Act
         processingJobService.handleChecksumResult(jobId, file1Id, sha256);
 
-        // Assert
         verify(duplicateCandidateRepository, never()).save(any());
     }
 
     @Test
     void handleChecksumResult_SameOrganization_ShouldDetectDuplicate() {
-        // Arrange
         UUID jobId = UUID.randomUUID();
         UUID file1Id = UUID.randomUUID();
         UUID file2Id = UUID.randomUUID();
@@ -144,16 +137,13 @@ class DuplicateScopingTest {
         when(fileFingerprintRepository.findByAlgorithmAndHashValueAndFileOwnerOrganizationIdAndFileDeletedAtIsNull(SHA256, sha256, org1.getId()))
                 .thenReturn(List.of(fingerprint2));
 
-        // Act
         processingJobService.handleChecksumResult(jobId, file1Id, sha256);
 
-        // Assert
         verify(duplicateCandidateRepository, times(1)).save(any());
     }
 
     @Test
     void handlePhashResult_SameOrganization_ShouldDetectDuplicate() {
-        // Arrange
         UUID jobId = UUID.randomUUID();
         UUID file1Id = UUID.randomUUID();
         UUID file2Id = UUID.randomUUID();
@@ -178,16 +168,13 @@ class DuplicateScopingTest {
         when(imageFingerprintRepository.findByFileOwnerOrganizationIdAndFileDeletedAtIsNull(org1.getId()))
                 .thenReturn(List.of(fingerprint2));
 
-        // Act
         processingJobService.handlePhashResult(jobId, file1Id, phash);
 
-        // Assert
         verify(duplicateCandidateRepository, times(1)).save(any());
     }
 
     @Test
     void handlePhashResult_DifferentOrganizations_ShouldNotDetectDuplicate() {
-        // Arrange
         UUID jobId = UUID.randomUUID();
         UUID file1Id = UUID.randomUUID();
         String phash = "fedcba9876543210";
@@ -205,16 +192,13 @@ class DuplicateScopingTest {
         when(imageFingerprintRepository.findByFileOwnerOrganizationIdAndFileDeletedAtIsNull(org1.getId()))
                 .thenReturn(List.of());
 
-        // Act
         processingJobService.handlePhashResult(jobId, file1Id, phash);
 
-        // Assert
         verify(duplicateCandidateRepository, never()).save(any());
     }
 
     @Test
     void handleChecksumResult_SameUser_ShouldDetectDuplicate() {
-        // Arrange
         UUID jobId = UUID.randomUUID();
         UUID file1Id = UUID.randomUUID();
         UUID file2Id = UUID.randomUUID();
@@ -240,16 +224,13 @@ class DuplicateScopingTest {
         when(fileFingerprintRepository.findByAlgorithmAndHashValueAndFileOwnerUserIdAndFileDeletedAtIsNull(SHA256, sha256, user1.getId()))
                 .thenReturn(List.of(fingerprint2));
 
-        // Act
         processingJobService.handleChecksumResult(jobId, file1Id, sha256);
 
-        // Assert
         verify(duplicateCandidateRepository, times(1)).save(any());
     }
 
     @Test
     void handlePhashResult_DifferentUsers_ShouldNotDetectDuplicate() {
-        // Arrange
         UUID jobId = UUID.randomUUID();
         UUID file1Id = UUID.randomUUID();
         String phash = "fedcba9876543210";
@@ -267,16 +248,13 @@ class DuplicateScopingTest {
         when(imageFingerprintRepository.findByFileOwnerUserIdAndFileDeletedAtIsNull(user1.getId()))
                 .thenReturn(List.of());
 
-        // Act
         processingJobService.handlePhashResult(jobId, file1Id, phash);
 
-        // Assert
         verify(duplicateCandidateRepository, never()).save(any());
     }
 
     @Test
     void handlePhashResult_SameUser_ShouldDetectDuplicate() {
-        // Arrange
         UUID jobId = UUID.randomUUID();
         UUID file1Id = UUID.randomUUID();
         UUID file2Id = UUID.randomUUID();
@@ -301,16 +279,13 @@ class DuplicateScopingTest {
         when(imageFingerprintRepository.findByFileOwnerUserIdAndFileDeletedAtIsNull(user1.getId()))
                 .thenReturn(List.of(fingerprint2));
 
-        // Act
         processingJobService.handlePhashResult(jobId, file1Id, phash);
 
-        // Assert
         verify(duplicateCandidateRepository, times(1)).save(any());
     }
 
     @Test
     void handleChecksumResult_DeletedFile_ShouldNotDetectDuplicate() {
-        // Arrange
         UUID jobId = UUID.randomUUID();
         UUID file1Id = UUID.randomUUID();
         String sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
@@ -329,16 +304,13 @@ class DuplicateScopingTest {
         when(fileFingerprintRepository.findByAlgorithmAndHashValueAndFileOwnerUserIdAndFileDeletedAtIsNull(SHA256, sha256, user1.getId()))
                 .thenReturn(List.of());
 
-        // Act
         processingJobService.handleChecksumResult(jobId, file1Id, sha256);
 
-        // Assert
         verify(duplicateCandidateRepository, never()).save(any());
     }
 
     @Test
     void handlePhashResult_DeletedFile_ShouldNotDetectDuplicate() {
-        // Arrange
         UUID jobId = UUID.randomUUID();
         UUID file1Id = UUID.randomUUID();
         String phash = "fedcba9876543210";
@@ -356,10 +328,8 @@ class DuplicateScopingTest {
         when(imageFingerprintRepository.findByFileOwnerUserIdAndFileDeletedAtIsNull(user1.getId()))
                 .thenReturn(List.of());
 
-        // Act
         processingJobService.handlePhashResult(jobId, file1Id, phash);
 
-        // Assert
         verify(duplicateCandidateRepository, never()).save(any());
     }
 }

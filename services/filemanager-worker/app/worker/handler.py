@@ -21,14 +21,14 @@ class WorkerMessageHandler:
         Handle a single Kafka message with retries and DLQ fallback.
         Returns True if the message was successfully handled (and should be committed).
         """
-        # 1. Parse message
+        # Parse and validate the incoming message.
         try:
             event = self._parse_event(msg)
         except Exception as e:
             logger.error(f"Poison message detected: {e}")
             return await self._handle_poison_message(msg, e)
 
-        # 2. Retry loop for valid event
+        # Execute processing flow with retry logic.
         return await self._process_with_retries(msg, event)
 
     def _parse_event(self, msg: Any) -> FileProcessingRequestedEvent:
@@ -85,7 +85,7 @@ class WorkerMessageHandler:
             else:
                 break
 
-        # 3. Handle failure after retries or non-retryable error
+        # Manage terminal failure and report results to API.
         return await self._handle_final_failure(msg, event, last_error, attempts)
 
     async def _handle_final_failure(self, msg: Any, event: FileProcessingRequestedEvent, last_error: Optional[Exception], attempts: int) -> bool:

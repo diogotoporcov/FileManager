@@ -83,6 +83,7 @@ public class FileService {
             String ownerType = ownerUserId != null ? "USER" : "ORGANIZATION";
             fileManagerMetrics.recordFileUpload(size, ownerType);
 
+            // Determine and initiate background processing jobs.
             List<ProcessingJob.JobType> plannedJobs = processingJobPlanner.planJobs(effectiveContentType);
 
             for (ProcessingJob.JobType jobType : plannedJobs) {
@@ -115,6 +116,7 @@ public class FileService {
 
             return savedFile;
         } catch (Exception e) {
+            // Cleanup orphaned binary content if database persistence fails.
             log.error("Failed to save file metadata to database. Cleaning up object from storage: {}", storagePath, e);
             try {
                 objectStoragePort.deleteObject(storagePath);

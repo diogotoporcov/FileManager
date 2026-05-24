@@ -13,11 +13,12 @@ class EventConsumer:
         self._should_stop = False
 
     async def start(self):
+        # Initialize Kafka consumer with manual offset management for reliable delivery.
         self.consumer = AIOKafkaConsumer(
             settings.kafka_topic_file_processing,
             bootstrap_servers=settings.kafka_bootstrap_servers,
             group_id=settings.kafka_consumer_group_id,
-            # We handle deserialization in WorkerMessageHandler for better poison message handling
+            # Deserialization is handled in WorkerMessageHandler to manage poison messages
             enable_auto_commit=False
         )
         await self.consumer.start()
@@ -36,6 +37,7 @@ class EventConsumer:
                 try:
                     handled = await self.handler.handle_message(msg)
                     
+                    # Commit offsets only upon successful processing to ensure At-Least-Once delivery.
                     if handled:
                         await self.consumer.commit()
                         logger.debug(f"Committed offset {msg.offset}")
@@ -43,7 +45,6 @@ class EventConsumer:
                         logger.error(f"Message at offset {msg.offset} was NOT handled successfully and will NOT be committed.")
                 except Exception as e:
                     logger.exception(f"Unexpected error in message handler for offset {msg.offset}: {e}")
-                    # Do not commit, loop continues to next poll
         finally:
             await self.consumer.stop()
 

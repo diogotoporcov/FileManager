@@ -42,7 +42,7 @@ public class FileEmbedding {
     private Integer dimension;
 
     @JdbcTypeCode(SqlTypes.VECTOR)
-    @Array(length = 768) // Fixed to 768 for the current model
+    @Array(length = 768) // Required dimension for the configured embedding model.
     @Column(nullable = false)
     private float[] embedding;
 

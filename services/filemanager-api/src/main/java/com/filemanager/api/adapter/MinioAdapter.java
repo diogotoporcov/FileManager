@@ -22,6 +22,7 @@ public class MinioAdapter implements ObjectStoragePort, InitializingBean {
     @Override
     public void afterPropertiesSet() {
         try {
+            // Ensure the configured bucket exists at startup; create it if missing.
             boolean found = minioClient.bucketExists(BucketExistsArgs.builder()
                     .bucket(properties.getBucketName())
                     .build());
