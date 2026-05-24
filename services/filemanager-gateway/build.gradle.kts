@@ -14,6 +14,8 @@ java {
     }
 }
 
+val mockitoAgent by configurations.creating
+
 repositories {
     mavenCentral()
 }
@@ -32,6 +34,7 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-starter-webflux")
     testImplementation("org.springframework.cloud:spring-cloud-contract-wiremock")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    mockitoAgent("org.mockito:mockito-core:5.20.0") { isTransitive = false }
 }
 
 dependencyManagement {
@@ -42,4 +45,5 @@ dependencyManagement {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+    jvmArgs("-javaagent:${mockitoAgent.asPath}")
 }

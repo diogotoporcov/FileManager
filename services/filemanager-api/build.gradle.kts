@@ -14,6 +14,8 @@ java {
     }
 }
 
+val mockitoAgent by configurations.creating
+
 configurations {
     compileOnly {
         extendsFrom(configurations.annotationProcessor.get())
@@ -49,8 +51,10 @@ dependencies {
     testImplementation("org.springframework.security:spring-security-test")
     testRuntimeOnly("com.h2database:h2")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    mockitoAgent("org.mockito:mockito-core:5.20.0") { isTransitive = false }
 }
 
 tasks.withType<Test> {
     useJUnitPlatform()
+    jvmArgs("-javaagent:${mockitoAgent.asPath}")
 }
