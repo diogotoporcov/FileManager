@@ -1,5 +1,6 @@
 package com.filemanager.api.service;
 
+import com.filemanager.api.config.AppProperties;
 import com.filemanager.api.entity.*;
 import com.filemanager.api.exception.ResourceNotFoundException;
 import com.filemanager.api.repository.DuplicateCandidateRepository;
@@ -9,7 +10,6 @@ import com.filemanager.api.repository.ImageFingerprintRepository;
 import com.filemanager.api.repository.ProcessingJobRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,9 +28,7 @@ public class ProcessingJobService {
     private final ImageFingerprintRepository imageFingerprintRepository;
     private final DuplicateCandidateRepository duplicateCandidateRepository;
     private final FileManagerMetrics fileManagerMetrics;
-
-    @Value("${app.phash.threshold:10}")
-    private int phashThreshold;
+    private final AppProperties appProperties;
 
     @Transactional
     public void handleProcessingFailure(UUID jobId, UUID fileId, String errorMessage) {
@@ -185,7 +183,7 @@ public class ProcessingJobService {
 
             int distance = calculateHammingDistance(normalizedPhash, existing.getPhash());
 
-            if (distance <= phashThreshold) {
+            if (distance <= appProperties.getPhash().getThreshold()) {
                 // Create duplicate candidate row if it doesn't exist in either direction for PHASH
                 boolean exists = duplicateCandidateRepository.existsBySourceFileIdAndCandidateFileIdAndDetectionMethod(
                         file.getId(), candidateFile.getId(), DuplicateCandidate.DetectionMethod.PHASH)

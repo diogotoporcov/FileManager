@@ -1,17 +1,29 @@
 package com.filemanager.api.config;
 
+import jakarta.validation.constraints.NotBlank;
 import lombok.Getter;
 import lombok.Setter;
+import org.hibernate.validator.constraints.URL;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.validation.annotation.Validated;
 
 @Configuration
 @ConfigurationProperties(prefix = "minio")
 @Getter
 @Setter
+@Validated
 public class MinioProperties {
+    @NotBlank
+    @URL
     private String endpoint;
+
+    @NotBlank
     private String accessKey;
+
+    @NotBlank
     private String secretKey;
+
+    @NotBlank
     private String bucketName;
 }

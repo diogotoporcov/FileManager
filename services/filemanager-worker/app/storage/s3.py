@@ -8,7 +8,7 @@ class S3ObjectStorageReader(ObjectStorageReader):
     def __init__(self):
         self.s3_client = boto3.client(
             "s3",
-            endpoint_url=settings.s3_endpoint,
+            endpoint_url=str(settings.s3_endpoint),
             aws_access_key_id=settings.s3_access_key,
             aws_secret_access_key=settings.s3_secret_key,
         )

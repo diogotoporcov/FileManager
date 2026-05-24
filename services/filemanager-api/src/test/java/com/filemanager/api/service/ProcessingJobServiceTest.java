@@ -1,5 +1,6 @@
 package com.filemanager.api.service;
 
+import com.filemanager.api.config.AppProperties;
 import com.filemanager.api.entity.*;
 import com.filemanager.api.repository.DuplicateCandidateRepository;
 import com.filemanager.api.repository.FileFingerprintRepository;
@@ -38,13 +39,18 @@ class ProcessingJobServiceTest {
     private DuplicateCandidateRepository duplicateCandidateRepository;
     @Mock
     private FileManagerMetrics fileManagerMetrics;
+    @Mock
+    private AppProperties appProperties;
 
     @InjectMocks
     private ProcessingJobService processingJobService;
 
     @BeforeEach
     void setup() {
-        ReflectionTestUtils.setField(processingJobService, "phashThreshold", 10);
+        // Configure AppProperties mock leniently as not all tests use phash
+        AppProperties.Phash phash = new AppProperties.Phash();
+        phash.setThreshold(10);
+        lenient().when(appProperties.getPhash()).thenReturn(phash);
     }
 
     @Test

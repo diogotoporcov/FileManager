@@ -1,10 +1,10 @@
 package com.filemanager.api.adapter;
 
+import com.filemanager.api.config.AppProperties;
 import com.filemanager.api.event.FileProcessingRequestedEvent;
 import com.filemanager.api.port.EventPublisherPort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 
@@ -14,12 +14,11 @@ import org.springframework.stereotype.Component;
 public class KafkaEventPublisherAdapter implements EventPublisherPort {
 
     private final KafkaTemplate<String, FileProcessingRequestedEvent> kafkaTemplate;
-
-    @Value("${app.kafka.topics.file-processing-requested}")
-    private String topic;
+    private final AppProperties appProperties;
 
     @Override
     public void publishFileProcessingRequested(FileProcessingRequestedEvent event) {
+        String topic = appProperties.getKafka().getTopics().getFileProcessingRequested();
         log.info("Publishing file processing requested event for file {}: job {}", event.fileId(), event.processingJobId());
         try {
             // Using .get() to make it synchronous and catch async failures as requested
