@@ -12,6 +12,13 @@ spring:
     gateway:
       server:
         webflux:
+          httpclient:
+            connect-timeout: ${GATEWAY_CONNECT_TIMEOUT:5000}
+            response-timeout: ${GATEWAY_RESPONSE_TIMEOUT:60s}
+          default-filters:
+            - name: RequestSize
+              args:
+                maxSize: ${GATEWAY_MAX_REQUEST_SIZE:100MB}
           routes:
             # 1. Block access to internal endpoints
             - id: internal_stop

@@ -14,14 +14,16 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import org.springframework.web.reactive.function.BodyInserters;
+import org.springframework.core.env.Environment;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static com.github.tomakehurst.wiremock.client.WireMock.*;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class GatewayRoutingTest {
 
-    private static WireMockServer wireMockServer = new WireMockServer(wireMockConfig().dynamicPort());
+    private static final WireMockServer wireMockServer = new WireMockServer(wireMockConfig().dynamicPort());
 
     @Autowired
     private ApplicationContext context;
@@ -42,12 +44,57 @@ class GatewayRoutingTest {
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry registry) {
         registry.add("filemanager.api.base-url", () -> "http://localhost:" + wireMockServer.port());
+        registry.add("GATEWAY_MAX_REQUEST_SIZE", () -> "1KB");
+        registry.add("GATEWAY_RESPONSE_TIMEOUT", () -> "1s");
     }
 
     @BeforeEach
     void setup() {
-        this.webClient = WebTestClient.bindToApplicationContext(this.context).build();
+        this.webClient = WebTestClient.bindToApplicationContext(this.context)
+                .configureClient()
+                .responseTimeout(java.time.Duration.ofSeconds(5)) // Client-side timeout
+                .build();
         wireMockServer.resetAll();
+    }
+
+    @Test
+    void gatewaySafetyConfigIsExposed() {
+        Environment env = context.getEnvironment();
+
+        assertThat(env.getProperty("spring.cloud.gateway.server.webflux.httpclient.connect-timeout"))
+                .isEqualTo("5000");
+
+        assertThat(env.getProperty("spring.cloud.gateway.server.webflux.httpclient.response-timeout"))
+                .isEqualTo("1s");
+
+        assertThat(env.getProperty("spring.cloud.gateway.server.webflux.default-filters[0].args.maxSize"))
+                .isEqualTo("1KB");
+    }
+
+    @Test
+    void rejectsOversizedRequest() {
+        byte[] largeBody = new byte[2048];
+
+        webClient.post().uri("/api/v1/files")
+                .bodyValue(largeBody)
+                .exchange()
+                .expectStatus().isEqualTo(413);
+
+        verify(0, anyRequestedFor(anyUrl()));
+    }
+
+    @Test
+    void returnsErrorOnResponseTimeout() {
+        stubFor(get(urlEqualTo("/files"))
+                .willReturn(aResponse()
+                        .withStatus(200)
+                        .withFixedDelay(2000)));
+
+        webClient.get().uri("/api/v1/files")
+                .exchange()
+                .expectStatus().isEqualTo(504);
+
+        verify(getRequestedFor(urlEqualTo("/files")));
     }
 
     @Test
