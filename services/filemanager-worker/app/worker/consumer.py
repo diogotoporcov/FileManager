@@ -19,7 +19,8 @@ class EventConsumer:
             settings.kafka_topic_file_processing,
             bootstrap_servers=settings.kafka_bootstrap_servers,
             group_id=settings.kafka_consumer_group_id,
-            value_deserializer=lambda x: json.loads(x.decode('utf-8'))
+            value_deserializer=lambda x: json.loads(x.decode('utf-8')),
+            enable_auto_commit=False
         )
         await self.consumer.start()
         logger.info(f"Kafka consumer started on {settings.kafka_bootstrap_servers} for topic {settings.kafka_topic_file_processing}")
@@ -33,8 +34,10 @@ class EventConsumer:
                 try:
                     event = FileProcessingRequestedEvent.model_validate(msg.value)
                     await self.flow.run(event)
+                    await self.consumer.commit()
+                    logger.debug(f"Committed offset for file {event.file_id}")
                 except Exception as e:
-                    logger.error(f"Failed to process message: {e}")
+                    logger.error(f"Failed to process message or commit offset: {e}")
         finally:
             await self.consumer.stop()
 

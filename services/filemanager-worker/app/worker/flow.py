@@ -46,9 +46,13 @@ class ProcessingFlow:
             return derived_data, matches
         except Exception as e:
             logger.error(f"Processing flow failed for file {event.file_id}: {e}")
-            await self.result_sink.report_failure(
-                event.processing_job_id,
-                event.file_id,
-                str(e)
-            )
-            raise
+            try:
+                await self.result_sink.report_failure(
+                    event.processing_job_id,
+                    event.file_id,
+                    str(e)
+                )
+                return {}, []
+            except Exception as report_error:
+                logger.error(f"Failed to report failure to API for file {event.file_id}: {report_error}")
+                raise
