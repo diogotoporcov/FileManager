@@ -56,3 +56,16 @@ management:
     web:
       exposure:
         include: health,info
+  endpoint:
+    health:
+      show-details: when_authorized
+      probes:
+        enabled: true
+  info:
+    env:
+      enabled: true
+
+info:
+  app:
+    name: filemanager-api
+    role: metadata-api

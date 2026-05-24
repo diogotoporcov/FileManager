@@ -103,7 +103,25 @@ class GatewayRoutingTest {
                 .exchange()
                 .expectStatus().isOk()
                 .expectBody()
-                .jsonPath("$.status").isEqualTo("UP");
+                .jsonPath("$.status").isEqualTo("UP")
+                .jsonPath("$.components").doesNotExist(); // Details should be hidden
+    }
+
+    @Test
+    void infoEndpointWorks() {
+        webClient.get().uri("/actuator/info")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.app.name").isEqualTo("filemanager-gateway")
+                .jsonPath("$.app.role").isEqualTo("public-gateway");
+    }
+
+    @Test
+    void envEndpointIsNotExposed() {
+        webClient.get().uri("/actuator/env")
+                .exchange()
+                .expectStatus().isNotFound();
     }
 
     @Test

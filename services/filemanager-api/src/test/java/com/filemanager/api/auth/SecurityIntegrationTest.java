@@ -34,6 +34,7 @@ import static org.springframework.security.test.web.servlet.setup.SecurityMockMv
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 
 @SpringBootTest
 @ActiveProfiles("test")
@@ -127,7 +128,36 @@ class SecurityIntegrationTest {
     @Test
     void healthEndpoint_PermitsAll() throws Exception {
         mockMvc.perform(get("/actuator/health"))
-                .andExpect(status().isOk());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("UP"));
+    }
+
+    @Test
+    void livenessEndpoint_PermitsAll() throws Exception {
+        mockMvc.perform(get("/actuator/health/liveness"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("UP"));
+    }
+
+    @Test
+    void readinessEndpoint_PermitsAll() throws Exception {
+        mockMvc.perform(get("/actuator/health/readiness"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("UP"));
+    }
+
+    @Test
+    void infoEndpoint_PermitsAll() throws Exception {
+        mockMvc.perform(get("/actuator/info"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.app.name").value("filemanager-api"))
+                .andExpect(jsonPath("$.app.role").value("metadata-api"));
+    }
+
+    @Test
+    void envEndpoint_IsForbiddenOrNotFound() throws Exception {
+        mockMvc.perform(get("/actuator/env"))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -214,7 +244,6 @@ class SecurityIntegrationTest {
                 .build();
 
         when(jwtDecoder.decode("test-internal-token")).thenReturn(dummyJwt);
-        // IdentityResolutionService will not recognize this subject/JWT
         when(identityResolutionService.resolveUser(dummyJwt)).thenThrow(new AccessDeniedException("Invalid user"));
 
         mockMvc.perform(get("/files")

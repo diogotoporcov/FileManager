@@ -51,6 +51,26 @@ class SecurityHeadersTest {
     }
 
     @Test
+    void actuatorHealthIncludesSecurityHeaders() {
+        webClient.get().uri("/actuator/health")
+                .exchange()
+                .expectStatus().isOk()
+                .expectHeader().valueEquals("X-Content-Type-Options", "nosniff")
+                .expectHeader().valueEquals("X-Frame-Options", "DENY")
+                .expectHeader().valueEquals("Referrer-Policy", "no-referrer");
+    }
+
+    @Test
+    void actuatorInfoIncludesSecurityHeaders() {
+        webClient.get().uri("/actuator/info")
+                .exchange()
+                .expectStatus().isOk()
+                .expectHeader().valueEquals("X-Content-Type-Options", "nosniff")
+                .expectHeader().valueEquals("X-Frame-Options", "DENY")
+                .expectHeader().valueEquals("Referrer-Policy", "no-referrer");
+    }
+
+    @Test
     void routedRequestIncludesSecurityHeaders() {
         stubFor(get(urlEqualTo("/files"))
                 .willReturn(aResponse()
@@ -117,8 +137,6 @@ class SecurityHeadersTest {
                 .expectStatus().isOk()
                 .expectHeader().valueEquals("X-Content-Type-Options", "nosniff")
                 .expectBody()
-                .consumeWith(result -> {
-                    assertThat(result.getResponseHeaders().get("X-Content-Type-Options")).hasSize(1);
-                });
+                .consumeWith(result -> assertThat(result.getResponseHeaders().get("X-Content-Type-Options")).hasSize(1));
     }
 }
