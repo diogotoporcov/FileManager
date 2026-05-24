@@ -133,6 +133,21 @@ class GatewayRoutingTest {
     }
 
     @Test
+    void preservesAuthorizationHeader() {
+        stubFor(get(urlEqualTo("/files"))
+                .withHeader("Authorization", equalTo("Bearer dummy-token"))
+                .willReturn(aResponse().withStatus(200)));
+
+        webClient.get().uri("/api/v1/files")
+                .header("Authorization", "Bearer dummy-token")
+                .exchange()
+                .expectStatus().isOk();
+
+        verify(getRequestedFor(urlEqualTo("/files"))
+                .withHeader("Authorization", equalTo("Bearer dummy-token")));
+    }
+
+    @Test
     void routesMultipartUpload() {
         stubFor(post(urlEqualTo("/files"))
                 .withHeader("Content-Type", containing("multipart/form-data"))

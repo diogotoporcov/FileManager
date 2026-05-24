@@ -1,5 +1,6 @@
 package com.filemanager.api.controller;
 
+import com.filemanager.api.auth.CurrentUserService;
 import com.filemanager.api.dto.FileProcessingStatusResponse;
 import com.filemanager.api.dto.ProcessingJobResponse;
 import com.filemanager.api.service.FileProcessingStatusService;
@@ -22,6 +23,9 @@ class ProcessingStatusControllerTest {
     @Mock
     private FileProcessingStatusService fileProcessingStatusService;
 
+    @Mock
+    private CurrentUserService currentUserService;
+
     @InjectMocks
     private ProcessingStatusController processingStatusController;
 
@@ -30,10 +34,11 @@ class ProcessingStatusControllerTest {
         UUID fileId = UUID.randomUUID();
         UUID actorUserId = UUID.randomUUID();
 
+        when(currentUserService.getCurrentUserId()).thenReturn(actorUserId);
         when(fileProcessingStatusService.getProcessingJobs(eq(actorUserId), eq(fileId)))
                 .thenReturn(List.of());
 
-        List<ProcessingJobResponse> result = processingStatusController.getProcessingJobs(fileId, actorUserId);
+        List<ProcessingJobResponse> result = processingStatusController.getProcessingJobs(fileId);
 
         assertThat(result).isNotNull();
     }
@@ -43,10 +48,11 @@ class ProcessingStatusControllerTest {
         UUID fileId = UUID.randomUUID();
         UUID actorUserId = UUID.randomUUID();
 
+        when(currentUserService.getCurrentUserId()).thenReturn(actorUserId);
         when(fileProcessingStatusService.getFileProcessingStatus(eq(actorUserId), eq(fileId)))
                 .thenReturn(FileProcessingStatusResponse.builder().build());
 
-        FileProcessingStatusResponse result = processingStatusController.getFileProcessingStatus(fileId, actorUserId);
+        FileProcessingStatusResponse result = processingStatusController.getFileProcessingStatus(fileId);
 
         assertThat(result).isNotNull();
     }

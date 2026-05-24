@@ -10,6 +10,11 @@ spring:
       ddl-auto: create-drop
   flyway:
     enabled: false
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: http://localhost:8082/realms/filemanager/protocol/openid-connect/certs
 
 minio:
   endpoint: http://localhost:9000

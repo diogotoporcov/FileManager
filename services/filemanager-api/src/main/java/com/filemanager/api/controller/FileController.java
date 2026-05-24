@@ -1,5 +1,6 @@
 package com.filemanager.api.controller;
 
+import com.filemanager.api.auth.CurrentUserService;
 import com.filemanager.api.dto.FileResponse;
 import com.filemanager.api.entity.FileEntity;
 import com.filemanager.api.service.FileService;
@@ -24,14 +25,14 @@ import java.util.stream.Collectors;
 public class FileController {
 
     private final FileService fileService;
+    private final CurrentUserService currentUserService;
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
     public FileResponse uploadFile(
             @RequestParam("file") MultipartFile file,
             @RequestParam(value = "ownerUserId", required = false) UUID ownerUserId,
-            @RequestParam(value = "ownerOrganizationId", required = false) UUID ownerOrganizationId,
-            @RequestParam(value = "actorUserId") UUID actorUserId
+            @RequestParam(value = "ownerOrganizationId", required = false) UUID ownerOrganizationId
     ) throws IOException {
         if (file.isEmpty()) {
             throw new IllegalArgumentException("Upload file is missing or empty");
@@ -40,6 +41,7 @@ public class FileController {
             throw new IllegalArgumentException("Filename is missing");
         }
 
+        UUID actorUserId = currentUserService.getCurrentUserId();
         FileEntity entity = fileService.uploadFile(
                 file.getOriginalFilename(),
                 file.getContentType(),
@@ -55,9 +57,9 @@ public class FileController {
     @GetMapping
     public List<FileResponse> listFiles(
             @RequestParam(value = "ownerUserId", required = false) UUID ownerUserId,
-            @RequestParam(value = "ownerOrganizationId", required = false) UUID ownerOrganizationId,
-            @RequestParam(value = "actorUserId") UUID actorUserId
+            @RequestParam(value = "ownerOrganizationId", required = false) UUID ownerOrganizationId
     ) {
+        UUID actorUserId = currentUserService.getCurrentUserId();
         return fileService.listFiles(ownerUserId, ownerOrganizationId, actorUserId)
                 .stream()
                 .map(this::mapToResponse)
@@ -65,13 +67,15 @@ public class FileController {
     }
 
     @GetMapping("/{fileId}")
-    public FileResponse getFileMetadata(@PathVariable UUID fileId, @RequestParam(value = "actorUserId") UUID actorUserId) {
+    public FileResponse getFileMetadata(@PathVariable UUID fileId) {
+        UUID actorUserId = currentUserService.getCurrentUserId();
         FileEntity entity = fileService.getFileMetadata(fileId, actorUserId);
         return mapToResponse(entity);
     }
 
     @GetMapping("/{fileId}/download")
-    public ResponseEntity<Resource> downloadFile(@PathVariable UUID fileId, @RequestParam(value = "actorUserId") UUID actorUserId) {
+    public ResponseEntity<Resource> downloadFile(@PathVariable UUID fileId) {
+        UUID actorUserId = currentUserService.getCurrentUserId();
         FileEntity entity = fileService.getFileMetadata(fileId, actorUserId);
         Resource resource = new InputStreamResource(fileService.downloadFile(fileId, actorUserId));
 
@@ -83,7 +87,8 @@ public class FileController {
 
     @DeleteMapping("/{fileId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void deleteFile(@PathVariable UUID fileId, @RequestParam(value = "actorUserId") UUID actorUserId) {
+    public void deleteFile(@PathVariable UUID fileId) {
+        UUID actorUserId = currentUserService.getCurrentUserId();
         fileService.deleteFile(fileId, actorUserId);
     }
 

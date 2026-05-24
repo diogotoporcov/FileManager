@@ -23,8 +23,15 @@ spring:
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8082/realms/filemanager}
 
 app:
+  auth:
+    provider-name: ${AUTH_PROVIDER_NAME:keycloak}
   kafka:
     topics:
       file-processing-requested: ${FILE_PROCESSING_REQUESTED_TOPIC:file.processing.requested}

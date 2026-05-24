@@ -1,5 +1,6 @@
 package com.filemanager.api.controller;
 
+import com.filemanager.api.auth.CurrentUserService;
 import com.filemanager.api.dto.DuplicateCandidateResponse;
 import com.filemanager.api.dto.DuplicateStatusUpdateRequest;
 import com.filemanager.api.dto.FileDuplicateResponse;
@@ -25,6 +26,9 @@ class DuplicateCandidateControllerTest {
     @Mock
     private DuplicateCandidateService duplicateCandidateService;
 
+    @Mock
+    private CurrentUserService currentUserService;
+
     @InjectMocks
     private DuplicateCandidateController duplicateCandidateController;
 
@@ -33,11 +37,12 @@ class DuplicateCandidateControllerTest {
         UUID fileId = UUID.randomUUID();
         UUID ownerId = UUID.randomUUID();
 
+        when(currentUserService.getCurrentUserId()).thenReturn(ownerId);
         when(duplicateCandidateService.getDuplicatesForFile(eq(fileId), eq(ownerId), eq(null), any(), any(), eq(ownerId)))
                 .thenReturn(List.of());
 
         List<FileDuplicateResponse> result = duplicateCandidateController.getDuplicatesForFile(
-                fileId, ownerId, null, null, null, ownerId);
+                fileId, ownerId, null, null, null);
         
         assertThat(result).isNotNull();
     }
@@ -46,11 +51,12 @@ class DuplicateCandidateControllerTest {
     void getDuplicatesForOwner_ReturnsOk() {
         UUID ownerId = UUID.randomUUID();
 
+        when(currentUserService.getCurrentUserId()).thenReturn(ownerId);
         when(duplicateCandidateService.getDuplicatesForOwner(eq(ownerId), eq(null), any(), any(), eq(ownerId)))
                 .thenReturn(List.of());
 
         List<DuplicateCandidateResponse> result = duplicateCandidateController.getDuplicatesForOwner(
-                ownerId, null, null, null, ownerId);
+                ownerId, null, null, null);
         
         assertThat(result).isNotNull();
     }
@@ -61,11 +67,12 @@ class DuplicateCandidateControllerTest {
         UUID ownerId = UUID.randomUUID();
         DuplicateStatusUpdateRequest request = new DuplicateStatusUpdateRequest(CandidateStatus.CONFIRMED);
 
+        when(currentUserService.getCurrentUserId()).thenReturn(ownerId);
         when(duplicateCandidateService.updateStatus(eq(candidateId), eq(ownerId), eq(null), eq(CandidateStatus.CONFIRMED), eq(ownerId)))
                 .thenReturn(DuplicateCandidateResponse.builder().build());
 
         DuplicateCandidateResponse result = duplicateCandidateController.updateStatus(
-                candidateId, ownerId, null, ownerId, request);
+                candidateId, ownerId, null, request);
         
         assertThat(result).isNotNull();
     }

@@ -1,5 +1,6 @@
 package com.filemanager.api.controller;
 
+import com.filemanager.api.auth.CurrentUserService;
 import com.filemanager.api.dto.FileProcessingStatusResponse;
 import com.filemanager.api.dto.ProcessingJobResponse;
 import com.filemanager.api.service.FileProcessingStatusService;
@@ -15,18 +16,17 @@ import java.util.UUID;
 public class ProcessingStatusController {
 
     private final FileProcessingStatusService fileProcessingStatusService;
+    private final CurrentUserService currentUserService;
 
     @GetMapping("/{fileId}/processing-jobs")
-    public List<ProcessingJobResponse> getProcessingJobs(
-            @PathVariable UUID fileId,
-            @RequestParam UUID actorUserId) {
+    public List<ProcessingJobResponse> getProcessingJobs(@PathVariable UUID fileId) {
+        UUID actorUserId = currentUserService.getCurrentUserId();
         return fileProcessingStatusService.getProcessingJobs(actorUserId, fileId);
     }
 
     @GetMapping("/{fileId}/processing-status")
-    public FileProcessingStatusResponse getFileProcessingStatus(
-            @PathVariable UUID fileId,
-            @RequestParam UUID actorUserId) {
+    public FileProcessingStatusResponse getFileProcessingStatus(@PathVariable UUID fileId) {
+        UUID actorUserId = currentUserService.getCurrentUserId();
         return fileProcessingStatusService.getFileProcessingStatus(actorUserId, fileId);
     }
 }

@@ -1,5 +1,6 @@
 package com.filemanager.api.controller;
 
+import com.filemanager.api.auth.CurrentUserService;
 import com.filemanager.api.dto.*;
 import com.filemanager.api.entity.DuplicateCandidate.CandidateStatus;
 import com.filemanager.api.entity.DuplicateCandidate.DetectionMethod;
@@ -16,6 +17,7 @@ import java.util.UUID;
 public class DuplicateCandidateController {
 
     private final DuplicateCandidateService duplicateCandidateService;
+    private final CurrentUserService currentUserService;
 
     @GetMapping("/files/{fileId}/duplicates")
     public List<FileDuplicateResponse> getDuplicatesForFile(
@@ -23,8 +25,8 @@ public class DuplicateCandidateController {
             @RequestParam(required = false) UUID ownerUserId,
             @RequestParam(required = false) UUID ownerOrganizationId,
             @RequestParam(required = false) DetectionMethod detectionMethod,
-            @RequestParam(required = false) CandidateStatus status,
-            @RequestParam UUID actorUserId) {
+            @RequestParam(required = false) CandidateStatus status) {
+        UUID actorUserId = currentUserService.getCurrentUserId();
         return duplicateCandidateService.getDuplicatesForFile(
                 fileId, ownerUserId, ownerOrganizationId, detectionMethod, status, actorUserId);
     }
@@ -34,8 +36,8 @@ public class DuplicateCandidateController {
             @RequestParam(required = false) UUID ownerUserId,
             @RequestParam(required = false) UUID ownerOrganizationId,
             @RequestParam(required = false) DetectionMethod detectionMethod,
-            @RequestParam(required = false) CandidateStatus status,
-            @RequestParam UUID actorUserId) {
+            @RequestParam(required = false) CandidateStatus status) {
+        UUID actorUserId = currentUserService.getCurrentUserId();
         return duplicateCandidateService.getDuplicatesForOwner(
                 ownerUserId, ownerOrganizationId, detectionMethod, status, actorUserId);
     }
@@ -45,8 +47,8 @@ public class DuplicateCandidateController {
             @PathVariable UUID candidateId,
             @RequestParam(required = false) UUID ownerUserId,
             @RequestParam(required = false) UUID ownerOrganizationId,
-            @RequestParam UUID actorUserId,
             @Valid @RequestBody DuplicateStatusUpdateRequest request) {
+        UUID actorUserId = currentUserService.getCurrentUserId();
         return duplicateCandidateService.updateStatus(
                 candidateId, ownerUserId, ownerOrganizationId, request.getStatus(), actorUserId);
     }
