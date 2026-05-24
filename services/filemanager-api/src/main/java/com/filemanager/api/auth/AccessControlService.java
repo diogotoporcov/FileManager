@@ -78,33 +78,23 @@ public class AccessControlService {
     }
 
     public void assertCanUploadToContext(UUID actorUserId, UUID ownerUserId, UUID ownerOrganizationId) {
-        if (ownerUserId != null && !ownerUserId.equals(actorUserId)) {
-            throw new AccessDeniedException("You can only upload files to your own user account.");
-        }
-
-        if (ownerUserId != null) {
-            return;
-        }
-
-        if (ownerOrganizationId != null) {
-            assertOrganizationPermission(actorUserId, ownerOrganizationId, Permission.FILE_UPLOAD);
-            return;
-        }
-
-        throw new IllegalArgumentException("Either ownerUserId or ownerOrganizationId must be provided.");
+        assertOwnershipContext(actorUserId, ownerUserId, ownerOrganizationId, Permission.FILE_UPLOAD, "You can only upload files to your own user account.");
     }
 
     public void assertCanViewDuplicates(UUID actorUserId, UUID ownerUserId, UUID ownerOrganizationId) {
-        if (ownerUserId != null && !ownerUserId.equals(actorUserId)) {
-            throw new AccessDeniedException("You can only view your own duplicates.");
-        }
+        assertOwnershipContext(actorUserId, ownerUserId, ownerOrganizationId, Permission.DUPLICATE_VIEW, "You can only view your own duplicates.");
+    }
 
+    private void assertOwnershipContext(UUID actorUserId, UUID ownerUserId, UUID ownerOrganizationId, Permission orgPermission, String userDeniedMessage) {
         if (ownerUserId != null) {
+            if (!ownerUserId.equals(actorUserId)) {
+                throw new AccessDeniedException(userDeniedMessage);
+            }
             return;
         }
 
         if (ownerOrganizationId != null) {
-            assertOrganizationPermission(actorUserId, ownerOrganizationId, Permission.DUPLICATE_VIEW);
+            assertOrganizationPermission(actorUserId, ownerOrganizationId, orgPermission);
             return;
         }
 

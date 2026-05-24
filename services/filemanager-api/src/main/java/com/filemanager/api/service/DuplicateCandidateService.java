@@ -43,16 +43,8 @@ public class DuplicateCandidateService {
         
         verifyFileOwnership(file, ownerUserId, ownerOrganizationId);
 
-        Specification<DuplicateCandidate> spec = Specification.where(DuplicateCandidateSpecifications.hasFileId(fileId))
-                .and(DuplicateCandidateSpecifications.isNotDeleted())
-                .and(DuplicateCandidateSpecifications.hasDetectionMethod(method))
-                .and(DuplicateCandidateSpecifications.hasStatus(status));
-
-        if (ownerUserId != null) {
-            spec = spec.and(DuplicateCandidateSpecifications.hasOwnerUserId(ownerUserId));
-        } else {
-            spec = spec.and(DuplicateCandidateSpecifications.hasOwnerOrganizationId(ownerOrganizationId));
-        }
+        Specification<DuplicateCandidate> spec = buildBaseSpecification(fileId, method, status);
+        spec = addOwnerContextToSpecification(spec, ownerUserId, ownerOrganizationId);
 
         List<DuplicateCandidate> candidates = duplicateCandidateRepository.findAll(spec);
 
@@ -69,15 +61,8 @@ public class DuplicateCandidateService {
         accessControlService.assertCanViewDuplicates(actorUserId, ownerUserId, ownerOrganizationId);
         validateOwnerContext(ownerUserId, ownerOrganizationId);
 
-        Specification<DuplicateCandidate> spec = Specification.where(DuplicateCandidateSpecifications.isNotDeleted())
-                .and(DuplicateCandidateSpecifications.hasDetectionMethod(method))
-                .and(DuplicateCandidateSpecifications.hasStatus(status));
-
-        if (ownerUserId != null) {
-            spec = spec.and(DuplicateCandidateSpecifications.hasOwnerUserId(ownerUserId));
-        } else {
-            spec = spec.and(DuplicateCandidateSpecifications.hasOwnerOrganizationId(ownerOrganizationId));
-        }
+        Specification<DuplicateCandidate> spec = buildBaseSpecification(null, method, status);
+        spec = addOwnerContextToSpecification(spec, ownerUserId, ownerOrganizationId);
 
         List<DuplicateCandidate> candidates = duplicateCandidateRepository.findAll(spec);
 
@@ -111,15 +96,28 @@ public class DuplicateCandidateService {
     }
 
     private void verifyFileOwnership(FileEntity file, UUID ownerUserId, UUID ownerOrganizationId) {
-        if (ownerUserId != null) {
-            if (!isFileOwnedByUser(file, ownerUserId)) {
-                throw new ResourceNotFoundException("File not found: " + file.getId());
-            }
-            return;
-        }
-        if (!isFileOwnedByOrganization(file, ownerOrganizationId)) {
+        boolean owned = (ownerUserId != null) ? isFileOwnedByUser(file, ownerUserId) : isFileOwnedByOrganization(file, ownerOrganizationId);
+        if (!owned) {
             throw new ResourceNotFoundException("File not found: " + file.getId());
         }
+    }
+
+    private Specification<DuplicateCandidate> buildBaseSpecification(UUID fileId, DetectionMethod method, CandidateStatus status) {
+        Specification<DuplicateCandidate> spec = Specification.where(DuplicateCandidateSpecifications.isNotDeleted())
+                .and(DuplicateCandidateSpecifications.hasDetectionMethod(method))
+                .and(DuplicateCandidateSpecifications.hasStatus(status));
+        
+        if (fileId != null) {
+            spec = spec.and(DuplicateCandidateSpecifications.hasFileId(fileId));
+        }
+        return spec;
+    }
+
+    private Specification<DuplicateCandidate> addOwnerContextToSpecification(Specification<DuplicateCandidate> spec, UUID ownerUserId, UUID ownerOrganizationId) {
+        if (ownerUserId != null) {
+            return spec.and(DuplicateCandidateSpecifications.hasOwnerUserId(ownerUserId));
+        }
+        return spec.and(DuplicateCandidateSpecifications.hasOwnerOrganizationId(ownerOrganizationId));
     }
 
     private boolean hasOwnershipOfCandidate(DuplicateCandidate dc, UUID ownerUserId, UUID ownerOrganizationId) {

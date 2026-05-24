@@ -24,27 +24,35 @@ public class InternalApiTokenFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
-        
         String authHeader = request.getHeader(AUTH_HEADER);
-        
-        if (authHeader != null && authHeader.startsWith(BEARER_PREFIX)) {
-            String token = authHeader.substring(BEARER_PREFIX.length());
-            
-            String configuredToken = internalApiProperties.getApiToken();
-            if (configuredToken != null && configuredToken.equals(token)) {
-                // Authenticate as internal service
-                UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
-                        "internal-service", null, Collections.singletonList(new SimpleGrantedAuthority("ROLE_INTERNAL_SERVICE")));
-                SecurityContextHolder.getContext().setAuthentication(authentication);
-            } else {
-                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-                return;
-            }
-        } else {
-            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+
+        if (authHeader == null || !authHeader.startsWith(BEARER_PREFIX)) {
+            rejectUnauthorized(response);
             return;
         }
-        
+
+        String token = authHeader.substring(BEARER_PREFIX.length());
+        String configuredToken = internalApiProperties.getApiToken();
+
+        if (configuredToken == null || !configuredToken.equals(token)) {
+            rejectUnauthorized(response);
+            return;
+        }
+
+        authenticateInternalService();
         filterChain.doFilter(request, response);
+    }
+
+    private void rejectUnauthorized(HttpServletResponse response) {
+        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+    }
+
+    private void authenticateInternalService() {
+        UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
+                "internal-service",
+                null,
+                Collections.singletonList(new SimpleGrantedAuthority("ROLE_INTERNAL_SERVICE"))
+        );
+        SecurityContextHolder.getContext().setAuthentication(authentication);
     }
 }

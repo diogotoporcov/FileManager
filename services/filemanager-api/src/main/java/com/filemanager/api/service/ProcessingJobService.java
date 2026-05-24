@@ -52,42 +52,14 @@ public class ProcessingJobService {
     public void handleChecksumResult(UUID jobId, UUID fileId, String sha256) {
         log.info("Handling checksum result for job {}: {}", jobId, sha256);
 
-        if (sha256 == null || !sha256.matches("^[a-fA-F0-9]{64}$")) {
-            throw new IllegalArgumentException("Invalid SHA-256 format");
-        }
-
+        validateChecksumFormat(sha256);
         String normalizedSha256 = sha256.toLowerCase(Locale.ROOT);
 
-        ProcessingJob job = processingJobRepository.findById(jobId)
-                .orElseThrow(() -> new ResourceNotFoundException("Processing job not found: " + jobId));
-
-        if (!job.getFile().getId().equals(fileId)) {
-            throw new IllegalArgumentException("Job file ID mismatch");
-        }
-
-        if (job.getJobType() != ProcessingJob.JobType.CHECKSUM) {
-            throw new IllegalArgumentException("Job type mismatch: expected CHECKSUM");
-        }
-
-        FileEntity file = fileRepository.findByIdAndDeletedAtIsNull(fileId)
-                .orElseThrow(() -> new ResourceNotFoundException("File not found or deleted: " + fileId));
+        ProcessingJob job = getAndValidateJob(jobId, fileId, ProcessingJob.JobType.CHECKSUM);
+        FileEntity file = getActiveFile(fileId);
 
         // 1. Store or update SHA-256 fingerprint
-        fileFingerprintRepository.findByFileIdAndAlgorithm(file.getId(), FileFingerprint.FingerprintAlgorithm.SHA256)
-                .ifPresentOrElse(
-                        f -> {
-                            f.setHashValue(normalizedSha256);
-                            fileFingerprintRepository.save(f);
-                        },
-                        () -> {
-                            FileFingerprint fingerprint = FileFingerprint.builder()
-                                    .file(file)
-                                    .algorithm(FileFingerprint.FingerprintAlgorithm.SHA256)
-                                    .hashValue(normalizedSha256)
-                                    .build();
-                            fileFingerprintRepository.save(fingerprint);
-                        }
-                );
+        updateFileFingerprint(file, normalizedSha256);
 
         // 2. Search for existing files with the same SHA-256 within the same ownership boundary
         List<FileFingerprint> existingFingerprints = findExistingChecksumDuplicates(file, normalizedSha256);
@@ -95,79 +67,26 @@ public class ProcessingJobService {
         for (FileFingerprint existing : existingFingerprints) {
             FileEntity candidateFile = existing.getFile();
 
-            // Skip self and deleted files
-            if (candidateFile.getId().equals(file.getId()) || candidateFile.getDeletedAt() != null) {
-                continue;
+            if (isEligibleDuplicate(file, candidateFile)) {
+                createDuplicateCandidate(file, candidateFile, DuplicateCandidate.DetectionMethod.EXACT, 0.0, 1.0);
             }
-
-            // Create duplicate candidate row if it doesn't exist in either direction
-            boolean exists = duplicateCandidateRepository.existsBySourceFileIdAndCandidateFileIdAndDetectionMethod(
-                    file.getId(), candidateFile.getId(), DuplicateCandidate.DetectionMethod.EXACT)
-                    || duplicateCandidateRepository.existsBySourceFileIdAndCandidateFileIdAndDetectionMethod(
-                    candidateFile.getId(), file.getId(), DuplicateCandidate.DetectionMethod.EXACT);
-
-                if (!exists) {
-                    DuplicateCandidate candidate = DuplicateCandidate.builder()
-                            .sourceFile(file)
-                            .candidateFile(candidateFile)
-                            .detectionMethod(DuplicateCandidate.DetectionMethod.EXACT)
-                            .distance(0.0)
-                            .confidenceScore(1.0)
-                            .status(DuplicateCandidate.CandidateStatus.PENDING)
-                            .build();
-
-                    duplicateCandidateRepository.save(candidate);
-                    fileManagerMetrics.recordDuplicateCandidateCreated(DuplicateCandidate.DetectionMethod.EXACT.name());
-                    log.info("Created exact duplicate candidate: {} and {}", file.getId(), candidateFile.getId());
-                }
         }
 
-        // 3. Mark job as COMPLETED
-        job.setStatus(ProcessingJob.JobStatus.COMPLETED);
-        job.setErrorMessage(null);
-        processingJobRepository.save(job);
-        fileManagerMetrics.recordJobCompleted(job.getJobType().name());
+        completeJob(job);
     }
 
     @Transactional
     public void handlePhashResult(UUID jobId, UUID fileId, String phash) {
         log.info("Handling pHash result for job {}: {}", jobId, phash);
 
-        if (phash == null || !phash.matches("^[a-fA-F0-9]{16}$")) {
-            throw new IllegalArgumentException("Invalid pHash format");
-        }
-
+        validatePhashFormat(phash);
         String normalizedPhash = phash.toLowerCase(Locale.ROOT);
 
-        ProcessingJob job = processingJobRepository.findById(jobId)
-                .orElseThrow(() -> new ResourceNotFoundException("Processing job not found: " + jobId));
-
-        if (!job.getFile().getId().equals(fileId)) {
-            throw new IllegalArgumentException("Job file ID mismatch");
-        }
-
-        if (job.getJobType() != ProcessingJob.JobType.PHASH) {
-            throw new IllegalArgumentException("Job type mismatch: expected PHASH");
-        }
-
-        FileEntity file = fileRepository.findByIdAndDeletedAtIsNull(fileId)
-                .orElseThrow(() -> new ResourceNotFoundException("File not found or deleted: " + fileId));
+        ProcessingJob job = getAndValidateJob(jobId, fileId, ProcessingJob.JobType.PHASH);
+        FileEntity file = getActiveFile(fileId);
 
         // 1. Store or update pHash fingerprint
-        imageFingerprintRepository.findByFileId(file.getId())
-                .ifPresentOrElse(
-                        f -> {
-                            f.setPhash(normalizedPhash);
-                            imageFingerprintRepository.save(f);
-                        },
-                        () -> {
-                            ImageFingerprint fingerprint = ImageFingerprint.builder()
-                                    .file(file)
-                                    .phash(normalizedPhash)
-                                    .build();
-                            imageFingerprintRepository.save(fingerprint);
-                        }
-                );
+        updateImageFingerprint(file, normalizedPhash);
 
         // 2. Search for existing image fingerprints to compare within the same ownership boundary
         List<ImageFingerprint> allFingerprints = findExistingPhashDuplicates(file);
@@ -175,39 +94,112 @@ public class ProcessingJobService {
         for (ImageFingerprint existing : allFingerprints) {
             FileEntity candidateFile = existing.getFile();
 
-            // Skip self and deleted files
-            if (candidateFile.getId().equals(file.getId()) || candidateFile.getDeletedAt() != null) {
-                continue;
-            }
+            if (isEligibleDuplicate(file, candidateFile)) {
+                int distance = calculateHammingDistance(normalizedPhash, existing.getPhash());
 
-            int distance = calculateHammingDistance(normalizedPhash, existing.getPhash());
-
-            if (distance <= appProperties.getPhash().getThreshold()) {
-                // Create duplicate candidate row if it doesn't exist in either direction for PHASH
-                boolean exists = duplicateCandidateRepository.existsBySourceFileIdAndCandidateFileIdAndDetectionMethod(
-                        file.getId(), candidateFile.getId(), DuplicateCandidate.DetectionMethod.PHASH)
-                        || duplicateCandidateRepository.existsBySourceFileIdAndCandidateFileIdAndDetectionMethod(
-                        candidateFile.getId(), file.getId(), DuplicateCandidate.DetectionMethod.PHASH);
-
-                if (!exists) {
+                if (distance <= appProperties.getPhash().getThreshold()) {
                     double confidenceScore = 1.0 - ((double) distance / 64.0);
-                    DuplicateCandidate candidate = DuplicateCandidate.builder()
-                            .sourceFile(file)
-                            .candidateFile(candidateFile)
-                            .detectionMethod(DuplicateCandidate.DetectionMethod.PHASH)
-                            .distance((double) distance)
-                            .confidenceScore(confidenceScore)
-                            .status(DuplicateCandidate.CandidateStatus.PENDING)
-                            .build();
-
-                    duplicateCandidateRepository.save(candidate);
-                    fileManagerMetrics.recordDuplicateCandidateCreated(DuplicateCandidate.DetectionMethod.PHASH.name());
-                    log.info("Created pHash duplicate candidate: {} and {} (distance: {})", file.getId(), candidateFile.getId(), distance);
+                    createDuplicateCandidate(file, candidateFile, DuplicateCandidate.DetectionMethod.PHASH, (double) distance, confidenceScore);
                 }
             }
         }
 
-        // 3. Mark job as COMPLETED
+        completeJob(job);
+    }
+
+    private void validateChecksumFormat(String sha256) {
+        if (sha256 == null || !sha256.matches("^[a-fA-F0-9]{64}$")) {
+            throw new IllegalArgumentException("Invalid SHA-256 format");
+        }
+    }
+
+    private void validatePhashFormat(String phash) {
+        if (phash == null || !phash.matches("^[a-fA-F0-9]{16}$")) {
+            throw new IllegalArgumentException("Invalid pHash format");
+        }
+    }
+
+    private ProcessingJob getAndValidateJob(UUID jobId, UUID fileId, ProcessingJob.JobType expectedType) {
+        ProcessingJob job = processingJobRepository.findById(jobId)
+                .orElseThrow(() -> new ResourceNotFoundException("Processing job not found: " + jobId));
+
+        if (!job.getFile().getId().equals(fileId)) {
+            throw new IllegalArgumentException("Job file ID mismatch");
+        }
+
+        if (job.getJobType() != expectedType) {
+            throw new IllegalArgumentException("Job type mismatch: expected " + expectedType);
+        }
+        return job;
+    }
+
+    private FileEntity getActiveFile(UUID fileId) {
+        return fileRepository.findByIdAndDeletedAtIsNull(fileId)
+                .orElseThrow(() -> new ResourceNotFoundException("File not found or deleted: " + fileId));
+    }
+
+    private void updateFileFingerprint(FileEntity file, String hashValue) {
+        fileFingerprintRepository.findByFileIdAndAlgorithm(file.getId(), FileFingerprint.FingerprintAlgorithm.SHA256)
+                .ifPresentOrElse(
+                        f -> {
+                            f.setHashValue(hashValue);
+                            fileFingerprintRepository.save(f);
+                        },
+                        () -> {
+                            FileFingerprint fingerprint = FileFingerprint.builder()
+                                    .file(file)
+                                    .algorithm(FileFingerprint.FingerprintAlgorithm.SHA256)
+                                    .hashValue(hashValue)
+                                    .build();
+                            fileFingerprintRepository.save(fingerprint);
+                        }
+                );
+    }
+
+    private void updateImageFingerprint(FileEntity file, String phash) {
+        imageFingerprintRepository.findByFileId(file.getId())
+                .ifPresentOrElse(
+                        f -> {
+                            f.setPhash(phash);
+                            imageFingerprintRepository.save(f);
+                        },
+                        () -> {
+                            ImageFingerprint fingerprint = ImageFingerprint.builder()
+                                    .file(file)
+                                    .phash(phash)
+                                    .build();
+                            imageFingerprintRepository.save(fingerprint);
+                        }
+                );
+    }
+
+    private boolean isEligibleDuplicate(FileEntity file, FileEntity candidateFile) {
+        return !candidateFile.getId().equals(file.getId()) && candidateFile.getDeletedAt() == null;
+    }
+
+    private void createDuplicateCandidate(FileEntity file, FileEntity candidateFile, DuplicateCandidate.DetectionMethod method, Double distance, Double confidenceScore) {
+        boolean exists = duplicateCandidateRepository.existsBySourceFileIdAndCandidateFileIdAndDetectionMethod(
+                file.getId(), candidateFile.getId(), method)
+                || duplicateCandidateRepository.existsBySourceFileIdAndCandidateFileIdAndDetectionMethod(
+                candidateFile.getId(), file.getId(), method);
+
+        if (!exists) {
+            DuplicateCandidate candidate = DuplicateCandidate.builder()
+                    .sourceFile(file)
+                    .candidateFile(candidateFile)
+                    .detectionMethod(method)
+                    .distance(distance)
+                    .confidenceScore(confidenceScore)
+                    .status(DuplicateCandidate.CandidateStatus.PENDING)
+                    .build();
+
+            duplicateCandidateRepository.save(candidate);
+            fileManagerMetrics.recordDuplicateCandidateCreated(method.name());
+            log.info("Created {} duplicate candidate: {} and {}", method, file.getId(), candidateFile.getId());
+        }
+    }
+
+    private void completeJob(ProcessingJob job) {
         job.setStatus(ProcessingJob.JobStatus.COMPLETED);
         job.setErrorMessage(null);
         processingJobRepository.save(job);

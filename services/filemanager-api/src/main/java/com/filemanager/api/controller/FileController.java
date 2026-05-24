@@ -53,12 +53,7 @@ public class FileController {
             @Parameter(description = "Owner user ID. For user-owned uploads, this must match the authenticated user. Exactly one ownership context should be provided.") @RequestParam(value = "ownerUserId", required = false) UUID ownerUserId,
             @Parameter(description = "Owner organization ID. For organization-owned uploads, authenticated user must have upload permission. Exactly one ownership context should be provided.") @RequestParam(value = "ownerOrganizationId", required = false) UUID ownerOrganizationId
     ) throws IOException {
-        if (file.isEmpty()) {
-            throw new IllegalArgumentException("Upload file is missing or empty");
-        }
-        if (file.getOriginalFilename() == null || file.getOriginalFilename().isBlank()) {
-            throw new IllegalArgumentException("Filename is missing");
-        }
+        validateUpload(file);
 
         UUID actorUserId = currentUserService.getCurrentUserId();
         FileEntity entity = fileService.uploadFile(
@@ -117,6 +112,15 @@ public class FileController {
                         .build()
                         .toString())
                 .body(resource);
+    }
+
+    private void validateUpload(MultipartFile file) {
+        if (file.isEmpty()) {
+            throw new IllegalArgumentException("Upload file is missing or empty");
+        }
+        if (file.getOriginalFilename() == null || file.getOriginalFilename().isBlank()) {
+            throw new IllegalArgumentException("Filename is missing");
+        }
     }
 
     private String safeDownloadFilename(String filename) {
