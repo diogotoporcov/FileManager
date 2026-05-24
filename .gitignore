@@ -37,3 +37,16 @@ out/
 # Project-specific merge files
 merger.ignore
 merger.txt
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
