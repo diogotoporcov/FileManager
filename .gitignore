@@ -34,3 +34,5 @@ mvnw.cmd
 *.iml
 *.iws
 out/
+merger.ignore
+merger.txt

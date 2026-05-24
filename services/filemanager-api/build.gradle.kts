@@ -32,6 +32,7 @@ dependencies {
 
     runtimeOnly("org.postgresql:postgresql")
     implementation("org.hibernate.orm:hibernate-vector:7.1.0.Final")
+    implementation("io.minio:minio:8.5.17")
 
     compileOnly("org.projectlombok:lombok")
     annotationProcessor("org.projectlombok:lombok")
