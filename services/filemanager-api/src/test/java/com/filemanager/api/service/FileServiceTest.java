@@ -20,6 +20,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 
 import java.io.ByteArrayInputStream;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -29,7 +30,6 @@ import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class FileServiceTest {
-
     @Mock
     private FileRepository fileRepository;
     @Mock
@@ -38,6 +38,8 @@ class FileServiceTest {
     private OrganizationRepository organizationRepository;
     @Mock
     private ProcessingJobRepository processingJobRepository;
+    @Mock
+    private ProcessingJobPlanner processingJobPlanner;
     @Mock
     private ObjectStoragePort objectStoragePort;
     @Mock
@@ -74,8 +76,11 @@ class FileServiceTest {
         
         when(fileRepository.save(any(FileEntity.class))).thenReturn(fileEntity);
         
+        when(processingJobPlanner.planJobs(contentType)).thenReturn(List.of(ProcessingJob.JobType.CHECKSUM));
+
         ProcessingJob processingJob = new ProcessingJob();
         processingJob.setId(UUID.randomUUID());
+        processingJob.setJobType(ProcessingJob.JobType.CHECKSUM);
         when(processingJobRepository.save(any(ProcessingJob.class))).thenReturn(processingJob);
 
         // Act
@@ -92,7 +97,52 @@ class FileServiceTest {
         FileProcessingRequestedEvent publishedEvent = eventCaptor.getValue();
         assertEquals(fileEntity.getId(), publishedEvent.fileId());
         assertEquals(processingJob.getId(), publishedEvent.processingJobId());
+        assertEquals(ProcessingJob.JobType.CHECKSUM.name(), publishedEvent.jobType());
         assertEquals("file.processing.requested", publishedEvent.eventType());
         assertEquals(userId, publishedEvent.ownerUserId());
+    }
+
+    @Test
+    void uploadFile_Image_ShouldCreateMultipleJobsAndPublishEvents() {
+        // Arrange
+        String fileName = "test.png";
+        String contentType = "image/png";
+        long size = 100L;
+        ByteArrayInputStream content = new ByteArrayInputStream(new byte[100]);
+        
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        
+        FileEntity fileEntity = new FileEntity();
+        fileEntity.setId(UUID.randomUUID());
+        fileEntity.setStoragePath("storage-path");
+        fileEntity.setMimeType(contentType);
+        fileEntity.setSize(size);
+        
+        when(fileRepository.save(any(FileEntity.class))).thenReturn(fileEntity);
+        
+        when(processingJobPlanner.planJobs(contentType)).thenReturn(List.of(ProcessingJob.JobType.CHECKSUM, ProcessingJob.JobType.PHASH));
+
+        ProcessingJob checksumJob = ProcessingJob.builder().id(UUID.randomUUID()).jobType(ProcessingJob.JobType.CHECKSUM).build();
+        ProcessingJob phashJob = ProcessingJob.builder().id(UUID.randomUUID()).jobType(ProcessingJob.JobType.PHASH).build();
+        
+        when(processingJobRepository.save(any(ProcessingJob.class)))
+                .thenReturn(checksumJob)
+                .thenReturn(phashJob);
+
+        // Act
+        FileEntity result = fileService.uploadFile(fileName, contentType, size, content, userId, null);
+
+        // Assert
+        assertNotNull(result);
+        verify(processingJobRepository, times(2)).save(any(ProcessingJob.class));
+        
+        ArgumentCaptor<FileProcessingRequestedEvent> eventCaptor = ArgumentCaptor.forClass(FileProcessingRequestedEvent.class);
+        verify(applicationEventPublisher, times(2)).publishEvent(eventCaptor.capture());
+        
+        List<FileProcessingRequestedEvent> events = eventCaptor.getAllValues();
+        assertEquals(2, events.size());
+        
+        assertTrue(events.stream().anyMatch(e -> e.jobType().equals("CHECKSUM")));
+        assertTrue(events.stream().anyMatch(e -> e.jobType().equals("PHASH")));
     }
 }

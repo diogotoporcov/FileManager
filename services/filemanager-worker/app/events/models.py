@@ -1,6 +1,6 @@
 from datetime import datetime
 from uuid import UUID
-from typing import Optional
+from typing import Optional, Self
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 class FileProcessingRequestedEvent(BaseModel):
@@ -9,6 +9,7 @@ class FileProcessingRequestedEvent(BaseModel):
     occurred_at: datetime = Field(alias="occurredAt")
     file_id: UUID = Field(alias="fileId")
     processing_job_id: UUID = Field(alias="processingJobId")
+    job_type: str = Field(alias="jobType")
     storage_path: str = Field(alias="storagePath")
     mime_type: str = Field(alias="mimeType")
     size: int = Field(alias="size")
@@ -18,7 +19,7 @@ class FileProcessingRequestedEvent(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     @model_validator(mode="after")
-    def validate_one_owner(self) -> "FileProcessingRequestedEvent":
+    def validate_one_owner(self) -> Self:
         if self.owner_user_id and self.owner_organization_id:
             raise ValueError("Exactly one of owner_user_id or owner_organization_id must be present, not both.")
         if not self.owner_user_id and not self.owner_organization_id:

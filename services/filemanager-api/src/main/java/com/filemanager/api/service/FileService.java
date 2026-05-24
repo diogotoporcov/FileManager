@@ -32,6 +32,7 @@ public class FileService {
     private final UserRepository userRepository;
     private final OrganizationRepository organizationRepository;
     private final ProcessingJobRepository processingJobRepository;
+    private final ProcessingJobPlanner processingJobPlanner;
     private final ObjectStoragePort objectStoragePort;
     private final ApplicationEventPublisher applicationEventPublisher;
 
@@ -75,28 +76,33 @@ public class FileService {
 
             FileEntity savedFile = fileRepository.save(fileEntity);
 
-            ProcessingJob job = ProcessingJob.builder()
-                    .file(savedFile)
-                    .jobType(ProcessingJob.JobType.CHECKSUM)
-                    .status(ProcessingJob.JobStatus.PENDING)
-                    .build();
+            List<ProcessingJob.JobType> plannedJobs = processingJobPlanner.planJobs(effectiveContentType);
 
-            ProcessingJob savedJob = processingJobRepository.save(job);
+            for (ProcessingJob.JobType jobType : plannedJobs) {
+                ProcessingJob job = ProcessingJob.builder()
+                        .file(savedFile)
+                        .jobType(jobType)
+                        .status(ProcessingJob.JobStatus.PENDING)
+                        .build();
 
-            FileProcessingRequestedEvent event = FileProcessingRequestedEvent.builder()
-                    .eventId(UUID.randomUUID())
-                    .eventType("file.processing.requested")
-                    .occurredAt(OffsetDateTime.now())
-                    .fileId(savedFile.getId())
-                    .processingJobId(savedJob.getId())
-                    .storagePath(savedFile.getStoragePath())
-                    .mimeType(savedFile.getMimeType())
-                    .size(savedFile.getSize())
-                    .ownerUserId(ownerUserId)
-                    .ownerOrganizationId(ownerOrganizationId)
-                    .build();
+                ProcessingJob savedJob = processingJobRepository.save(job);
 
-            applicationEventPublisher.publishEvent(event);
+                FileProcessingRequestedEvent event = FileProcessingRequestedEvent.builder()
+                        .eventId(UUID.randomUUID())
+                        .eventType("file.processing.requested")
+                        .occurredAt(OffsetDateTime.now())
+                        .fileId(savedFile.getId())
+                        .processingJobId(savedJob.getId())
+                        .jobType(jobType.name())
+                        .storagePath(savedFile.getStoragePath())
+                        .mimeType(savedFile.getMimeType())
+                        .size(savedFile.getSize())
+                        .ownerUserId(ownerUserId)
+                        .ownerOrganizationId(ownerOrganizationId)
+                        .build();
+
+                applicationEventPublisher.publishEvent(event);
+            }
 
             return savedFile;
         } catch (Exception e) {

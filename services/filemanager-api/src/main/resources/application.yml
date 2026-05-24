@@ -28,6 +28,8 @@ app:
   kafka:
     topics:
       file-processing-requested: ${FILE_PROCESSING_REQUESTED_TOPIC:file.processing.requested}
+  phash:
+    threshold: ${PHASH_THRESHOLD:10}
 
 server:
   port: ${PORT_API:8080}

@@ -11,6 +11,7 @@ public record FileProcessingRequestedEvent(
     OffsetDateTime occurredAt,
     UUID fileId,
     UUID processingJobId,
+    String jobType,
     String storagePath,
     String mimeType,
     long size,

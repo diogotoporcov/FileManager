@@ -1,6 +1,7 @@
 package com.filemanager.api.controller;
 
 import com.filemanager.api.dto.internal.ChecksumResultRequest;
+import com.filemanager.api.dto.internal.PhashResultRequest;
 import com.filemanager.api.dto.internal.ProcessingFailureRequest;
 import com.filemanager.api.service.ProcessingJobService;
 import jakarta.validation.Valid;
@@ -22,6 +23,14 @@ public class InternalProcessingController {
             @PathVariable UUID jobId,
             @RequestBody @Valid ChecksumResultRequest request) {
         processingJobService.handleChecksumResult(jobId, request.getFileId(), request.getSha256());
+        return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/{jobId}/phash-result")
+    public ResponseEntity<Void> reportPhashResult(
+            @PathVariable UUID jobId,
+            @RequestBody @Valid PhashResultRequest request) {
+        processingJobService.handlePhashResult(jobId, request.getFileId(), request.getPhash());
         return ResponseEntity.ok().build();
     }
 

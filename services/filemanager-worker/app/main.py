@@ -3,8 +3,7 @@ import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from app.config import settings
-from app.processors.impl import ChecksumProcessor, PHashProcessor, EmbeddingProcessor
-from app.matchers.impl import PHashMatcher, EmbeddingMatcher
+from app.processors.impl import ChecksumProcessor, PHashProcessor
 from app.storage.s3 import S3ObjectStorageReader
 from app.sinks.http import HttpProcessingResultSink
 from app.worker.flow import ProcessingFlow
@@ -19,16 +18,10 @@ result_sink = HttpProcessingResultSink()
 
 processors = [
     ChecksumProcessor(storage_reader),
-    PHashProcessor(),
-    EmbeddingProcessor()
+    PHashProcessor(storage_reader)
 ]
 
-matchers = [
-    PHashMatcher(),
-    EmbeddingMatcher()
-]
-
-flow = ProcessingFlow(processors, matchers, result_sink)
+flow = ProcessingFlow(processors, result_sink)
 consumer = EventConsumer(flow)
 
 @asynccontextmanager
@@ -59,8 +52,7 @@ async def health():
     return {
         "status": "UP",
         "version": "0.1.0",
-        "processors": [p.name for p in processors],
-        "matchers": [m.name for m in matchers]
+        "processors": [p.name for p in processors]
     }
 
 if __name__ == "__main__":

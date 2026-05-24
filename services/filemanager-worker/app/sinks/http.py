@@ -25,6 +25,21 @@ class HttpProcessingResultSink(ProcessingResultSink):
                 logger.error(f"Failed to report checksum success for job {job_id}: {e}")
                 raise
 
+    async def report_phash_success(self, job_id: UUID, file_id: UUID, phash: str):
+        url = f"{self.base_url}/internal/processing/jobs/{job_id}/phash-result"
+        payload = {
+            "fileId": str(file_id),
+            "phash": phash
+        }
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.post(url, json=payload)
+                response.raise_for_status()
+                logger.info(f"Reported pHash success for job {job_id}")
+            except httpx.HTTPError as e:
+                logger.error(f"Failed to report pHash success for job {job_id}: {e}")
+                raise
+
     async def report_failure(self, job_id: UUID, file_id: UUID, error_message: str):
         url = f"{self.base_url}/internal/processing/jobs/{job_id}/failed"
         payload = {

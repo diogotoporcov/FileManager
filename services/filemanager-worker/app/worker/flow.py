@@ -2,57 +2,59 @@ import logging
 from typing import List, Dict, Any
 from app.events.models import FileProcessingRequestedEvent
 from app.processors.base import Processor
-from app.matchers.base import Matcher
 from app.sinks.base import ProcessingResultSink
 
 logger = logging.getLogger(__name__)
 
 class ProcessingFlow:
-    def __init__(self, processors: List[Processor], matchers: List[Matcher], result_sink: ProcessingResultSink):
-        self.processors = processors
-        self.matchers = matchers
+    def __init__(self, processors: List[Processor], result_sink: ProcessingResultSink):
+        self.processors = {p.name.upper(): p for p in processors}
         self.result_sink = result_sink
 
     async def run(self, event: FileProcessingRequestedEvent):
-        logger.info(f"Starting processing flow for file: {event.file_id}")
+        logger.info(f"Starting processing flow for job: {event.processing_job_id} ({event.job_type})")
         
-        derived_data: Dict[str, Any] = {}
+        job_type = event.job_type.upper()
+        processor = self.processors.get(job_type)
         
         try:
-            for processor in self.processors:
-                if processor.should_process(event):
-                    logger.debug(f"Running processor: {processor.name}")
-                    result = await processor.process(event)
-                    derived_data.update(result)
+            if not processor:
+                raise ValueError(f"No processor found for job type: {job_type}")
 
-                    if processor.name == "checksum" and "sha256" in result:
-                        await self.result_sink.report_checksum_success(
-                            event.processing_job_id,
-                            event.file_id,
-                            result["sha256"]
-                        )
+            if not processor.should_process(event):
+                raise ValueError(f"Processor {processor.name} cannot handle file with mime type {event.mime_type}")
 
-            matches: List[Dict[str, Any]] = []
-            for matcher in self.matchers:
-                try:
-                    logger.debug(f"Running matcher: {matcher.name}")
-                    match_results = await matcher.match(event, derived_data)
-                    matches.extend(match_results)
-                except Exception as e:
-                    logger.error(f"Matcher {matcher.name} failed: {e}")
-
-            logger.info(f"Finished processing flow for file: {event.file_id}. Produced: {list(derived_data.keys())}, Matches found: {len(matches)}")
+            result = await processor.process(event)
             
-            return derived_data, matches
+            if job_type == "CHECKSUM":
+                if "sha256" not in result:
+                    raise ValueError(f"Processor {processor.name} did not produce required 'sha256' output")
+                await self.result_sink.report_checksum_success(
+                    event.processing_job_id,
+                    event.file_id,
+                    result["sha256"]
+                )
+            elif job_type == "PHASH":
+                if "phash" not in result:
+                    raise ValueError(f"Processor {processor.name} did not produce required 'phash' output")
+                await self.result_sink.report_phash_success(
+                    event.processing_job_id,
+                    event.file_id,
+                    result["phash"]
+                )
+
+            logger.info(f"Finished processing flow for job: {event.processing_job_id}. Produced: {list(result.keys())}")
+            
+            return result
         except Exception as e:
-            logger.error(f"Processing flow failed for file {event.file_id}: {e}")
+            logger.error(f"Processing flow failed for job {event.processing_job_id}: {e}")
             try:
                 await self.result_sink.report_failure(
                     event.processing_job_id,
                     event.file_id,
                     str(e)
                 )
-                return {}, []
+                return {}
             except Exception as report_error:
                 logger.error(f"Failed to report failure to API for file {event.file_id}: {report_error}")
                 raise
