@@ -38,6 +38,10 @@ app:
   phash:
     threshold: ${PHASH_THRESHOLD:10}
 
+filemanager:
+  internal:
+    api-token: ${INTERNAL_API_TOKEN:}
+
 server:
   port: ${PORT_API:8081}
 

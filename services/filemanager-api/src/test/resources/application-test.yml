@@ -21,3 +21,7 @@ minio:
   access-key: dummy
   secret-key: dummy
   bucket-name: test-bucket
+
+filemanager:
+  internal:
+    api-token: test-internal-token

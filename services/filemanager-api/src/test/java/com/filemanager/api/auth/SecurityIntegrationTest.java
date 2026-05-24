@@ -13,7 +13,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtException;
+import java.time.Instant;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -125,5 +128,97 @@ class SecurityIntegrationTest {
     void healthEndpoint_PermitsAll() throws Exception {
         mockMvc.perform(get("/actuator/health"))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    void internalEndpoint_WithoutToken_Returns401() throws Exception {
+        mockMvc.perform(post("/internal/processing/jobs/" + UUID.randomUUID() + "/checksum-result")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void internalEndpoint_WithInvalidToken_Returns401() throws Exception {
+        mockMvc.perform(post("/internal/processing/jobs/" + UUID.randomUUID() + "/checksum-result")
+                        .header("Authorization", "Bearer wrong-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void internalEndpoint_WithMalformedHeader_Returns401() throws Exception {
+        mockMvc.perform(post("/internal/processing/jobs/" + UUID.randomUUID() + "/checksum-result")
+                        .header("Authorization", "InvalidFormat token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void internalEndpoint_WithValidToken_PermitsAccess() throws Exception {
+        UUID jobId = UUID.randomUUID();
+        UUID fileId = UUID.randomUUID();
+        String sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        String content = String.format("{\"fileId\":\"%s\", \"sha256\":\"%s\"}", fileId, sha256);
+
+        mockMvc.perform(post("/internal/processing/jobs/" + jobId + "/checksum-result")
+                        .header("Authorization", "Bearer test-internal-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(content))
+                .andExpect(status().isOk());
+
+        verify(processingJobService).handleChecksumResult(eq(jobId), eq(fileId), eq(sha256));
+    }
+
+    @Test
+    void internalPhashResult_WithValidToken_PermitsAccess() throws Exception {
+        UUID jobId = UUID.randomUUID();
+        UUID fileId = UUID.randomUUID();
+        String phash = "fedcba9876543210";
+        String content = String.format("{\"fileId\":\"%s\", \"phash\":\"%s\"}", fileId, phash);
+
+        mockMvc.perform(post("/internal/processing/jobs/" + jobId + "/phash-result")
+                        .header("Authorization", "Bearer test-internal-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(content))
+                .andExpect(status().isOk());
+
+        verify(processingJobService).handlePhashResult(eq(jobId), eq(fileId), eq(phash));
+    }
+
+    @Test
+    void internalFailureReport_WithValidToken_PermitsAccess() throws Exception {
+        UUID jobId = UUID.randomUUID();
+        UUID fileId = UUID.randomUUID();
+        String error = "test error";
+        String content = String.format("{\"fileId\":\"%s\", \"errorMessage\":\"%s\"}", fileId, error);
+
+        mockMvc.perform(post("/internal/processing/jobs/" + jobId + "/failed")
+                        .header("Authorization", "Bearer test-internal-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(content))
+                .andExpect(status().isOk());
+
+        verify(processingJobService).handleProcessingFailure(eq(jobId), eq(fileId), eq(error));
+    }
+
+    @Test
+    void internalToken_DoesNotAuthenticatePublicEndpoints() throws Exception {
+        Jwt dummyJwt = Jwt.withTokenValue("test-internal-token")
+                .header("alg", "none")
+                .subject("test-internal-token")
+                .issuedAt(Instant.now())
+                .expiresAt(Instant.now().plusSeconds(60))
+                .build();
+
+        when(jwtDecoder.decode("test-internal-token")).thenReturn(dummyJwt);
+        // IdentityResolutionService will not recognize this subject/JWT
+        when(identityResolutionService.resolveUser(dummyJwt)).thenThrow(new AccessDeniedException("Invalid user"));
+
+        mockMvc.perform(get("/files")
+                        .header("Authorization", "Bearer test-internal-token"))
+                .andExpect(status().isForbidden());
     }
 }

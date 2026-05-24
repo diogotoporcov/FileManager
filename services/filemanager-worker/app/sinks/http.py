@@ -7,8 +7,12 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 class HttpProcessingResultSink(ProcessingResultSink):
-    def __init__(self):
-        self.base_url = settings.metadata_api_base_url
+    def __init__(self, base_url: str | None = None, internal_api_token: str | None = None):
+        self.base_url = base_url or settings.metadata_api_base_url
+        token = internal_api_token or settings.internal_api_token
+        self.headers = {
+            "Authorization": f"Bearer {token}"
+        }
 
     async def report_checksum_success(self, job_id: UUID, file_id: UUID, sha256: str):
         url = f"{self.base_url}/internal/processing/jobs/{job_id}/checksum-result"
@@ -18,7 +22,7 @@ class HttpProcessingResultSink(ProcessingResultSink):
         }
         async with httpx.AsyncClient() as client:
             try:
-                response = await client.post(url, json=payload)
+                response = await client.post(url, json=payload, headers=self.headers)
                 response.raise_for_status()
                 logger.info(f"Reported checksum success for job {job_id}")
             except httpx.HTTPError as e:
@@ -33,7 +37,7 @@ class HttpProcessingResultSink(ProcessingResultSink):
         }
         async with httpx.AsyncClient() as client:
             try:
-                response = await client.post(url, json=payload)
+                response = await client.post(url, json=payload, headers=self.headers)
                 response.raise_for_status()
                 logger.info(f"Reported pHash success for job {job_id}")
             except httpx.HTTPError as e:
@@ -48,7 +52,7 @@ class HttpProcessingResultSink(ProcessingResultSink):
         }
         async with httpx.AsyncClient() as client:
             try:
-                response = await client.post(url, json=payload)
+                response = await client.post(url, json=payload, headers=self.headers)
                 response.raise_for_status()
                 logger.info(f"Reported failure for job {job_id}")
             except httpx.HTTPError as e:

@@ -22,6 +22,7 @@ class Settings(BaseSettings):
 
     # API
     metadata_api_base_url: str = "http://localhost:8081"
+    internal_api_token: str = Field(min_length=1)
 
     # Logging
     log_level: str = "INFO"
