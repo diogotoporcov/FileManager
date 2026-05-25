@@ -1,6 +1,7 @@
 package com.filemanager.api.service;
 
 import com.filemanager.api.entity.ProcessingJob;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -9,7 +10,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ProcessingJobPlannerTest {
 
-    private final ProcessingJobPlanner planner = new ProcessingJobPlanner();
+    private ProcessingJobPlanner planner;
+
+    @BeforeEach
+    void setUp() {
+        planner = new ProcessingJobPlanner(List.of(
+                new ChecksumJobStrategy(),
+                new PhashJobStrategy()
+        ));
+    }
 
     @Test
     void planJobs_ShouldIncludeChecksumForAllFiles() {
