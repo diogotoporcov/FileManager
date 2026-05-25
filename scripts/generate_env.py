@@ -1,13 +1,15 @@
+import argparse
 import re
 import secrets
 import string
-import argparse
-import sys
 import uuid
-from enum import Enum
-from typing import Match, Dict, Callable, Any, List, Optional
-from pathlib import Path
 from abc import ABC, abstractmethod
+from enum import Enum
+from pathlib import Path
+from typing import Dict, Any, List, Optional
+
+import sys
+
 
 # Enums
 class SecretAlgorithm(str, Enum):
@@ -107,7 +109,8 @@ class SecretGenerator:
 
         return instance.generate(**kwargs)
 
-    def _parse_algo(self, name: str) -> SecretAlgorithm:
+    @staticmethod
+    def _parse_algo(name: str) -> SecretAlgorithm:
         """Parses the algorithm name into a SecretAlgorithm enum."""
         try:
             return SecretAlgorithm(name.lower())
@@ -170,7 +173,7 @@ class EnvTemplateProcessor:
         # Regex to identify environment variable assignments
         # Group 1: Leading space and optional 'export'
         # Group 2: The key name
-        # Group 3: The equals sign and surrounding whitespace
+        # Group 3: The equal sign and surrounding whitespace
         # Group 4: The value part (handles optional quotes and avoids trailing comments)
         # Group 5: The rest of the line (trailing comments)
         self.assignment_pattern = re.compile(
