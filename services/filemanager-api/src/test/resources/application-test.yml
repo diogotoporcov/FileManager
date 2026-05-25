@@ -24,4 +24,4 @@ minio:
 
 filemanager:
   internal:
-    api-token: test-internal-token
+    api-token: test-internal-token-123456789012

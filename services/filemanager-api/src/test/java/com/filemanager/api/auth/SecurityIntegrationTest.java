@@ -39,6 +39,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ActiveProfiles("test")
 class SecurityIntegrationTest {
 
+    private static final String VALID_INTERNAL_TOKEN = "test-internal-token-123456789012";
+
     @Autowired
     private WebApplicationContext context;
 
@@ -179,7 +181,7 @@ class SecurityIntegrationTest {
         String invalidContent = String.format("{\"fileId\":\"%s\", \"sha256\":\"too-short\"}", fileId);
 
         mockMvc.perform(post("/internal/processing/jobs/" + jobId + "/checksum-result")
-                        .header("Authorization", "Bearer test-internal-token")
+                        .header("Authorization", "Bearer " + VALID_INTERNAL_TOKEN)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(invalidContent))
                 .andExpect(status().isBadRequest());
@@ -227,7 +229,7 @@ class SecurityIntegrationTest {
         String content = String.format("{\"fileId\":\"%s\", \"sha256\":\"%s\"}", fileId, sha256);
 
         mockMvc.perform(post("/internal/processing/jobs/" + jobId + "/checksum-result")
-                        .header("Authorization", "Bearer test-internal-token")
+                        .header("Authorization", "Bearer " + VALID_INTERNAL_TOKEN)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(content))
                 .andExpect(status().isOk());
@@ -243,7 +245,7 @@ class SecurityIntegrationTest {
         String content = String.format("{\"fileId\":\"%s\", \"phash\":\"%s\"}", fileId, phash);
 
         mockMvc.perform(post("/internal/processing/jobs/" + jobId + "/phash-result")
-                        .header("Authorization", "Bearer test-internal-token")
+                        .header("Authorization", "Bearer " + VALID_INTERNAL_TOKEN)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(content))
                 .andExpect(status().isOk());
@@ -259,7 +261,7 @@ class SecurityIntegrationTest {
         String content = String.format("{\"fileId\":\"%s\", \"errorMessage\":\"%s\"}", fileId, error);
 
         mockMvc.perform(post("/internal/processing/jobs/" + jobId + "/failed")
-                        .header("Authorization", "Bearer test-internal-token")
+                        .header("Authorization", "Bearer " + VALID_INTERNAL_TOKEN)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(content))
                 .andExpect(status().isOk());

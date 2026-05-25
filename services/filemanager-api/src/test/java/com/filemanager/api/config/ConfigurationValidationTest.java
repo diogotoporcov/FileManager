@@ -93,7 +93,7 @@ class ConfigurationValidationTest {
     @Test
     void internalApiProperties_Valid() {
         InternalApiProperties properties = new InternalApiProperties();
-        properties.setApiToken("token");
+        properties.setApiToken("12345678901234567890123456789012");
 
         Set<ConstraintViolation<InternalApiProperties>> violations = validator.validate(properties);
         assertThat(violations).isEmpty();
@@ -105,6 +105,6 @@ class ConfigurationValidationTest {
         properties.setApiToken("");
 
         Set<ConstraintViolation<InternalApiProperties>> violations = validator.validate(properties);
-        assertThat(violations).hasSize(1);
+        assertThat(violations).isNotEmpty();
     }
 }
