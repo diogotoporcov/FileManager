@@ -1,4 +1,5 @@
 import hashlib
+import io
 import uuid
 from datetime import datetime, timezone
 from typing import AsyncIterator
@@ -10,6 +11,7 @@ from app.processors.impl import ChecksumProcessor, PHashProcessor
 from app.sinks.base import ProcessingResultSink
 from app.storage.base import ObjectStorageReader
 from app.worker.flow import ProcessingFlow
+from app.worker.errors import NonRetryableProcessingError
 
 
 class FakeStorageReader(ObjectStorageReader):
@@ -25,6 +27,15 @@ class ImageStorageReader(ObjectStorageReader):
         buf = io.BytesIO()
         img.save(buf, format='PNG')
         yield buf.getvalue()
+
+class OversizedImageStorageReader(ObjectStorageReader):
+    async def read_object(self, storage_path: str) -> AsyncIterator[bytes]:
+        yield b"a" * 6
+        yield b"b" * 6
+
+class CorruptImageStorageReader(ObjectStorageReader):
+    async def read_object(self, storage_path: str) -> AsyncIterator[bytes]:
+        yield b"not an image"
 
 class FakeResultSink(ProcessingResultSink):
     def __init__(self):
@@ -84,7 +95,7 @@ def test_processor_selection(sample_event):
 @pytest.mark.asyncio
 async def test_phash_processor_real_hash(sample_event):
     storage = ImageStorageReader()
-    phash_processor = PHashProcessor(storage)
+    phash_processor = PHashProcessor(storage, max_image_bytes=1024 * 1024)
     
     result = await phash_processor.process(sample_event)
     
@@ -93,6 +104,22 @@ async def test_phash_processor_real_hash(sample_event):
     assert result["phash"] == result["phash"].lower()
     # Check if it's a valid hex
     int(result["phash"], 16)
+
+@pytest.mark.asyncio
+async def test_phash_processor_rejects_oversized_image(sample_event):
+    storage = OversizedImageStorageReader()
+    phash_processor = PHashProcessor(storage, max_image_bytes=10)
+
+    with pytest.raises(NonRetryableProcessingError, match="maximum pHash processing size"):
+        await phash_processor.process(sample_event)
+
+@pytest.mark.asyncio
+async def test_phash_processor_rejects_corrupt_image(sample_event):
+    storage = CorruptImageStorageReader()
+    phash_processor = PHashProcessor(storage, max_image_bytes=1024)
+
+    with pytest.raises(NonRetryableProcessingError, match="Corrupt or unsupported image"):
+        await phash_processor.process(sample_event)
 
 @pytest.mark.asyncio
 async def test_processing_flow(sample_event):

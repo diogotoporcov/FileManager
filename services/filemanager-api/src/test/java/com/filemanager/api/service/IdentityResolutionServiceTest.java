@@ -2,13 +2,13 @@ package com.filemanager.api.service;
 
 import com.filemanager.api.entity.User;
 import com.filemanager.api.entity.UserIdentity;
+import com.filemanager.api.config.AppProperties;
 import com.filemanager.api.port.AuthenticatedIdentity;
 import com.filemanager.api.port.IdentityProviderPort;
 import com.filemanager.api.repository.UserIdentityRepository;
 import com.filemanager.api.repository.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -33,8 +33,14 @@ class IdentityResolutionServiceTest {
     @Mock
     private IdentityProviderPort identityProviderPort;
 
-    @InjectMocks
+    private final AppProperties appProperties = new AppProperties();
+
     private IdentityResolutionService identityResolutionService;
+
+    @org.junit.jupiter.api.BeforeEach
+    void setUp() {
+        identityResolutionService = new IdentityResolutionService(userRepository, userIdentityRepository, identityProviderPort, appProperties);
+    }
 
     @Test
     void resolveUser_ExistingIdentity_ReturnsUser() {
@@ -55,7 +61,30 @@ class IdentityResolutionServiceTest {
     }
 
     @Test
-    void resolveUser_NewIdentityExistingUser_LinksAndReturnsUser() {
+    void resolveUser_NewIdentityExistingUser_RejectsAutoLinkByDefault() {
+        String subject = "sub-123";
+        String email = "test@example.com";
+        Jwt jwt = mock(Jwt.class);
+        when(identityProviderPort.extractIdentity(jwt)).thenReturn(identity(subject, email, null, null, true));
+
+        User user = User.builder().id(UUID.randomUUID()).email(email).build();
+
+        when(userIdentityRepository.findByProviderAndProviderSubject("keycloak", subject))
+                .thenReturn(Optional.empty());
+        when(userRepository.findByEmail(email)).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> identityResolutionService.resolveUser(jwt))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Automatic linking to an existing user is not enabled");
+        verify(userIdentityRepository, never()).save(any(UserIdentity.class));
+        verify(userRepository, never()).save(any(User.class));
+    }
+
+    @Test
+    void resolveUser_NewIdentityExistingUser_LinksWhenTrustedProviderEnabled() {
+        appProperties.getAuth().setAutoLinkExistingUsers(true);
+        appProperties.getAuth().getTrustedAutoLinkProviders().add("keycloak");
+
         String subject = "sub-123";
         String email = "test@example.com";
         Jwt jwt = mock(Jwt.class);
@@ -130,6 +159,9 @@ class IdentityResolutionServiceTest {
                 .thenReturn(Optional.empty());
         when(userRepository.findByEmail(email)).thenReturn(Optional.of(user));
 
+        appProperties.getAuth().setAutoLinkExistingUsers(true);
+        appProperties.getAuth().getTrustedAutoLinkProviders().add("keycloak");
+
         assertThatThrownBy(() -> identityResolutionService.resolveUser(jwt))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Cannot link identity to existing user with unverified email");
@@ -148,9 +180,9 @@ class IdentityResolutionServiceTest {
                 .thenReturn(Optional.empty());
         when(userRepository.findByEmail(normalizedEmail)).thenReturn(Optional.of(user));
 
-        User result = identityResolutionService.resolveUser(jwt);
-
-        assertThat(result).isEqualTo(user);
+        assertThatThrownBy(() -> identityResolutionService.resolveUser(jwt))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Automatic linking to an existing user is not enabled");
         verify(userRepository).findByEmail(normalizedEmail);
     }
 

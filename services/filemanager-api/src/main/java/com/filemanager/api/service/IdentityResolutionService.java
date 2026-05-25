@@ -1,5 +1,6 @@
 package com.filemanager.api.service;
 
+import com.filemanager.api.config.AppProperties;
 import com.filemanager.api.entity.User;
 import com.filemanager.api.entity.UserIdentity;
 import com.filemanager.api.port.AuthenticatedIdentity;
@@ -18,6 +19,7 @@ public class IdentityResolutionService {
     private final UserRepository userRepository;
     private final UserIdentityRepository userIdentityRepository;
     private final IdentityProviderPort identityProviderPort;
+    private final AppProperties appProperties;
 
     @Transactional
     public User resolveUser(Jwt jwt) {
@@ -31,8 +33,10 @@ public class IdentityResolutionService {
     private User provisionUser(AuthenticatedIdentity identity) {
         return userRepository.findByEmail(identity.email())
                 .map(user -> {
-                    // Safety check: ensure the external email is verified before linking to an existing internal account.
-                    if (identity.emailVerified() != null && !identity.emailVerified()) {
+                    if (!canAutoLinkExistingUser(identity)) {
+                        throw new IllegalStateException("Automatic linking to an existing user is not enabled for this identity provider");
+                    }
+                    if (!Boolean.TRUE.equals(identity.emailVerified())) {
                         throw new IllegalStateException("Cannot link identity to existing user with unverified email");
                     }
                     return createIdentity(user, identity.provider(), identity.subject());
@@ -46,6 +50,11 @@ public class IdentityResolutionService {
                     User savedUser = userRepository.save(newUser);
                     return createIdentity(savedUser, identity.provider(), identity.subject());
                 });
+    }
+
+    private boolean canAutoLinkExistingUser(AuthenticatedIdentity identity) {
+        return appProperties.getAuth().isAutoLinkExistingUsers()
+                && appProperties.getAuth().getTrustedAutoLinkProviders().contains(identity.provider());
     }
 
     private User createIdentity(User user, String provider, String subject) {

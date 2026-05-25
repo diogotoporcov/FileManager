@@ -32,11 +32,17 @@ spring:
 app:
   auth:
     provider-name: ${AUTH_PROVIDER_NAME:keycloak}
+    auto-link-existing-users: ${AUTH_AUTO_LINK_EXISTING_USERS:false}
+    trusted-auto-link-providers: ${AUTH_TRUSTED_AUTO_LINK_PROVIDERS:}
   kafka:
     topics:
       file-processing-requested: ${FILE_PROCESSING_REQUESTED_TOPIC:file.processing.requested}
   phash:
     threshold: ${PHASH_THRESHOLD:10}
+    max-candidates: ${PHASH_MAX_CANDIDATES:5000}
+  quota:
+    user-bytes: ${USER_STORAGE_QUOTA_BYTES:16106127360}
+    organization-bytes: ${ORGANIZATION_STORAGE_QUOTA_BYTES:107374182400}
 
 filemanager:
   internal:
