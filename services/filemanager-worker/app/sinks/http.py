@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 class HttpProcessingResultSink(ProcessingResultSink):
     def __init__(self, base_url: str | None = None, internal_api_token: str | None = None):
-        self.base_url = str(base_url or settings.metadata_api_base_url)
+        self.base_url = str(base_url or settings.metadata_api_base_url).rstrip("/")
         token = internal_api_token or settings.internal_api_token
         self.headers = {
             "Authorization": f"Bearer {token}"
