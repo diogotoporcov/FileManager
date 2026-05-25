@@ -30,22 +30,6 @@ public class AppProperties {
     @Valid
     private final Quota quota = new Quota();
 
-    public Kafka getKafka() {
-        return kafka;
-    }
-
-    public Phash getPhash() {
-        return phash;
-    }
-
-    public Auth getAuth() {
-        return auth;
-    }
-
-    public Quota getQuota() {
-        return quota;
-    }
-
     @Getter
     @Setter
     public static class Kafka {
