@@ -1,5 +1,4 @@
 import hashlib
-import io
 import uuid
 from datetime import datetime, timezone
 from typing import AsyncIterator
