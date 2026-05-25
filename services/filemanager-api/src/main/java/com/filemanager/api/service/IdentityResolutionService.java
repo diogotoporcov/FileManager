@@ -2,10 +2,11 @@ package com.filemanager.api.service;
 
 import com.filemanager.api.entity.User;
 import com.filemanager.api.entity.UserIdentity;
+import com.filemanager.api.port.AuthenticatedIdentity;
+import com.filemanager.api.port.IdentityProviderPort;
 import com.filemanager.api.repository.UserIdentityRepository;
 import com.filemanager.api.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,49 +17,34 @@ public class IdentityResolutionService {
 
     private final UserRepository userRepository;
     private final UserIdentityRepository userIdentityRepository;
-
-    @Value("${app.auth.provider-name:keycloak}")
-    private String provider;
+    private final IdentityProviderPort identityProviderPort;
 
     @Transactional
     public User resolveUser(Jwt jwt) {
-        String subject = jwt.getSubject();
-        if (subject == null || subject.isBlank()) {
-            throw new IllegalArgumentException("Subject (sub) claim is missing or blank in JWT");
-        }
+        AuthenticatedIdentity identity = identityProviderPort.extractIdentity(jwt);
 
-        return userIdentityRepository.findByProviderAndProviderSubject(provider, subject)
+        return userIdentityRepository.findByProviderAndProviderSubject(identity.provider(), identity.subject())
                 .map(UserIdentity::getUser)
-                .orElseGet(() -> provisionUser(jwt, provider, subject));
+                .orElseGet(() -> provisionUser(identity));
     }
 
-    private User provisionUser(Jwt jwt, String provider, String subject) {
-        String rawEmail = jwt.getClaimAsString("email");
-        if (rawEmail == null || rawEmail.isBlank()) {
-            throw new IllegalArgumentException("Email claim is missing or blank in JWT");
-        }
-        String email = rawEmail.trim().toLowerCase();
-        
-        String firstName = jwt.getClaimAsString("given_name");
-        String lastName = jwt.getClaimAsString("family_name");
-        Boolean emailVerified = jwt.getClaimAsBoolean("email_verified");
-
-        return userRepository.findByEmail(email)
+    private User provisionUser(AuthenticatedIdentity identity) {
+        return userRepository.findByEmail(identity.email())
                 .map(user -> {
                     // Safety check: ensure the external email is verified before linking to an existing internal account.
-                    if (emailVerified != null && !emailVerified) {
+                    if (identity.emailVerified() != null && !identity.emailVerified()) {
                         throw new IllegalStateException("Cannot link identity to existing user with unverified email");
                     }
-                    return createIdentity(user, provider, subject);
+                    return createIdentity(user, identity.provider(), identity.subject());
                 })
                 .orElseGet(() -> {
                     User newUser = User.builder()
-                            .email(email)
-                            .firstName(firstName)
-                            .lastName(lastName)
+                            .email(identity.email())
+                            .firstName(identity.firstName())
+                            .lastName(identity.lastName())
                             .build();
                     User savedUser = userRepository.save(newUser);
-                    return createIdentity(savedUser, provider, subject);
+                    return createIdentity(savedUser, identity.provider(), identity.subject());
                 });
     }
 

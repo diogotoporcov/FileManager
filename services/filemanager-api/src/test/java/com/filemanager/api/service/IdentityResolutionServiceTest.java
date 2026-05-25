@@ -2,16 +2,16 @@ package com.filemanager.api.service;
 
 import com.filemanager.api.entity.User;
 import com.filemanager.api.entity.UserIdentity;
+import com.filemanager.api.port.AuthenticatedIdentity;
+import com.filemanager.api.port.IdentityProviderPort;
 import com.filemanager.api.repository.UserIdentityRepository;
 import com.filemanager.api.repository.UserRepository;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -30,19 +30,17 @@ class IdentityResolutionServiceTest {
     @Mock
     private UserIdentityRepository userIdentityRepository;
 
+    @Mock
+    private IdentityProviderPort identityProviderPort;
+
     @InjectMocks
     private IdentityResolutionService identityResolutionService;
-
-    @BeforeEach
-    void setUp() {
-        ReflectionTestUtils.setField(identityResolutionService, "provider", "keycloak");
-    }
 
     @Test
     void resolveUser_ExistingIdentity_ReturnsUser() {
         String subject = "sub-123";
         Jwt jwt = mock(Jwt.class);
-        when(jwt.getSubject()).thenReturn(subject);
+        when(identityProviderPort.extractIdentity(jwt)).thenReturn(identity(subject, "test@example.com", null, null, null));
 
         User user = User.builder().id(UUID.randomUUID()).email("test@example.com").build();
         UserIdentity identity = UserIdentity.builder().user(user).build();
@@ -61,9 +59,7 @@ class IdentityResolutionServiceTest {
         String subject = "sub-123";
         String email = "test@example.com";
         Jwt jwt = mock(Jwt.class);
-        when(jwt.getSubject()).thenReturn(subject);
-        when(jwt.getClaimAsString("email")).thenReturn(email);
-        when(jwt.getClaimAsBoolean("email_verified")).thenReturn(true);
+        when(identityProviderPort.extractIdentity(jwt)).thenReturn(identity(subject, email, null, null, true));
 
         User user = User.builder().id(UUID.randomUUID()).email(email).build();
 
@@ -83,10 +79,7 @@ class IdentityResolutionServiceTest {
         String subject = "sub-123";
         String email = "new@example.com";
         Jwt jwt = mock(Jwt.class);
-        when(jwt.getSubject()).thenReturn(subject);
-        when(jwt.getClaimAsString("email")).thenReturn(email);
-        when(jwt.getClaimAsString("given_name")).thenReturn("First");
-        when(jwt.getClaimAsString("family_name")).thenReturn("Last");
+        when(identityProviderPort.extractIdentity(jwt)).thenReturn(identity(subject, email, "First", "Last", null));
 
         when(userIdentityRepository.findByProviderAndProviderSubject("keycloak", subject))
                 .thenReturn(Optional.empty());
@@ -105,7 +98,8 @@ class IdentityResolutionServiceTest {
     @Test
     void resolveUser_MissingSubject_ThrowsException() {
         Jwt jwt = mock(Jwt.class);
-        when(jwt.getSubject()).thenReturn(null);
+        when(identityProviderPort.extractIdentity(jwt))
+                .thenThrow(new IllegalArgumentException("Subject (sub) claim is missing or blank in JWT"));
 
         assertThatThrownBy(() -> identityResolutionService.resolveUser(jwt))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -114,13 +108,9 @@ class IdentityResolutionServiceTest {
 
     @Test
     void resolveUser_MissingEmail_ThrowsException() {
-        String subject = "sub-123";
         Jwt jwt = mock(Jwt.class);
-        when(jwt.getSubject()).thenReturn(subject);
-        when(jwt.getClaimAsString("email")).thenReturn(null);
-
-        when(userIdentityRepository.findByProviderAndProviderSubject("keycloak", subject))
-                .thenReturn(Optional.empty());
+        when(identityProviderPort.extractIdentity(jwt))
+                .thenThrow(new IllegalArgumentException("Email claim is missing or blank in JWT"));
 
         assertThatThrownBy(() -> identityResolutionService.resolveUser(jwt))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -132,9 +122,7 @@ class IdentityResolutionServiceTest {
         String subject = "sub-123";
         String email = "test@example.com";
         Jwt jwt = mock(Jwt.class);
-        when(jwt.getSubject()).thenReturn(subject);
-        when(jwt.getClaimAsString("email")).thenReturn(email);
-        when(jwt.getClaimAsBoolean("email_verified")).thenReturn(false);
+        when(identityProviderPort.extractIdentity(jwt)).thenReturn(identity(subject, email, null, null, false));
 
         User user = User.builder().id(UUID.randomUUID()).email(email).build();
 
@@ -150,12 +138,9 @@ class IdentityResolutionServiceTest {
     @Test
     void resolveUser_EmailNormalization_Works() {
         String subject = "sub-123";
-        String email = " TEST@Example.Com ";
         String normalizedEmail = "test@example.com";
         Jwt jwt = mock(Jwt.class);
-        when(jwt.getSubject()).thenReturn(subject);
-        when(jwt.getClaimAsString("email")).thenReturn(email);
-        when(jwt.getClaimAsBoolean("email_verified")).thenReturn(true);
+        when(identityProviderPort.extractIdentity(jwt)).thenReturn(identity(subject, normalizedEmail, null, null, true));
 
         User user = User.builder().id(UUID.randomUUID()).email(normalizedEmail).build();
 
@@ -167,5 +152,9 @@ class IdentityResolutionServiceTest {
 
         assertThat(result).isEqualTo(user);
         verify(userRepository).findByEmail(normalizedEmail);
+    }
+
+    private AuthenticatedIdentity identity(String subject, String email, String firstName, String lastName, Boolean emailVerified) {
+        return new AuthenticatedIdentity("keycloak", subject, email, firstName, lastName, emailVerified);
     }
 }

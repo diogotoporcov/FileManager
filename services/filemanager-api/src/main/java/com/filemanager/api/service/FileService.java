@@ -9,6 +9,7 @@ import com.filemanager.api.entity.ProcessingJob;
 import com.filemanager.api.entity.User;
 import com.filemanager.api.exception.AccessDeniedException;
 import com.filemanager.api.exception.ResourceNotFoundException;
+import com.filemanager.api.port.ApplicationMetricsPort;
 import com.filemanager.api.port.ObjectStoragePort;
 import com.filemanager.api.port.StoreObjectRequest;
 import com.filemanager.api.port.StoreObjectResponse;
@@ -40,7 +41,7 @@ public class FileService {
     private final ObjectStoragePort objectStoragePort;
     private final ApplicationEventPublisher applicationEventPublisher;
     private final AccessControlService accessControlService;
-    private final FileManagerMetrics fileManagerMetrics;
+    private final ApplicationMetricsPort applicationMetricsPort;
 
     @Transactional
     public FileEntity uploadFile(String fileName, String contentType, long size, InputStream content, UUID ownerUserId, UUID ownerOrganizationId, UUID actorUserId) {
@@ -83,7 +84,7 @@ public class FileService {
             FileEntity savedFile = fileRepository.save(fileEntity);
 
             String ownerType = ownerUserId != null ? "USER" : "ORGANIZATION";
-            fileManagerMetrics.recordFileUpload(size, ownerType);
+            applicationMetricsPort.recordFileUpload(size, ownerType);
 
             // Determine and initiate background processing jobs.
             List<ProcessingJob.JobType> plannedJobs = processingJobPlanner.planJobs(effectiveContentType);
@@ -97,7 +98,7 @@ public class FileService {
 
                 ProcessingJob savedJob = processingJobRepository.save(job);
 
-                fileManagerMetrics.recordJobCreated(jobType.name());
+                applicationMetricsPort.recordJobCreated(jobType.name());
 
                 FileProcessingRequestedEvent event = FileProcessingRequestedEvent.builder()
                         .eventId(UUID.randomUUID())
@@ -164,7 +165,7 @@ public class FileService {
         accessControlService.assertCanAccessFile(actorUserId, fileId, Permission.FILE_VIEW);
         FileEntity file = fileRepository.findByIdAndDeletedAtIsNull(fileId)
                 .orElseThrow(() -> new ResourceNotFoundException("File not found: " + fileId));
-        fileManagerMetrics.recordFileDownload();
+        applicationMetricsPort.recordFileDownload();
         return objectStoragePort.getObject(file.getStoragePath());
     }
 

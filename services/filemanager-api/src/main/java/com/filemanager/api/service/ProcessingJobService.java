@@ -7,6 +7,7 @@ import com.filemanager.api.entity.FileFingerprint;
 import com.filemanager.api.entity.ImageFingerprint;
 import com.filemanager.api.entity.ProcessingJob;
 import com.filemanager.api.exception.ResourceNotFoundException;
+import com.filemanager.api.port.ApplicationMetricsPort;
 import com.filemanager.api.repository.DuplicateCandidateRepository;
 import com.filemanager.api.repository.FileFingerprintRepository;
 import com.filemanager.api.repository.FileRepository;
@@ -32,7 +33,7 @@ public class ProcessingJobService {
     private final FileFingerprintRepository fileFingerprintRepository;
     private final ImageFingerprintRepository imageFingerprintRepository;
     private final DuplicateCandidateRepository duplicateCandidateRepository;
-    private final FileManagerMetrics fileManagerMetrics;
+    private final ApplicationMetricsPort applicationMetricsPort;
     private final AppProperties appProperties;
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -59,7 +60,7 @@ public class ProcessingJobService {
         job.setErrorMessage(errorMessage);
         processingJobRepository.save(job);
 
-        fileManagerMetrics.recordJobFailed(job.getJobType().name());
+        applicationMetricsPort.recordJobFailed(job.getJobType().name());
     }
 
     @Transactional
@@ -208,7 +209,7 @@ public class ProcessingJobService {
                     .build();
 
             duplicateCandidateRepository.save(candidate);
-            fileManagerMetrics.recordDuplicateCandidateCreated(method.name());
+            applicationMetricsPort.recordDuplicateCandidateCreated(method.name());
             log.info("Created {} duplicate candidate: {} and {}", method, file.getId(), candidateFile.getId());
         }
     }
@@ -217,7 +218,7 @@ public class ProcessingJobService {
         job.setStatus(ProcessingJob.JobStatus.COMPLETED);
         job.setErrorMessage(null);
         processingJobRepository.save(job);
-        fileManagerMetrics.recordJobCompleted(job.getJobType().name());
+        applicationMetricsPort.recordJobCompleted(job.getJobType().name());
     }
 
     private List<FileFingerprint> findExistingChecksumDuplicates(FileEntity file, String hashValue) {

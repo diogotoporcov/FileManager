@@ -1,12 +1,14 @@
-package com.filemanager.api.service;
+package com.filemanager.api.adapter;
 
 import com.filemanager.api.port.ApplicationMetricsPort;
 import io.micrometer.core.instrument.MeterRegistry;
+import org.springframework.stereotype.Component;
 
-public class FileManagerMetrics implements ApplicationMetricsPort {
+@Component
+public class MicrometerApplicationMetricsAdapter implements ApplicationMetricsPort {
     private final MeterRegistry registry;
 
-    public FileManagerMetrics(MeterRegistry registry) {
+    public MicrometerApplicationMetricsAdapter(MeterRegistry registry) {
         this.registry = registry;
     }
 

@@ -2,6 +2,7 @@ package com.filemanager.api.service;
 
 import com.filemanager.api.config.AppProperties;
 import com.filemanager.api.entity.*;
+import com.filemanager.api.port.ApplicationMetricsPort;
 import com.filemanager.api.repository.DuplicateCandidateRepository;
 import com.filemanager.api.repository.FileFingerprintRepository;
 import com.filemanager.api.repository.FileRepository;
@@ -37,7 +38,7 @@ class ProcessingJobServiceTest {
     @Mock
     private DuplicateCandidateRepository duplicateCandidateRepository;
     @Mock
-    private FileManagerMetrics fileManagerMetrics;
+    private ApplicationMetricsPort applicationMetricsPort;
     @Mock
     private AppProperties appProperties;
 
@@ -104,7 +105,7 @@ class ProcessingJobServiceTest {
         assertEquals(normalizedSha256, fingerprintCaptor.getValue().getHashValue());
         
         verify(duplicateCandidateRepository).save(any(DuplicateCandidate.class));
-        verify(fileManagerMetrics).recordJobCompleted("CHECKSUM");
+        verify(applicationMetricsPort).recordJobCompleted("CHECKSUM");
     }
 
     @Test

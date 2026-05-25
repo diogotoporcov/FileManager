@@ -7,6 +7,7 @@ import com.filemanager.api.entity.ImageFingerprint;
 import com.filemanager.api.entity.Organization;
 import com.filemanager.api.entity.ProcessingJob;
 import com.filemanager.api.entity.User;
+import com.filemanager.api.port.ApplicationMetricsPort;
 import com.filemanager.api.repository.DuplicateCandidateRepository;
 import com.filemanager.api.repository.FileFingerprintRepository;
 import com.filemanager.api.repository.FileRepository;
@@ -45,7 +46,7 @@ class DuplicateScopingTest {
     @Mock
     private DuplicateCandidateRepository duplicateCandidateRepository;
     @Mock
-    private FileManagerMetrics fileManagerMetrics;
+    private ApplicationMetricsPort applicationMetricsPort;
     @Mock
     private AppProperties appProperties;
 
@@ -88,7 +89,7 @@ class DuplicateScopingTest {
         processingJobService.handleChecksumResult(jobId, file1Id, sha256);
 
         verify(duplicateCandidateRepository, never()).save(any());
-        verify(fileManagerMetrics).recordJobCompleted("CHECKSUM");
+        verify(applicationMetricsPort).recordJobCompleted("CHECKSUM");
     }
 
     @Test
@@ -176,8 +177,8 @@ class DuplicateScopingTest {
         processingJobService.handlePhashResult(jobId, file1Id, phash);
 
         verify(duplicateCandidateRepository, times(1)).save(any());
-        verify(fileManagerMetrics).recordJobCompleted("PHASH");
-        verify(fileManagerMetrics).recordDuplicateCandidateCreated("PHASH");
+        verify(applicationMetricsPort).recordJobCompleted("PHASH");
+        verify(applicationMetricsPort).recordDuplicateCandidateCreated("PHASH");
     }
 
     @Test

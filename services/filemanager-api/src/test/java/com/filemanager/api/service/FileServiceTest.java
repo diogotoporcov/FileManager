@@ -7,6 +7,7 @@ import com.filemanager.api.entity.FileEntity;
 import com.filemanager.api.entity.Organization;
 import com.filemanager.api.entity.ProcessingJob;
 import com.filemanager.api.entity.User;
+import com.filemanager.api.port.ApplicationMetricsPort;
 import com.filemanager.api.port.ObjectStoragePort;
 import com.filemanager.api.port.StoreObjectResponse;
 import com.filemanager.api.repository.FileRepository;
@@ -55,7 +56,7 @@ class FileServiceTest {
     @Mock
     private AccessControlService accessControlService;
     @Mock
-    private FileManagerMetrics fileManagerMetrics;
+    private ApplicationMetricsPort applicationMetricsPort;
 
     @InjectMocks
     private FileService fileService;
@@ -108,8 +109,8 @@ class FileServiceTest {
         verify(fileRepository).save(any(FileEntity.class));
         verify(processingJobRepository).save(any(ProcessingJob.class));
         
-        verify(fileManagerMetrics).recordFileUpload(size, "USER");
-        verify(fileManagerMetrics).recordJobCreated("CHECKSUM");
+        verify(applicationMetricsPort).recordFileUpload(size, "USER");
+        verify(applicationMetricsPort).recordJobCreated("CHECKSUM");
 
         ArgumentCaptor<FileProcessingRequestedEvent> eventCaptor = ArgumentCaptor.forClass(FileProcessingRequestedEvent.class);
         verify(applicationEventPublisher).publishEvent(eventCaptor.capture());
@@ -161,9 +162,9 @@ class FileServiceTest {
         verify(accessControlService).assertCanUploadToContext(userId, userId, null);
         verify(processingJobRepository, times(2)).save(any(ProcessingJob.class));
         
-        verify(fileManagerMetrics).recordFileUpload(size, "USER");
-        verify(fileManagerMetrics).recordJobCreated("CHECKSUM");
-        verify(fileManagerMetrics).recordJobCreated("PHASH");
+        verify(applicationMetricsPort).recordFileUpload(size, "USER");
+        verify(applicationMetricsPort).recordJobCreated("CHECKSUM");
+        verify(applicationMetricsPort).recordJobCreated("PHASH");
 
         ArgumentCaptor<FileProcessingRequestedEvent> eventCaptor = ArgumentCaptor.forClass(FileProcessingRequestedEvent.class);
         verify(applicationEventPublisher, times(2)).publishEvent(eventCaptor.capture());
@@ -210,7 +211,7 @@ class FileServiceTest {
         }
 
         verify(accessControlService).assertCanUploadToContext(userId, null, orgId);
-        verify(fileManagerMetrics).recordFileUpload(size, "ORGANIZATION");
+        verify(applicationMetricsPort).recordFileUpload(size, "ORGANIZATION");
     }
 
     @Test
@@ -228,6 +229,6 @@ class FileServiceTest {
         }
 
         verify(accessControlService).assertCanAccessFile(userId, fileId, Permission.FILE_VIEW);
-        verify(fileManagerMetrics).recordFileDownload();
+        verify(applicationMetricsPort).recordFileDownload();
     }
 }

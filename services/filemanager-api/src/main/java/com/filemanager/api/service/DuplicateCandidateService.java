@@ -10,11 +10,11 @@ import com.filemanager.api.entity.DuplicateCandidate.CandidateStatus;
 import com.filemanager.api.entity.DuplicateCandidate.DetectionMethod;
 import com.filemanager.api.entity.FileEntity;
 import com.filemanager.api.exception.ResourceNotFoundException;
+import com.filemanager.api.port.DuplicateCandidateSearchPort;
+import com.filemanager.api.port.DuplicateCandidateSearchRequest;
 import com.filemanager.api.repository.DuplicateCandidateRepository;
-import com.filemanager.api.repository.DuplicateCandidateSpecifications;
 import com.filemanager.api.repository.FileRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,6 +29,7 @@ public class DuplicateCandidateService {
     private final DuplicateCandidateRepository duplicateCandidateRepository;
     private final FileRepository fileRepository;
     private final AccessControlService accessControlService;
+    private final DuplicateCandidateSearchPort duplicateCandidateSearchPort;
 
     @Transactional(readOnly = true)
     public List<FileDuplicateResponse> getDuplicatesForFile(
@@ -45,10 +46,13 @@ public class DuplicateCandidateService {
         
         verifyFileOwnership(file, ownerUserId, ownerOrganizationId);
 
-        Specification<DuplicateCandidate> spec = buildBaseSpecification(fileId, method, status);
-        spec = addOwnerContextToSpecification(spec, ownerUserId, ownerOrganizationId);
-
-        List<DuplicateCandidate> candidates = duplicateCandidateRepository.findAll(spec);
+        List<DuplicateCandidate> candidates = duplicateCandidateSearchPort.search(new DuplicateCandidateSearchRequest(
+                fileId,
+                ownerUserId,
+                ownerOrganizationId,
+                method,
+                status
+        ));
 
         return candidates.stream()
                 .map(dc -> mapToFileDuplicateResponse(dc, fileId))
@@ -63,10 +67,13 @@ public class DuplicateCandidateService {
         accessControlService.assertCanViewDuplicates(actorUserId, ownerUserId, ownerOrganizationId);
         validateOwnerContext(ownerUserId, ownerOrganizationId);
 
-        Specification<DuplicateCandidate> spec = buildBaseSpecification(null, method, status);
-        spec = addOwnerContextToSpecification(spec, ownerUserId, ownerOrganizationId);
-
-        List<DuplicateCandidate> candidates = duplicateCandidateRepository.findAll(spec);
+        List<DuplicateCandidate> candidates = duplicateCandidateSearchPort.search(new DuplicateCandidateSearchRequest(
+                null,
+                ownerUserId,
+                ownerOrganizationId,
+                method,
+                status
+        ));
 
         return candidates.stream()
                 .map(this::mapToDuplicateCandidateResponse)
@@ -104,25 +111,6 @@ public class DuplicateCandidateService {
         }
     }
 
-    private Specification<DuplicateCandidate> buildBaseSpecification(UUID fileId, DetectionMethod method, CandidateStatus status) {
-        Specification<DuplicateCandidate> spec = Specification.where(DuplicateCandidateSpecifications.isNotDeleted())
-                .and(DuplicateCandidateSpecifications.hasDetectionMethod(method))
-                .and(DuplicateCandidateSpecifications.hasStatus(status));
-        
-        if (fileId != null) {
-            spec = spec.and(DuplicateCandidateSpecifications.hasFileId(fileId));
-        }
-
-        return spec;
-    }
-
-    private Specification<DuplicateCandidate> addOwnerContextToSpecification(Specification<DuplicateCandidate> spec, UUID ownerUserId, UUID ownerOrganizationId) {
-        if (ownerUserId != null) {
-            return spec.and(DuplicateCandidateSpecifications.hasOwnerUserId(ownerUserId));
-        }
-
-        return spec.and(DuplicateCandidateSpecifications.hasOwnerOrganizationId(ownerOrganizationId));
-    }
 
     private boolean hasOwnershipOfCandidate(DuplicateCandidate dc, UUID ownerUserId, UUID ownerOrganizationId) {
         if (ownerUserId != null) {
