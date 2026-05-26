@@ -71,7 +71,7 @@ class PHashProcessor(Processor):
 
                 buffer.seek(0)
                 try:
-                    with warnings.catch_warnings():
+                    with warnings.catch_warnings(record=False):
                         warnings.simplefilter("error", Image.DecompressionBombWarning)
                         with Image.open(buffer) as img:
                             img.verify()
