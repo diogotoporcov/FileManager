@@ -32,6 +32,34 @@ public class AppProperties {
 
     @Getter
     @Setter
+    public static class Auth {
+        @NotBlank
+        private String providerName = "keycloak";
+
+        @Valid
+        private final Claims claims = new Claims();
+
+        private boolean autoLinkExistingUsers = false;
+
+        @NotNull
+        private Set<String> trustedAutoLinkProviders = new HashSet<>();
+
+        @Getter
+        @Setter
+        public static class Claims {
+            @NotBlank
+            private String email = "email";
+            @NotBlank
+            private String firstName = "given_name";
+            @NotBlank
+            private String lastName = "family_name";
+            @NotBlank
+            private String emailVerified = "email_verified";
+        }
+    }
+
+    @Getter
+    @Setter
     public static class Kafka {
         @Valid
         private final Topics topics = new Topics();
@@ -53,18 +81,6 @@ public class AppProperties {
 
         @Min(1)
         private int maxCandidates = 5000;
-    }
-
-    @Getter
-    @Setter
-    public static class Auth {
-        @NotBlank
-        private String providerName = "keycloak";
-
-        private boolean autoLinkExistingUsers = false;
-
-        @NotNull
-        private Set<String> trustedAutoLinkProviders = new HashSet<>();
     }
 
     @Getter

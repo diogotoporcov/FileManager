@@ -1,8 +1,8 @@
 package com.filemanager.api.service;
 
+import com.filemanager.api.config.AppProperties;
 import com.filemanager.api.entity.User;
 import com.filemanager.api.entity.UserIdentity;
-import com.filemanager.api.config.AppProperties;
 import com.filemanager.api.port.AuthenticatedIdentity;
 import com.filemanager.api.port.IdentityProviderPort;
 import com.filemanager.api.repository.UserIdentityRepository;

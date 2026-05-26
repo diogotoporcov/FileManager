@@ -34,6 +34,11 @@ app:
     provider-name: ${AUTH_PROVIDER_NAME:keycloak}
     auto-link-existing-users: ${AUTH_AUTO_LINK_EXISTING_USERS:false}
     trusted-auto-link-providers: ${AUTH_TRUSTED_AUTO_LINK_PROVIDERS:}
+    claims:
+      email: ${AUTH_EMAIL_CLAIM:email}
+      first-name: ${AUTH_FIRST_NAME_CLAIM:given_name}
+      last-name: ${AUTH_LAST_NAME_CLAIM:family_name}
+      email-verified: ${AUTH_EMAIL_VERIFIED_CLAIM:email_verified}
   kafka:
     topics:
       file-processing-requested: ${FILE_PROCESSING_REQUESTED_TOPIC:file.processing.requested}

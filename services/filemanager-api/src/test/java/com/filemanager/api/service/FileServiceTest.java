@@ -2,6 +2,7 @@ package com.filemanager.api.service;
 
 import com.filemanager.api.auth.AccessControlService;
 import com.filemanager.api.auth.Permission;
+import com.filemanager.api.config.AppProperties;
 import com.filemanager.api.event.FileProcessingRequestedEvent;
 import com.filemanager.api.entity.FileEntity;
 import com.filemanager.api.entity.Organization;
@@ -18,7 +19,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
@@ -58,7 +58,6 @@ class FileServiceTest {
     @Mock
     private ApplicationMetricsPort applicationMetricsPort;
 
-    @InjectMocks
     private FileService fileService;
 
     private User user;
@@ -69,6 +68,18 @@ class FileServiceTest {
         userId = UUID.randomUUID();
         user = new User();
         user.setId(userId);
+        fileService = new FileService(
+                fileRepository,
+                userRepository,
+                organizationRepository,
+                processingJobRepository,
+                processingJobPlanner,
+                objectStoragePort,
+                applicationEventPublisher,
+                accessControlService,
+                applicationMetricsPort,
+                new AppProperties()
+        );
     }
 
     @Test
