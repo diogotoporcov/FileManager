@@ -1,5 +1,6 @@
 package com.filemanager.api.service;
 
+import com.filemanager.api.config.AppProperties;
 import com.filemanager.api.entity.User;
 import com.filemanager.api.entity.UserIdentity;
 import com.filemanager.api.repository.UserIdentityRepository;
@@ -7,11 +8,9 @@ import com.filemanager.api.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -30,12 +29,15 @@ class IdentityResolutionServiceTest {
     @Mock
     private UserIdentityRepository userIdentityRepository;
 
-    @InjectMocks
     private IdentityResolutionService identityResolutionService;
 
     @BeforeEach
     void setUp() {
-        ReflectionTestUtils.setField(identityResolutionService, "provider", "keycloak");
+        identityResolutionService = new IdentityResolutionService(
+                userRepository,
+                userIdentityRepository,
+                new AppProperties()
+        );
     }
 
     @Test

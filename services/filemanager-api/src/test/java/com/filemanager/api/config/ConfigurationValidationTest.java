@@ -59,6 +59,11 @@ class ConfigurationValidationTest {
     @Test
     void appProperties_Valid() {
         AppProperties properties = new AppProperties();
+        properties.getAuth().setProviderName("keycloak");
+        properties.getAuth().getClaims().setEmail("email");
+        properties.getAuth().getClaims().setFirstName("given_name");
+        properties.getAuth().getClaims().setLastName("family_name");
+        properties.getAuth().getClaims().setEmailVerified("email_verified");
         properties.getKafka().getTopics().setFileProcessingRequested("topic");
         properties.getPhash().setThreshold(10);
 
@@ -88,6 +93,20 @@ class ConfigurationValidationTest {
         Set<ConstraintViolation<AppProperties>> violations = validator.validate(properties);
         assertThat(violations).hasSize(1);
         assertThat(violations.iterator().next().getPropertyPath().toString()).isEqualTo("kafka.topics.fileProcessingRequested");
+    }
+
+    @Test
+    void appProperties_BlankAuthValues_Fail() {
+        AppProperties properties = new AppProperties();
+        properties.getAuth().setProviderName("");
+        properties.getAuth().getClaims().setEmail("");
+        properties.getAuth().getClaims().setFirstName("");
+        properties.getAuth().getClaims().setLastName("");
+        properties.getAuth().getClaims().setEmailVerified("");
+
+        Set<ConstraintViolation<AppProperties>> violations = validator.validate(properties);
+
+        assertThat(violations).hasSize(5);
     }
 
     @Test

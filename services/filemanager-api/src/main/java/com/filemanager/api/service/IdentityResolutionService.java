@@ -1,11 +1,11 @@
 package com.filemanager.api.service;
 
+import com.filemanager.api.config.AppProperties;
 import com.filemanager.api.entity.User;
 import com.filemanager.api.entity.UserIdentity;
 import com.filemanager.api.repository.UserIdentityRepository;
 import com.filemanager.api.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,9 +16,7 @@ public class IdentityResolutionService {
 
     private final UserRepository userRepository;
     private final UserIdentityRepository userIdentityRepository;
-
-    @Value("${app.auth.provider-name:keycloak}")
-    private String provider;
+    private final AppProperties appProperties;
 
     @Transactional
     public User resolveUser(Jwt jwt) {
@@ -27,21 +25,23 @@ public class IdentityResolutionService {
             throw new IllegalArgumentException("Subject (sub) claim is missing or blank in JWT");
         }
 
+        String provider = appProperties.getAuth().getProviderName();
         return userIdentityRepository.findByProviderAndProviderSubject(provider, subject)
                 .map(UserIdentity::getUser)
                 .orElseGet(() -> provisionUser(jwt, provider, subject));
     }
 
     private User provisionUser(Jwt jwt, String provider, String subject) {
-        String rawEmail = jwt.getClaimAsString("email");
+        AppProperties.Auth.Claims claims = appProperties.getAuth().getClaims();
+        String rawEmail = jwt.getClaimAsString(claims.getEmail());
         if (rawEmail == null || rawEmail.isBlank()) {
             throw new IllegalArgumentException("Email claim is missing or blank in JWT");
         }
         String email = rawEmail.trim().toLowerCase();
         
-        String firstName = jwt.getClaimAsString("given_name");
-        String lastName = jwt.getClaimAsString("family_name");
-        Boolean emailVerified = jwt.getClaimAsBoolean("email_verified");
+        String firstName = jwt.getClaimAsString(claims.getFirstName());
+        String lastName = jwt.getClaimAsString(claims.getLastName());
+        Boolean emailVerified = jwt.getClaimAsBoolean(claims.getEmailVerified());
 
         return userRepository.findByEmail(email)
                 .map(user -> {

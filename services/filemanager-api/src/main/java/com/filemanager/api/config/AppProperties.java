@@ -18,9 +18,33 @@ import org.springframework.validation.annotation.Validated;
 public class AppProperties {
 
     @Valid
+    private final Auth auth = new Auth();
+    @Valid
     private final Kafka kafka = new Kafka();
     @Valid
     private final Phash phash = new Phash();
+
+    @Getter
+    @Setter
+    public static class Auth {
+        @NotBlank
+        private String providerName = "keycloak";
+        @Valid
+        private final Claims claims = new Claims();
+
+        @Getter
+        @Setter
+        public static class Claims {
+            @NotBlank
+            private String email = "email";
+            @NotBlank
+            private String firstName = "given_name";
+            @NotBlank
+            private String lastName = "family_name";
+            @NotBlank
+            private String emailVerified = "email_verified";
+        }
+    }
 
     @Getter
     @Setter

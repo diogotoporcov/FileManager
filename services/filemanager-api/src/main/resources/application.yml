@@ -32,6 +32,11 @@ spring:
 app:
   auth:
     provider-name: ${AUTH_PROVIDER_NAME:keycloak}
+    claims:
+      email: ${AUTH_EMAIL_CLAIM:email}
+      first-name: ${AUTH_FIRST_NAME_CLAIM:given_name}
+      last-name: ${AUTH_LAST_NAME_CLAIM:family_name}
+      email-verified: ${AUTH_EMAIL_VERIFIED_CLAIM:email_verified}
   kafka:
     topics:
       file-processing-requested: ${FILE_PROCESSING_REQUESTED_TOPIC:file.processing.requested}
