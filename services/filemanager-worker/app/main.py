@@ -1,5 +1,6 @@
 import logging
 import asyncio
+import secrets
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Response, HTTPException, status, Request
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
@@ -76,7 +77,7 @@ async def metrics(request: Request):
         )
     
     token = auth_header[7:]
-    if token != settings.internal_api_token:
+    if not secrets.compare_digest(token, settings.internal_api_token):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication credentials",

@@ -3,10 +3,11 @@ from pydantic import Field, AnyHttpUrl, field_validator, StringConstraints, Alia
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 NonBlankString = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+InternalApiToken = Annotated[str, StringConstraints(strip_whitespace=True, min_length=32)]
 
 class Settings(BaseSettings):
     # Kafka/Redpanda
-    kafka_bootstrap_servers: NonBlankString = Field(default="localhost:9092")
+    kafka_bootstrap_servers: NonBlankString = Field(default=...)
     kafka_topic_file_processing: NonBlankString = Field(default="file.processing.requested")
     kafka_topic_dlq: NonBlankString = Field(default="file.processing.requested.dlq")
     kafka_consumer_group_id: NonBlankString = Field(default="filemanager-worker-group")
@@ -20,15 +21,15 @@ class Settings(BaseSettings):
 
     # MinIO/S3
     s3_endpoint: AnyHttpUrl = Field(  # type: ignore
-        default="http://localhost:9000",
+        default=...,
         validation_alias=AliasChoices("s3_endpoint", "MINIO_ENDPOINT")
     )
     s3_access_key: NonBlankString = Field(
-        default="minioadmin",
+        default=...,
         validation_alias=AliasChoices("s3_access_key", "MINIO_ROOT_USER")
     )
     s3_secret_key: NonBlankString = Field(
-        default="minioadmin",
+        default=...,
         validation_alias=AliasChoices("s3_secret_key", "MINIO_ROOT_PASSWORD")
     )
     s3_bucket_name: NonBlankString = Field(
@@ -38,7 +39,7 @@ class Settings(BaseSettings):
 
     # API
     metadata_api_base_url: AnyHttpUrl = Field(default="http://localhost:8081")  # type: ignore
-    internal_api_token: NonBlankString = Field(
+    internal_api_token: InternalApiToken = Field(
         default=...,
         validation_alias=AliasChoices("internal_api_token", "INTERNAL_API_TOKEN")
     )

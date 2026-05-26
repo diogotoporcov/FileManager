@@ -13,7 +13,7 @@ services:
     restart: unless-stopped
 
   filemanager-minio:
-    image: minio/minio
+    image: ${MINIO_IMAGE:-minio/minio:RELEASE.2025-09-07T16-13-09Z}
     container_name: filemanager-minio
     command: server /data --console-address ":9001"
     environment:
@@ -27,7 +27,7 @@ services:
     restart: unless-stopped
 
   filemanager-redpanda:
-    image: docker.redpanda.com/redpandadata/redpanda:latest
+    image: ${REDPANDA_IMAGE:-docker.redpanda.com/redpandadata/redpanda:v25.3.11}
     container_name: filemanager-redpanda
     command:
       - redpanda
@@ -53,7 +53,7 @@ services:
     restart: unless-stopped
 
   filemanager-keycloak:
-    image: quay.io/keycloak/keycloak:latest
+    image: ${KEYCLOAK_IMAGE:-quay.io/keycloak/keycloak:26.4}
     container_name: filemanager-keycloak
     command: start-dev
     environment:
