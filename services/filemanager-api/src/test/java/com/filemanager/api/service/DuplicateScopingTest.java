@@ -28,7 +28,6 @@ import java.util.UUID;
 
 import static com.filemanager.api.entity.FileFingerprint.FingerprintAlgorithm.SHA256;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -66,6 +65,7 @@ class DuplicateScopingTest {
         AppProperties.Phash phash = new AppProperties.Phash();
         phash.setThreshold(10);
         lenient().when(appProperties.getPhash()).thenReturn(phash);
+        lenient().when(imageFingerprintRepository.findByFileId(any(UUID.class))).thenReturn(Optional.empty());
 
         user1 = new User(); user1.setId(UUID.randomUUID());
         org1 = new Organization(); org1.setId(UUID.randomUUID());

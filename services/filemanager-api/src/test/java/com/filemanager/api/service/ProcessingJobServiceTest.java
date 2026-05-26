@@ -191,7 +191,6 @@ class ProcessingJobServiceTest {
         UUID fileId = UUID.randomUUID();
         UUID otherFileId = UUID.randomUUID();
         String phash = "ffffffffffffffff";
-        String otherPhash = "fffffffffffffffe"; // distance = 1
 
         FileEntity file = new FileEntity();
         file.setId(fileId);
@@ -238,7 +237,6 @@ class ProcessingJobServiceTest {
         UUID fileId = UUID.randomUUID();
         UUID otherFileId = UUID.randomUUID();
         String phash = "ffffffffffffffff";
-        String otherPhash = "0000000000000000"; // distance = 64
 
         FileEntity file = new FileEntity();
         file.setId(fileId);
