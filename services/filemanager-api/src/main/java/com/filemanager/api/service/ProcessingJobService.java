@@ -8,6 +8,9 @@ import com.filemanager.api.entity.ImageFingerprint;
 import com.filemanager.api.entity.ProcessingJob;
 import com.filemanager.api.exception.ResourceNotFoundException;
 import com.filemanager.api.port.ApplicationMetricsPort;
+import com.filemanager.api.port.SimilarImageCandidate;
+import com.filemanager.api.port.SimilarImageSearchPort;
+import com.filemanager.api.port.SimilarImageSearchRequest;
 import com.filemanager.api.repository.DuplicateCandidateRepository;
 import com.filemanager.api.repository.FileFingerprintRepository;
 import com.filemanager.api.repository.FileRepository;
@@ -15,7 +18,6 @@ import com.filemanager.api.repository.ImageFingerprintRepository;
 import com.filemanager.api.repository.ProcessingJobRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,6 +37,7 @@ public class ProcessingJobService {
     private final ImageFingerprintRepository imageFingerprintRepository;
     private final DuplicateCandidateRepository duplicateCandidateRepository;
     private final ApplicationMetricsPort applicationMetricsPort;
+    private final SimilarImageSearchPort similarImageSearchPort;
     private final AppProperties appProperties;
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -82,10 +85,7 @@ public class ProcessingJobService {
 
         for (FileFingerprint existing : existingFingerprints) {
             FileEntity candidateFile = existing.getFile();
-
-            if (isEligibleDuplicate(file, candidateFile)) {
-                createDuplicateCandidate(file, candidateFile, DuplicateCandidate.DetectionMethod.EXACT, 0.0, 1.0);
-            }
+            createExactDuplicateCandidate(file, candidateFile);
         }
 
         completeJob(job);
@@ -104,24 +104,16 @@ public class ProcessingJobService {
         // Record or update pHash fingerprint.
         updateImageFingerprint(file, normalizedPhash);
 
-        // Identify similar images within the same ownership scope.
-        List<ImageFingerprint> allFingerprints = findExistingPhashDuplicates(file);
+        List<SimilarImageCandidate> similarImages = findSimilarPhashCandidates(file, normalizedPhash);
         int maxCandidates = appProperties.getPhash().getMaxCandidates();
-        if (allFingerprints.size() == maxCandidates) {
-            log.warn("pHash candidate cap reached for file {} at {} candidates", fileId, maxCandidates);
+        if (similarImages.size() == maxCandidates) {
+            log.warn("pHash match cap reached for file {} at {} candidates", fileId, maxCandidates);
         }
 
-        for (ImageFingerprint existing : allFingerprints) {
-            FileEntity candidateFile = existing.getFile();
-
-            if (isEligibleDuplicate(file, candidateFile)) {
-                int distance = calculateHammingDistance(normalizedPhash, existing.getPhash());
-
-                if (distance <= appProperties.getPhash().getThreshold()) {
-                    double confidenceScore = 1.0 - ((double) distance / 64.0);
-                    createDuplicateCandidate(file, candidateFile, DuplicateCandidate.DetectionMethod.PHASH, (double) distance, confidenceScore);
-                }
-            }
+        for (SimilarImageCandidate candidate : similarImages) {
+            double confidenceScore = 1.0 - ((double) candidate.distance() / 64.0);
+            createDuplicateCandidate(file, candidate.fileId(), DuplicateCandidate.DetectionMethod.PHASH,
+                    (double) candidate.distance(), confidenceScore);
         }
 
         completeJob(job);
@@ -197,16 +189,28 @@ public class ProcessingJobService {
         return !candidateFile.getId().equals(file.getId()) && candidateFile.getDeletedAt() == null;
     }
 
-    private void createDuplicateCandidate(FileEntity file, FileEntity candidateFile, DuplicateCandidate.DetectionMethod method, Double distance, Double confidenceScore) {
+    private void createExactDuplicateCandidate(FileEntity file, FileEntity candidateFile) {
+        if (!isEligibleDuplicate(file, candidateFile)) {
+            return;
+        }
+
+        createDuplicateCandidate(file, candidateFile.getId(), DuplicateCandidate.DetectionMethod.EXACT, 0.0, 1.0);
+    }
+
+    private void createDuplicateCandidate(FileEntity file, UUID candidateFileId, DuplicateCandidate.DetectionMethod method, Double distance, Double confidenceScore) {
+        if (candidateFileId.equals(file.getId())) {
+            return;
+        }
+
         boolean exists = duplicateCandidateRepository.existsBySourceFileIdAndCandidateFileIdAndDetectionMethod(
-                file.getId(), candidateFile.getId(), method)
+                file.getId(), candidateFileId, method)
                 || duplicateCandidateRepository.existsBySourceFileIdAndCandidateFileIdAndDetectionMethod(
-                candidateFile.getId(), file.getId(), method);
+                candidateFileId, file.getId(), method);
 
         if (!exists) {
             DuplicateCandidate candidate = DuplicateCandidate.builder()
                     .sourceFile(file)
-                    .candidateFile(candidateFile)
+                    .candidateFile(fileRepository.getReferenceById(candidateFileId))
                     .detectionMethod(method)
                     .distance(distance)
                     .confidenceScore(confidenceScore)
@@ -215,7 +219,7 @@ public class ProcessingJobService {
 
             duplicateCandidateRepository.save(candidate);
             applicationMetricsPort.recordDuplicateCandidateCreated(method.name());
-            log.info("Created {} duplicate candidate: {} and {}", method, file.getId(), candidateFile.getId());
+            log.info("Created {} duplicate candidate: {} and {}", method, file.getId(), candidateFileId);
         }
     }
 
@@ -230,26 +234,36 @@ public class ProcessingJobService {
         if (file.getOwnerUser() != null) {
             return fileFingerprintRepository.findByAlgorithmAndHashValueAndFileOwnerUserIdAndFileDeletedAtIsNull(
                     FileFingerprint.FingerprintAlgorithm.SHA256, hashValue, file.getOwnerUser().getId());
-        } else if (file.getOwnerOrganization() != null) {
+        }
+
+        if (file.getOwnerOrganization() != null) {
             return fileFingerprintRepository.findByAlgorithmAndHashValueAndFileOwnerOrganizationIdAndFileDeletedAtIsNull(
                     FileFingerprint.FingerprintAlgorithm.SHA256, hashValue, file.getOwnerOrganization().getId());
         }
+
         return List.of();
     }
 
-    private List<ImageFingerprint> findExistingPhashDuplicates(FileEntity file) {
-        PageRequest candidateLimit = PageRequest.of(0, appProperties.getPhash().getMaxCandidates());
+    private List<SimilarImageCandidate> findSimilarPhashCandidates(FileEntity file, String phash) {
         if (file.getOwnerUser() != null) {
-            return imageFingerprintRepository.findByFileOwnerUserIdAndFileDeletedAtIsNull(file.getOwnerUser().getId(), candidateLimit);
-        } else if (file.getOwnerOrganization() != null) {
-            return imageFingerprintRepository.findByFileOwnerOrganizationIdAndFileDeletedAtIsNull(file.getOwnerOrganization().getId(), candidateLimit);
+            return similarImageSearchPort.search(new SimilarImageSearchRequest(
+                    file.getId(),
+                    file.getOwnerUser().getId(),
+                    null,
+                    phash,
+                    appProperties.getPhash().getThreshold(),
+                    appProperties.getPhash().getMaxCandidates()));
+        }
+
+        if (file.getOwnerOrganization() != null) {
+            return similarImageSearchPort.search(new SimilarImageSearchRequest(
+                    file.getId(),
+                    null,
+                    file.getOwnerOrganization().getId(),
+                    phash,
+                    appProperties.getPhash().getThreshold(),
+                    appProperties.getPhash().getMaxCandidates()));
         }
         return List.of();
-    }
-
-    private int calculateHammingDistance(String h1, String h2) {
-        long l1 = Long.parseUnsignedLong(h1, 16);
-        long l2 = Long.parseUnsignedLong(h2, 16);
-        return Long.bitCount(l1 ^ l2);
     }
 }

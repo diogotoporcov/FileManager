@@ -1,8 +1,16 @@
 package com.filemanager.api.service;
 
 import com.filemanager.api.config.AppProperties;
-import com.filemanager.api.entity.*;
+import com.filemanager.api.entity.DuplicateCandidate;
+import com.filemanager.api.entity.FileEntity;
+import com.filemanager.api.entity.FileFingerprint;
+import com.filemanager.api.entity.ImageFingerprint;
+import com.filemanager.api.entity.ProcessingJob;
+import com.filemanager.api.entity.User;
 import com.filemanager.api.port.ApplicationMetricsPort;
+import com.filemanager.api.port.SimilarImageCandidate;
+import com.filemanager.api.port.SimilarImageSearchPort;
+import com.filemanager.api.port.SimilarImageSearchRequest;
 import com.filemanager.api.repository.DuplicateCandidateRepository;
 import com.filemanager.api.repository.FileFingerprintRepository;
 import com.filemanager.api.repository.FileRepository;
@@ -15,15 +23,17 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.domain.Pageable;
 
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class ProcessingJobServiceTest {
@@ -40,6 +50,8 @@ class ProcessingJobServiceTest {
     private DuplicateCandidateRepository duplicateCandidateRepository;
     @Mock
     private ApplicationMetricsPort applicationMetricsPort;
+    @Mock
+    private SimilarImageSearchPort similarImageSearchPort;
     @Mock
     private AppProperties appProperties;
 
@@ -179,7 +191,6 @@ class ProcessingJobServiceTest {
         UUID fileId = UUID.randomUUID();
         UUID otherFileId = UUID.randomUUID();
         String phash = "ffffffffffffffff";
-        String otherPhash = "fffffffffffffffe"; // distance = 1
 
         FileEntity file = new FileEntity();
         file.setId(fileId);
@@ -197,13 +208,9 @@ class ProcessingJobServiceTest {
         FileEntity otherFile = new FileEntity();
         otherFile.setId(otherFileId);
         otherFile.setOwnerUser(testUser);
-        ImageFingerprint otherFingerprint = ImageFingerprint.builder()
-                .file(otherFile)
-                .phash(otherPhash)
-                .build();
-
-        when(imageFingerprintRepository.findByFileOwnerUserIdAndFileDeletedAtIsNull(eq(testUser.getId()), any(Pageable.class)))
-                .thenReturn(List.of(otherFingerprint));
+        when(similarImageSearchPort.search(any(SimilarImageSearchRequest.class)))
+                .thenReturn(List.of(new SimilarImageCandidate(otherFileId, 1)));
+        when(fileRepository.getReferenceById(otherFileId)).thenReturn(otherFile);
 
         when(duplicateCandidateRepository.existsBySourceFileIdAndCandidateFileIdAndDetectionMethod(
                 fileId, otherFileId, DuplicateCandidate.DetectionMethod.PHASH)).thenReturn(false);
@@ -215,9 +222,13 @@ class ProcessingJobServiceTest {
         verify(imageFingerprintRepository).save(any(ImageFingerprint.class));
         verify(duplicateCandidateRepository).save(any(DuplicateCandidate.class));
 
-        ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
-        verify(imageFingerprintRepository).findByFileOwnerUserIdAndFileDeletedAtIsNull(eq(testUser.getId()), pageableCaptor.capture());
-        assertEquals(5000, pageableCaptor.getValue().getPageSize());
+        ArgumentCaptor<SimilarImageSearchRequest> requestCaptor = ArgumentCaptor.forClass(SimilarImageSearchRequest.class);
+        verify(similarImageSearchPort).search(requestCaptor.capture());
+        assertEquals(fileId, requestCaptor.getValue().sourceFileId());
+        assertEquals(testUser.getId(), requestCaptor.getValue().ownerUserId());
+        assertEquals(phash, requestCaptor.getValue().phash());
+        assertEquals(10, requestCaptor.getValue().threshold());
+        assertEquals(5000, requestCaptor.getValue().maxResults());
     }
 
     @Test
@@ -226,7 +237,6 @@ class ProcessingJobServiceTest {
         UUID fileId = UUID.randomUUID();
         UUID otherFileId = UUID.randomUUID();
         String phash = "ffffffffffffffff";
-        String otherPhash = "0000000000000000"; // distance = 64
 
         FileEntity file = new FileEntity();
         file.setId(fileId);
@@ -244,13 +254,7 @@ class ProcessingJobServiceTest {
         FileEntity otherFile = new FileEntity();
         otherFile.setId(otherFileId);
         otherFile.setOwnerUser(testUser);
-        ImageFingerprint otherFingerprint = ImageFingerprint.builder()
-                .file(otherFile)
-                .phash(otherPhash)
-                .build();
-
-        when(imageFingerprintRepository.findByFileOwnerUserIdAndFileDeletedAtIsNull(eq(testUser.getId()), any(Pageable.class)))
-                .thenReturn(List.of(otherFingerprint));
+        when(similarImageSearchPort.search(any(SimilarImageSearchRequest.class))).thenReturn(List.of());
 
         processingJobService.handlePhashResult(jobId, fileId, phash);
 
