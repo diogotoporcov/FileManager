@@ -2,6 +2,7 @@ package com.filemanager.api.service;
 
 import com.filemanager.api.config.AppProperties;
 import com.filemanager.api.entity.*;
+import com.filemanager.api.port.ApplicationMetricsPort;
 import com.filemanager.api.repository.DuplicateCandidateRepository;
 import com.filemanager.api.repository.FileFingerprintRepository;
 import com.filemanager.api.repository.FileRepository;
@@ -14,6 +15,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Pageable;
 
 import java.util.List;
 import java.util.Optional;
@@ -37,7 +39,7 @@ class ProcessingJobServiceTest {
     @Mock
     private DuplicateCandidateRepository duplicateCandidateRepository;
     @Mock
-    private FileManagerMetrics fileManagerMetrics;
+    private ApplicationMetricsPort applicationMetricsPort;
     @Mock
     private AppProperties appProperties;
 
@@ -51,6 +53,7 @@ class ProcessingJobServiceTest {
     void setup() {
         AppProperties.Phash phash = new AppProperties.Phash();
         phash.setThreshold(10);
+        phash.setMaxCandidates(5000);
         lenient().when(appProperties.getPhash()).thenReturn(phash);
 
         testUser = new User();
@@ -104,7 +107,7 @@ class ProcessingJobServiceTest {
         assertEquals(normalizedSha256, fingerprintCaptor.getValue().getHashValue());
         
         verify(duplicateCandidateRepository).save(any(DuplicateCandidate.class));
-        verify(fileManagerMetrics).recordJobCompleted("CHECKSUM");
+        verify(applicationMetricsPort).recordJobCompleted("CHECKSUM");
     }
 
     @Test
@@ -199,7 +202,7 @@ class ProcessingJobServiceTest {
                 .phash(otherPhash)
                 .build();
 
-        when(imageFingerprintRepository.findByFileOwnerUserIdAndFileDeletedAtIsNull(testUser.getId()))
+        when(imageFingerprintRepository.findByFileOwnerUserIdAndFileDeletedAtIsNull(eq(testUser.getId()), any(Pageable.class)))
                 .thenReturn(List.of(otherFingerprint));
 
         when(duplicateCandidateRepository.existsBySourceFileIdAndCandidateFileIdAndDetectionMethod(
@@ -211,6 +214,10 @@ class ProcessingJobServiceTest {
 
         verify(imageFingerprintRepository).save(any(ImageFingerprint.class));
         verify(duplicateCandidateRepository).save(any(DuplicateCandidate.class));
+
+        ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
+        verify(imageFingerprintRepository).findByFileOwnerUserIdAndFileDeletedAtIsNull(eq(testUser.getId()), pageableCaptor.capture());
+        assertEquals(5000, pageableCaptor.getValue().getPageSize());
     }
 
     @Test
@@ -242,7 +249,7 @@ class ProcessingJobServiceTest {
                 .phash(otherPhash)
                 .build();
 
-        when(imageFingerprintRepository.findByFileOwnerUserIdAndFileDeletedAtIsNull(testUser.getId()))
+        when(imageFingerprintRepository.findByFileOwnerUserIdAndFileDeletedAtIsNull(eq(testUser.getId()), any(Pageable.class)))
                 .thenReturn(List.of(otherFingerprint));
 
         processingJobService.handlePhashResult(jobId, fileId, phash);

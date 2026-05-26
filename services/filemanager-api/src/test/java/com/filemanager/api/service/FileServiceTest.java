@@ -2,11 +2,13 @@ package com.filemanager.api.service;
 
 import com.filemanager.api.auth.AccessControlService;
 import com.filemanager.api.auth.Permission;
+import com.filemanager.api.config.AppProperties;
 import com.filemanager.api.event.FileProcessingRequestedEvent;
 import com.filemanager.api.entity.FileEntity;
 import com.filemanager.api.entity.Organization;
 import com.filemanager.api.entity.ProcessingJob;
 import com.filemanager.api.entity.User;
+import com.filemanager.api.port.ApplicationMetricsPort;
 import com.filemanager.api.port.ObjectStoragePort;
 import com.filemanager.api.port.StoreObjectResponse;
 import com.filemanager.api.repository.FileRepository;
@@ -17,7 +19,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
@@ -55,9 +56,8 @@ class FileServiceTest {
     @Mock
     private AccessControlService accessControlService;
     @Mock
-    private FileManagerMetrics fileManagerMetrics;
+    private ApplicationMetricsPort applicationMetricsPort;
 
-    @InjectMocks
     private FileService fileService;
 
     private User user;
@@ -68,6 +68,18 @@ class FileServiceTest {
         userId = UUID.randomUUID();
         user = new User();
         user.setId(userId);
+        fileService = new FileService(
+                fileRepository,
+                userRepository,
+                organizationRepository,
+                processingJobRepository,
+                processingJobPlanner,
+                objectStoragePort,
+                applicationEventPublisher,
+                accessControlService,
+                applicationMetricsPort,
+                new AppProperties()
+        );
     }
 
     @Test
@@ -108,8 +120,8 @@ class FileServiceTest {
         verify(fileRepository).save(any(FileEntity.class));
         verify(processingJobRepository).save(any(ProcessingJob.class));
         
-        verify(fileManagerMetrics).recordFileUpload(size, "USER");
-        verify(fileManagerMetrics).recordJobCreated("CHECKSUM");
+        verify(applicationMetricsPort).recordFileUpload(size, "USER");
+        verify(applicationMetricsPort).recordJobCreated("CHECKSUM");
 
         ArgumentCaptor<FileProcessingRequestedEvent> eventCaptor = ArgumentCaptor.forClass(FileProcessingRequestedEvent.class);
         verify(applicationEventPublisher).publishEvent(eventCaptor.capture());
@@ -161,9 +173,9 @@ class FileServiceTest {
         verify(accessControlService).assertCanUploadToContext(userId, userId, null);
         verify(processingJobRepository, times(2)).save(any(ProcessingJob.class));
         
-        verify(fileManagerMetrics).recordFileUpload(size, "USER");
-        verify(fileManagerMetrics).recordJobCreated("CHECKSUM");
-        verify(fileManagerMetrics).recordJobCreated("PHASH");
+        verify(applicationMetricsPort).recordFileUpload(size, "USER");
+        verify(applicationMetricsPort).recordJobCreated("CHECKSUM");
+        verify(applicationMetricsPort).recordJobCreated("PHASH");
 
         ArgumentCaptor<FileProcessingRequestedEvent> eventCaptor = ArgumentCaptor.forClass(FileProcessingRequestedEvent.class);
         verify(applicationEventPublisher, times(2)).publishEvent(eventCaptor.capture());
@@ -210,7 +222,7 @@ class FileServiceTest {
         }
 
         verify(accessControlService).assertCanUploadToContext(userId, null, orgId);
-        verify(fileManagerMetrics).recordFileUpload(size, "ORGANIZATION");
+        verify(applicationMetricsPort).recordFileUpload(size, "ORGANIZATION");
     }
 
     @Test
@@ -228,6 +240,6 @@ class FileServiceTest {
         }
 
         verify(accessControlService).assertCanAccessFile(userId, fileId, Permission.FILE_VIEW);
-        verify(fileManagerMetrics).recordFileDownload();
+        verify(applicationMetricsPort).recordFileDownload();
     }
 }

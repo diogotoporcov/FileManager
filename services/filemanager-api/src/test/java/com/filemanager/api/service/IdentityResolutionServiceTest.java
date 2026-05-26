@@ -3,9 +3,10 @@ package com.filemanager.api.service;
 import com.filemanager.api.config.AppProperties;
 import com.filemanager.api.entity.User;
 import com.filemanager.api.entity.UserIdentity;
+import com.filemanager.api.port.AuthenticatedIdentity;
+import com.filemanager.api.port.IdentityProviderPort;
 import com.filemanager.api.repository.UserIdentityRepository;
 import com.filemanager.api.repository.UserRepository;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -29,22 +30,23 @@ class IdentityResolutionServiceTest {
     @Mock
     private UserIdentityRepository userIdentityRepository;
 
+    @Mock
+    private IdentityProviderPort identityProviderPort;
+
+    private final AppProperties appProperties = new AppProperties();
+
     private IdentityResolutionService identityResolutionService;
 
-    @BeforeEach
+    @org.junit.jupiter.api.BeforeEach
     void setUp() {
-        identityResolutionService = new IdentityResolutionService(
-                userRepository,
-                userIdentityRepository,
-                new AppProperties()
-        );
+        identityResolutionService = new IdentityResolutionService(userRepository, userIdentityRepository, identityProviderPort, appProperties);
     }
 
     @Test
     void resolveUser_ExistingIdentity_ReturnsUser() {
         String subject = "sub-123";
         Jwt jwt = mock(Jwt.class);
-        when(jwt.getSubject()).thenReturn(subject);
+        when(identityProviderPort.extractIdentity(jwt)).thenReturn(identity(subject, "test@example.com", null, null, null));
 
         User user = User.builder().id(UUID.randomUUID()).email("test@example.com").build();
         UserIdentity identity = UserIdentity.builder().user(user).build();
@@ -59,13 +61,34 @@ class IdentityResolutionServiceTest {
     }
 
     @Test
-    void resolveUser_NewIdentityExistingUser_LinksAndReturnsUser() {
+    void resolveUser_NewIdentityExistingUser_RejectsAutoLinkByDefault() {
         String subject = "sub-123";
         String email = "test@example.com";
         Jwt jwt = mock(Jwt.class);
-        when(jwt.getSubject()).thenReturn(subject);
-        when(jwt.getClaimAsString("email")).thenReturn(email);
-        when(jwt.getClaimAsBoolean("email_verified")).thenReturn(true);
+        when(identityProviderPort.extractIdentity(jwt)).thenReturn(identity(subject, email, null, null, true));
+
+        User user = User.builder().id(UUID.randomUUID()).email(email).build();
+
+        when(userIdentityRepository.findByProviderAndProviderSubject("keycloak", subject))
+                .thenReturn(Optional.empty());
+        when(userRepository.findByEmail(email)).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> identityResolutionService.resolveUser(jwt))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Automatic linking to an existing user is not enabled");
+        verify(userIdentityRepository, never()).save(any(UserIdentity.class));
+        verify(userRepository, never()).save(any(User.class));
+    }
+
+    @Test
+    void resolveUser_NewIdentityExistingUser_LinksWhenTrustedProviderEnabled() {
+        appProperties.getAuth().setAutoLinkExistingUsers(true);
+        appProperties.getAuth().getTrustedAutoLinkProviders().add("keycloak");
+
+        String subject = "sub-123";
+        String email = "test@example.com";
+        Jwt jwt = mock(Jwt.class);
+        when(identityProviderPort.extractIdentity(jwt)).thenReturn(identity(subject, email, null, null, true));
 
         User user = User.builder().id(UUID.randomUUID()).email(email).build();
 
@@ -85,10 +108,7 @@ class IdentityResolutionServiceTest {
         String subject = "sub-123";
         String email = "new@example.com";
         Jwt jwt = mock(Jwt.class);
-        when(jwt.getSubject()).thenReturn(subject);
-        when(jwt.getClaimAsString("email")).thenReturn(email);
-        when(jwt.getClaimAsString("given_name")).thenReturn("First");
-        when(jwt.getClaimAsString("family_name")).thenReturn("Last");
+        when(identityProviderPort.extractIdentity(jwt)).thenReturn(identity(subject, email, "First", "Last", null));
 
         when(userIdentityRepository.findByProviderAndProviderSubject("keycloak", subject))
                 .thenReturn(Optional.empty());
@@ -107,7 +127,8 @@ class IdentityResolutionServiceTest {
     @Test
     void resolveUser_MissingSubject_ThrowsException() {
         Jwt jwt = mock(Jwt.class);
-        when(jwt.getSubject()).thenReturn(null);
+        when(identityProviderPort.extractIdentity(jwt))
+                .thenThrow(new IllegalArgumentException("Subject (sub) claim is missing or blank in JWT"));
 
         assertThatThrownBy(() -> identityResolutionService.resolveUser(jwt))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -116,13 +137,9 @@ class IdentityResolutionServiceTest {
 
     @Test
     void resolveUser_MissingEmail_ThrowsException() {
-        String subject = "sub-123";
         Jwt jwt = mock(Jwt.class);
-        when(jwt.getSubject()).thenReturn(subject);
-        when(jwt.getClaimAsString("email")).thenReturn(null);
-
-        when(userIdentityRepository.findByProviderAndProviderSubject("keycloak", subject))
-                .thenReturn(Optional.empty());
+        when(identityProviderPort.extractIdentity(jwt))
+                .thenThrow(new IllegalArgumentException("Email claim is missing or blank in JWT"));
 
         assertThatThrownBy(() -> identityResolutionService.resolveUser(jwt))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -134,15 +151,16 @@ class IdentityResolutionServiceTest {
         String subject = "sub-123";
         String email = "test@example.com";
         Jwt jwt = mock(Jwt.class);
-        when(jwt.getSubject()).thenReturn(subject);
-        when(jwt.getClaimAsString("email")).thenReturn(email);
-        when(jwt.getClaimAsBoolean("email_verified")).thenReturn(false);
+        when(identityProviderPort.extractIdentity(jwt)).thenReturn(identity(subject, email, null, null, false));
 
         User user = User.builder().id(UUID.randomUUID()).email(email).build();
 
         when(userIdentityRepository.findByProviderAndProviderSubject("keycloak", subject))
                 .thenReturn(Optional.empty());
         when(userRepository.findByEmail(email)).thenReturn(Optional.of(user));
+
+        appProperties.getAuth().setAutoLinkExistingUsers(true);
+        appProperties.getAuth().getTrustedAutoLinkProviders().add("keycloak");
 
         assertThatThrownBy(() -> identityResolutionService.resolveUser(jwt))
                 .isInstanceOf(IllegalStateException.class)
@@ -152,12 +170,9 @@ class IdentityResolutionServiceTest {
     @Test
     void resolveUser_EmailNormalization_Works() {
         String subject = "sub-123";
-        String email = " TEST@Example.Com ";
         String normalizedEmail = "test@example.com";
         Jwt jwt = mock(Jwt.class);
-        when(jwt.getSubject()).thenReturn(subject);
-        when(jwt.getClaimAsString("email")).thenReturn(email);
-        when(jwt.getClaimAsBoolean("email_verified")).thenReturn(true);
+        when(identityProviderPort.extractIdentity(jwt)).thenReturn(identity(subject, normalizedEmail, null, null, true));
 
         User user = User.builder().id(UUID.randomUUID()).email(normalizedEmail).build();
 
@@ -165,9 +180,13 @@ class IdentityResolutionServiceTest {
                 .thenReturn(Optional.empty());
         when(userRepository.findByEmail(normalizedEmail)).thenReturn(Optional.of(user));
 
-        User result = identityResolutionService.resolveUser(jwt);
-
-        assertThat(result).isEqualTo(user);
+        assertThatThrownBy(() -> identityResolutionService.resolveUser(jwt))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Automatic linking to an existing user is not enabled");
         verify(userRepository).findByEmail(normalizedEmail);
+    }
+
+    private AuthenticatedIdentity identity(String subject, String email, String firstName, String lastName, Boolean emailVerified) {
+        return new AuthenticatedIdentity("keycloak", subject, email, firstName, lastName, emailVerified);
     }
 }

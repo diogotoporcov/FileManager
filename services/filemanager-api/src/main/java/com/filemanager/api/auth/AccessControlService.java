@@ -5,6 +5,7 @@ import com.filemanager.api.entity.FileEntity;
 import com.filemanager.api.entity.OrganizationMember;
 import com.filemanager.api.exception.AccessDeniedException;
 import com.filemanager.api.exception.ResourceNotFoundException;
+import com.filemanager.api.port.RolePermissionPolicyPort;
 import com.filemanager.api.repository.DuplicateCandidateRepository;
 import com.filemanager.api.repository.FileRepository;
 import com.filemanager.api.repository.OrganizationMemberRepository;
@@ -21,7 +22,7 @@ public class AccessControlService {
     private final FileRepository fileRepository;
     private final DuplicateCandidateRepository duplicateCandidateRepository;
     private final OrganizationMemberRepository organizationMemberRepository;
-    private final RolePermissionResolver rolePermissionResolver;
+    private final RolePermissionPolicyPort rolePermissionPolicyPort;
 
     public void assertCanAccessFile(UUID actorUserId, UUID fileId, Permission permission) {
         FileEntity file = fileRepository.findByIdAndDeletedAtIsNull(fileId)
@@ -61,7 +62,7 @@ public class AccessControlService {
         // For organization-owned files, access depends on membership and assigned roles.
         if (file.getOwnerOrganization() != null) {
             return organizationMemberRepository.findByOrganizationIdAndUserId(file.getOwnerOrganization().getId(), actorUserId)
-                    .map(member -> rolePermissionResolver.hasPermission(member.getRole(), permission))
+                    .map(member -> rolePermissionPolicyPort.hasPermission(member.getRole(), permission))
                     .orElse(false);
         }
 
@@ -75,7 +76,7 @@ public class AccessControlService {
         OrganizationMember member = organizationMemberRepository.findByOrganizationIdAndUserId(organizationId, actorUserId)
                 .orElseThrow(() -> new AccessDeniedException("User is not a member of the organization."));
 
-        if (!rolePermissionResolver.hasPermission(member.getRole(), permission)) {
+        if (!rolePermissionPolicyPort.hasPermission(member.getRole(), permission)) {
             throw new AccessDeniedException("User does not have required permission: " + permission);
         }
     }

@@ -5,6 +5,7 @@ import com.filemanager.api.entity.FileEntity;
 import com.filemanager.api.entity.Organization;
 import com.filemanager.api.entity.OrganizationMember;
 import com.filemanager.api.exception.AccessDeniedException;
+import com.filemanager.api.port.RolePermissionPolicyPort;
 import com.filemanager.api.repository.DuplicateCandidateRepository;
 import com.filemanager.api.repository.OrganizationMemberRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -28,7 +29,7 @@ class DuplicatePermissionReproTest {
     @Mock
     private OrganizationMemberRepository organizationMemberRepository;
     @Mock
-    private RolePermissionResolver rolePermissionResolver;
+    private RolePermissionPolicyPort rolePermissionPolicyPort;
 
     @InjectMocks
     private AccessControlService accessControlService;
@@ -63,7 +64,7 @@ class DuplicatePermissionReproTest {
         when(organizationMemberRepository.findByOrganizationIdAndUserId(organizationId, actorUserId))
                 .thenReturn(Optional.of(member));
 
-        when(rolePermissionResolver.hasPermission(OrganizationMember.MemberRole.VIEWER, Permission.DUPLICATE_MANAGE))
+        when(rolePermissionPolicyPort.hasPermission(OrganizationMember.MemberRole.VIEWER, Permission.DUPLICATE_MANAGE))
                 .thenReturn(false);
 
         assertThrows(AccessDeniedException.class, () -> 

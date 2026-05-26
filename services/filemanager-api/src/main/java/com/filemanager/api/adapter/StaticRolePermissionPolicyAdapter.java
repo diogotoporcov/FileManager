@@ -1,6 +1,8 @@
-package com.filemanager.api.auth;
+package com.filemanager.api.adapter;
 
+import com.filemanager.api.auth.Permission;
 import com.filemanager.api.entity.OrganizationMember.MemberRole;
+import com.filemanager.api.port.RolePermissionPolicyPort;
 import org.springframework.stereotype.Component;
 
 import java.util.EnumSet;
@@ -18,9 +20,8 @@ import static com.filemanager.api.auth.Permission.ORGANIZATION_MANAGE_MEMBERS;
 import static com.filemanager.api.auth.Permission.ORGANIZATION_MANAGE_ROLES;
 
 @Component
-public class RolePermissionResolver {
+public class StaticRolePermissionPolicyAdapter implements RolePermissionPolicyPort {
 
-    // Static mapping defining granular permissions for each organizational role.
     private static final Map<MemberRole, Set<Permission>> ROLE_PERMISSIONS = Map.of(
             MemberRole.VIEWER, EnumSet.of(FILE_VIEW, DUPLICATE_VIEW),
             MemberRole.CONTRIBUTOR, EnumSet.of(FILE_VIEW, FILE_UPLOAD, DUPLICATE_VIEW),
@@ -30,11 +31,8 @@ public class RolePermissionResolver {
             MemberRole.OWNER, EnumSet.of(FILE_VIEW, FILE_UPLOAD, FILE_MODIFY, FILE_DELETE, FILE_SHARE, DUPLICATE_VIEW, DUPLICATE_MANAGE, ORGANIZATION_MANAGE_MEMBERS, ORGANIZATION_MANAGE_ROLES)
     );
 
+    @Override
     public Set<Permission> resolvePermissions(MemberRole role) {
         return ROLE_PERMISSIONS.getOrDefault(role, EnumSet.noneOf(Permission.class));
-    }
-
-    public boolean hasPermission(MemberRole role, Permission permission) {
-        return resolvePermissions(role).contains(permission);
     }
 }

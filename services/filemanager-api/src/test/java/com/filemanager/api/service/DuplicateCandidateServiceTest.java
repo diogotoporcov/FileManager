@@ -9,13 +9,12 @@ import com.filemanager.api.entity.DuplicateCandidate.DetectionMethod;
 import com.filemanager.api.entity.FileEntity;
 import com.filemanager.api.entity.User;
 import com.filemanager.api.exception.ResourceNotFoundException;
+import com.filemanager.api.port.DuplicateCandidateSearchPort;
 import com.filemanager.api.repository.DuplicateCandidateRepository;
 import com.filemanager.api.repository.FileRepository;
-import org.springframework.data.jpa.domain.Specification;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentMatchers;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -44,6 +43,9 @@ class DuplicateCandidateServiceTest {
 
     @Mock
     private AccessControlService accessControlService;
+
+    @Mock
+    private DuplicateCandidateSearchPort duplicateCandidateSearchPort;
 
     @InjectMocks
     private DuplicateCandidateService duplicateCandidateService;
@@ -81,8 +83,7 @@ class DuplicateCandidateServiceTest {
     @Test
     void getDuplicatesForFile_Success() {
         when(fileRepository.findByIdAndDeletedAtIsNull(file1.getId())).thenReturn(Optional.of(file1));
-        when(duplicateCandidateRepository.findAll(ArgumentMatchers.<Specification<DuplicateCandidate>>any()))
-                .thenReturn(List.of(candidate));
+        when(duplicateCandidateSearchPort.search(any())).thenReturn(List.of(candidate));
 
         List<FileDuplicateResponse> result = duplicateCandidateService.getDuplicatesForFile(
                 file1.getId(), owner.getId(), null, null, null, owner.getId());
@@ -95,8 +96,7 @@ class DuplicateCandidateServiceTest {
     @Test
     void getDuplicatesForFile_Bidirectional_Success() {
         when(fileRepository.findByIdAndDeletedAtIsNull(file2.getId())).thenReturn(Optional.of(file2));
-        when(duplicateCandidateRepository.findAll(ArgumentMatchers.<Specification<DuplicateCandidate>>any()))
-                .thenReturn(List.of(candidate));
+        when(duplicateCandidateSearchPort.search(any())).thenReturn(List.of(candidate));
 
         List<FileDuplicateResponse> result = duplicateCandidateService.getDuplicatesForFile(
                 file2.getId(), owner.getId(), null, null, null, owner.getId());
@@ -118,8 +118,7 @@ class DuplicateCandidateServiceTest {
 
     @Test
     void getDuplicatesForOwner_Success() {
-        when(duplicateCandidateRepository.findAll(ArgumentMatchers.<Specification<DuplicateCandidate>>any()))
-                .thenReturn(List.of(candidate));
+        when(duplicateCandidateSearchPort.search(any())).thenReturn(List.of(candidate));
 
         List<DuplicateCandidateResponse> result = duplicateCandidateService.getDuplicatesForOwner(
                 owner.getId(), null, null, null, owner.getId());

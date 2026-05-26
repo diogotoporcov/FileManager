@@ -37,6 +37,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ActiveProfiles("test")
 class ErrorHandlingIntegrationTest {
 
+    private static final String VALID_INTERNAL_TOKEN = "test-internal-token-123456789012";
+
     @Autowired
     private WebApplicationContext context;
 
@@ -125,7 +127,7 @@ class ErrorHandlingIntegrationTest {
     @Test
     void internalWorkerEndpointInvalidBody_Returns400() throws Exception {
         mockMvc.perform(post("/internal/processing/jobs/" + UUID.randomUUID() + "/checksum-result")
-                        .header("Authorization", "Bearer test-internal-token")
+                        .header("Authorization", "Bearer " + VALID_INTERNAL_TOKEN)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
                 .andExpect(status().isBadRequest())

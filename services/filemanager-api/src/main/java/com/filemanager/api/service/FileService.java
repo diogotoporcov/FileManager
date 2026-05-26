@@ -2,6 +2,7 @@ package com.filemanager.api.service;
 
 import com.filemanager.api.auth.AccessControlService;
 import com.filemanager.api.auth.Permission;
+import com.filemanager.api.config.AppProperties;
 import com.filemanager.api.event.FileProcessingRequestedEvent;
 import com.filemanager.api.entity.FileEntity;
 import com.filemanager.api.entity.Organization;
@@ -9,6 +10,7 @@ import com.filemanager.api.entity.ProcessingJob;
 import com.filemanager.api.entity.User;
 import com.filemanager.api.exception.AccessDeniedException;
 import com.filemanager.api.exception.ResourceNotFoundException;
+import com.filemanager.api.port.ApplicationMetricsPort;
 import com.filemanager.api.port.ObjectStoragePort;
 import com.filemanager.api.port.StoreObjectRequest;
 import com.filemanager.api.port.StoreObjectResponse;
@@ -40,7 +42,8 @@ public class FileService {
     private final ObjectStoragePort objectStoragePort;
     private final ApplicationEventPublisher applicationEventPublisher;
     private final AccessControlService accessControlService;
-    private final FileManagerMetrics fileManagerMetrics;
+    private final ApplicationMetricsPort applicationMetricsPort;
+    private final AppProperties appProperties;
 
     @Transactional
     public FileEntity uploadFile(String fileName, String contentType, long size, InputStream content, UUID ownerUserId, UUID ownerOrganizationId, UUID actorUserId) {
@@ -51,12 +54,14 @@ public class FileService {
         if (ownerUserId != null) {
             ownerUser = userRepository.findById(ownerUserId)
                     .orElseThrow(() -> new ResourceNotFoundException("User not found: " + ownerUserId));
+            enforceUserQuota(ownerUser, size);
         }
 
         Organization ownerOrganization = null;
         if (ownerOrganizationId != null) {
             ownerOrganization = organizationRepository.findById(ownerOrganizationId)
                     .orElseThrow(() -> new ResourceNotFoundException("Organization not found: " + ownerOrganizationId));
+            enforceOrganizationQuota(ownerOrganization, size);
         }
 
         String effectiveContentType = (contentType == null || contentType.isBlank()) ? "application/octet-stream" : contentType;
@@ -83,7 +88,7 @@ public class FileService {
             FileEntity savedFile = fileRepository.save(fileEntity);
 
             String ownerType = ownerUserId != null ? "USER" : "ORGANIZATION";
-            fileManagerMetrics.recordFileUpload(size, ownerType);
+            applicationMetricsPort.recordFileUpload(size, ownerType);
 
             // Determine and initiate background processing jobs.
             List<ProcessingJob.JobType> plannedJobs = processingJobPlanner.planJobs(effectiveContentType);
@@ -97,7 +102,7 @@ public class FileService {
 
                 ProcessingJob savedJob = processingJobRepository.save(job);
 
-                fileManagerMetrics.recordJobCreated(jobType.name());
+                applicationMetricsPort.recordJobCreated(jobType.name());
 
                 FileProcessingRequestedEvent event = FileProcessingRequestedEvent.builder()
                         .eventId(UUID.randomUUID())
@@ -154,6 +159,26 @@ public class FileService {
         }
     }
 
+    private void enforceUserQuota(User ownerUser, long uploadSize) {
+        long currentSize = fileRepository.sumActiveSizeByOwnerUser(ownerUser);
+        long quota = appProperties.getQuota().getUserBytes();
+        if (wouldExceedQuota(currentSize, uploadSize, quota)) {
+            throw new IllegalStateException("User storage quota exceeded");
+        }
+    }
+
+    private void enforceOrganizationQuota(Organization ownerOrganization, long uploadSize) {
+        long currentSize = fileRepository.sumActiveSizeByOwnerOrganization(ownerOrganization);
+        long quota = appProperties.getQuota().getOrganizationBytes();
+        if (wouldExceedQuota(currentSize, uploadSize, quota)) {
+            throw new IllegalStateException("Organization storage quota exceeded");
+        }
+    }
+
+    private boolean wouldExceedQuota(long currentSize, long uploadSize, long quota) {
+        return uploadSize > quota || currentSize > quota - uploadSize;
+    }
+
     public FileEntity getFileMetadata(UUID fileId, UUID actorUserId) {
         accessControlService.assertCanAccessFile(actorUserId, fileId, Permission.FILE_VIEW);
         return fileRepository.findByIdAndDeletedAtIsNull(fileId)
@@ -164,7 +189,7 @@ public class FileService {
         accessControlService.assertCanAccessFile(actorUserId, fileId, Permission.FILE_VIEW);
         FileEntity file = fileRepository.findByIdAndDeletedAtIsNull(fileId)
                 .orElseThrow(() -> new ResourceNotFoundException("File not found: " + fileId));
-        fileManagerMetrics.recordFileDownload();
+        applicationMetricsPort.recordFileDownload();
         return objectStoragePort.getObject(file.getStoragePath());
     }
 

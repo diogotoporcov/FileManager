@@ -3,6 +3,7 @@ package com.filemanager.api.auth;
 import com.filemanager.api.entity.*;
 import com.filemanager.api.exception.AccessDeniedException;
 import com.filemanager.api.exception.ResourceNotFoundException;
+import com.filemanager.api.port.RolePermissionPolicyPort;
 import com.filemanager.api.repository.DuplicateCandidateRepository;
 import com.filemanager.api.repository.FileRepository;
 import com.filemanager.api.repository.OrganizationMemberRepository;
@@ -31,7 +32,7 @@ class AccessControlServiceTest {
     @Mock
     private OrganizationMemberRepository organizationMemberRepository;
     @Mock
-    private RolePermissionResolver rolePermissionResolver;
+    private RolePermissionPolicyPort rolePermissionPolicyPort;
 
     @InjectMocks
     private AccessControlService accessControlService;
@@ -87,7 +88,7 @@ class AccessControlServiceTest {
         OrganizationMember member = new OrganizationMember();
         member.setRole(OrganizationMember.MemberRole.VIEWER);
         when(organizationMemberRepository.findByOrganizationIdAndUserId(organizationId, actorUserId)).thenReturn(Optional.of(member));
-        when(rolePermissionResolver.hasPermission(OrganizationMember.MemberRole.VIEWER, Permission.FILE_VIEW)).thenReturn(true);
+        when(rolePermissionPolicyPort.hasPermission(OrganizationMember.MemberRole.VIEWER, Permission.FILE_VIEW)).thenReturn(true);
 
         assertDoesNotThrow(() -> accessControlService.assertCanAccessFile(actorUserId, fileId, Permission.FILE_VIEW));
     }

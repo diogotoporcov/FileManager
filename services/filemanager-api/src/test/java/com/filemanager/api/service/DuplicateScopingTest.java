@@ -7,6 +7,7 @@ import com.filemanager.api.entity.ImageFingerprint;
 import com.filemanager.api.entity.Organization;
 import com.filemanager.api.entity.ProcessingJob;
 import com.filemanager.api.entity.User;
+import com.filemanager.api.port.ApplicationMetricsPort;
 import com.filemanager.api.repository.DuplicateCandidateRepository;
 import com.filemanager.api.repository.FileFingerprintRepository;
 import com.filemanager.api.repository.FileRepository;
@@ -18,6 +19,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Pageable;
 
 import java.util.List;
 import java.util.Optional;
@@ -25,6 +27,7 @@ import java.util.UUID;
 
 import static com.filemanager.api.entity.FileFingerprint.FingerprintAlgorithm.SHA256;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -45,7 +48,7 @@ class DuplicateScopingTest {
     @Mock
     private DuplicateCandidateRepository duplicateCandidateRepository;
     @Mock
-    private FileManagerMetrics fileManagerMetrics;
+    private ApplicationMetricsPort applicationMetricsPort;
     @Mock
     private AppProperties appProperties;
 
@@ -88,7 +91,7 @@ class DuplicateScopingTest {
         processingJobService.handleChecksumResult(jobId, file1Id, sha256);
 
         verify(duplicateCandidateRepository, never()).save(any());
-        verify(fileManagerMetrics).recordJobCompleted("CHECKSUM");
+        verify(applicationMetricsPort).recordJobCompleted("CHECKSUM");
     }
 
     @Test
@@ -170,14 +173,14 @@ class DuplicateScopingTest {
                 .phash(phash)
                 .build();
 
-        when(imageFingerprintRepository.findByFileOwnerOrganizationIdAndFileDeletedAtIsNull(org1.getId()))
+        when(imageFingerprintRepository.findByFileOwnerOrganizationIdAndFileDeletedAtIsNull(eq(org1.getId()), any(Pageable.class)))
                 .thenReturn(List.of(fingerprint2));
 
         processingJobService.handlePhashResult(jobId, file1Id, phash);
 
         verify(duplicateCandidateRepository, times(1)).save(any());
-        verify(fileManagerMetrics).recordJobCompleted("PHASH");
-        verify(fileManagerMetrics).recordDuplicateCandidateCreated("PHASH");
+        verify(applicationMetricsPort).recordJobCompleted("PHASH");
+        verify(applicationMetricsPort).recordDuplicateCandidateCreated("PHASH");
     }
 
     @Test
@@ -196,7 +199,7 @@ class DuplicateScopingTest {
         when(processingJobRepository.findById(jobId)).thenReturn(Optional.of(job));
         when(fileRepository.findByIdAndDeletedAtIsNull(file1Id)).thenReturn(Optional.of(file1));
         
-        when(imageFingerprintRepository.findByFileOwnerOrganizationIdAndFileDeletedAtIsNull(org1.getId()))
+        when(imageFingerprintRepository.findByFileOwnerOrganizationIdAndFileDeletedAtIsNull(eq(org1.getId()), any(Pageable.class)))
                 .thenReturn(List.of());
 
         processingJobService.handlePhashResult(jobId, file1Id, phash);
@@ -252,7 +255,7 @@ class DuplicateScopingTest {
         when(processingJobRepository.findById(jobId)).thenReturn(Optional.of(job));
         when(fileRepository.findByIdAndDeletedAtIsNull(file1Id)).thenReturn(Optional.of(file1));
         
-        when(imageFingerprintRepository.findByFileOwnerUserIdAndFileDeletedAtIsNull(user1.getId()))
+        when(imageFingerprintRepository.findByFileOwnerUserIdAndFileDeletedAtIsNull(eq(user1.getId()), any(Pageable.class)))
                 .thenReturn(List.of());
 
         processingJobService.handlePhashResult(jobId, file1Id, phash);
@@ -283,7 +286,7 @@ class DuplicateScopingTest {
                 .phash(phash)
                 .build();
 
-        when(imageFingerprintRepository.findByFileOwnerUserIdAndFileDeletedAtIsNull(user1.getId()))
+        when(imageFingerprintRepository.findByFileOwnerUserIdAndFileDeletedAtIsNull(eq(user1.getId()), any(Pageable.class)))
                 .thenReturn(List.of(fingerprint2));
 
         processingJobService.handlePhashResult(jobId, file1Id, phash);
@@ -332,7 +335,7 @@ class DuplicateScopingTest {
         when(processingJobRepository.findById(jobId)).thenReturn(Optional.of(job));
         when(fileRepository.findByIdAndDeletedAtIsNull(file1Id)).thenReturn(Optional.of(file1));
         
-        when(imageFingerprintRepository.findByFileOwnerUserIdAndFileDeletedAtIsNull(user1.getId()))
+        when(imageFingerprintRepository.findByFileOwnerUserIdAndFileDeletedAtIsNull(eq(user1.getId()), any(Pageable.class)))
                 .thenReturn(List.of());
 
         processingJobService.handlePhashResult(jobId, file1Id, phash);

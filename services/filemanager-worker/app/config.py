@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     worker_max_attempts: int = Field(default=3, ge=1)
     worker_retry_backoff_seconds: float = Field(default=1.0, ge=0)
     worker_retry_backoff_multiplier: float = Field(default=2.0, ge=1)
+    worker_phash_max_image_bytes: int = Field(default=25 * 1024 * 1024, gt=0)
 
     # MinIO/S3
     s3_endpoint: AnyHttpUrl = Field(  # type: ignore

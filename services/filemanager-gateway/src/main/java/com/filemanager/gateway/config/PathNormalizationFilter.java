@@ -29,9 +29,7 @@ public class PathNormalizationFilter implements WebFilter {
     }
 
     private boolean isTraversal(@Nullable String p) {
-        if (p == null) {
-            return false;
-        }
+        if (p == null) return false;
 
         return p.contains("/../") || p.contains("/%2e%2e/") || p.contains("/%2E%2E/") ||
                p.endsWith("/..") || p.endsWith("/%2e%2e") || p.endsWith("/%2E%2E") ||

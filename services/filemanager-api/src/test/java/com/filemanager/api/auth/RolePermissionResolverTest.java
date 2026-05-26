@@ -1,6 +1,7 @@
 package com.filemanager.api.auth;
 
 import com.filemanager.api.entity.OrganizationMember.MemberRole;
+import com.filemanager.api.adapter.StaticRolePermissionPolicyAdapter;
 import org.junit.jupiter.api.Test;
 
 import java.util.Set;
@@ -10,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class RolePermissionResolverTest {
 
-    private final RolePermissionResolver resolver = new RolePermissionResolver();
+    private final StaticRolePermissionPolicyAdapter resolver = new StaticRolePermissionPolicyAdapter();
 
     @Test
     void viewer_ShouldHaveCorrectPermissions() {
