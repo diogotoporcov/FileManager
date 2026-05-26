@@ -1,6 +1,7 @@
 import httpx
 import logging
 from uuid import UUID
+from typing import Any, Sequence
 from app.sinks.base import ProcessingResultSink
 from app.config import settings
 
@@ -23,9 +24,10 @@ class HttpProcessingResultSink(ProcessingResultSink):
     def _get_client(self) -> httpx.AsyncClient:
         if self._client is None:
             self._client = httpx.AsyncClient()
+
         return self._client
 
-    async def _post(self, url: str, payload: dict[str, str]) -> httpx.Response:
+    async def _post(self, url: str, payload: dict[str, Any]) -> httpx.Response:
         response = await self._get_client().post(url, json=payload, headers=self.headers)
         response.raise_for_status()
         return response
@@ -60,6 +62,33 @@ class HttpProcessingResultSink(ProcessingResultSink):
             raise
         except httpx.HTTPError as e:
             logger.error(f"Failed to report pHash success for job {job_id}: {type(e).__name__}")
+            raise
+
+    async def report_embedding_success(
+        self,
+        job_id: UUID,
+        file_id: UUID,
+        model_name: str,
+        model_version: str,
+        dimension: int,
+        embedding: Sequence[float],
+    ):
+        url = f"{self.base_url}/internal/processing/jobs/{job_id}/embedding-result"
+        payload = {
+            "fileId": str(file_id),
+            "modelName": model_name,
+            "modelVersion": model_version,
+            "dimension": dimension,
+            "embedding": list(embedding),
+        }
+        try:
+            await self._post(url, payload)
+            logger.info(f"Reported embedding success for job {job_id}")
+        except httpx.HTTPStatusError as e:
+            logger.error(f"Failed to report embedding success for job {job_id}: status {e.response.status_code}")
+            raise
+        except httpx.HTTPError as e:
+            logger.error(f"Failed to report embedding success for job {job_id}: {type(e).__name__}")
             raise
 
     async def report_failure(self, job_id: UUID, file_id: UUID, error_message: str):

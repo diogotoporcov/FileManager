@@ -74,7 +74,8 @@ public class OpenApiIntegrationTest {
                 .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.scheme").value("bearer"))
                 .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.bearerFormat").value("JWT"))
                 .andExpect(jsonPath("$.paths['/internal/processing/jobs']").doesNotExist())
-                .andExpect(jsonPath("$.paths['/internal/processing/jobs/{jobId}/checksum-result']").doesNotExist());
+                .andExpect(jsonPath("$.paths['/internal/processing/jobs/{jobId}/checksum-result']").doesNotExist())
+                .andExpect(jsonPath("$.paths['/internal/processing/jobs/{jobId}/embedding-result']").doesNotExist());
     }
 
     @Test
@@ -82,7 +83,8 @@ public class OpenApiIntegrationTest {
         mockMvc.perform(get("/v3/api-docs/public"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.paths['/files']").exists())
-                .andExpect(jsonPath("$.paths['/internal/processing/jobs/{jobId}/checksum-result']").doesNotExist());
+                .andExpect(jsonPath("$.paths['/internal/processing/jobs/{jobId}/checksum-result']").doesNotExist())
+                .andExpect(jsonPath("$.paths['/internal/processing/jobs/{jobId}/embedding-result']").doesNotExist());
     }
 
     @Test

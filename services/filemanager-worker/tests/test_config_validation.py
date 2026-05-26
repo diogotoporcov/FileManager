@@ -115,3 +115,34 @@ def test_metadata_api_validation():
     # Blank metadata API URL
     with pytest.raises(ValidationError):
         Settings(internal_api_token="test-token-1234567890123456789012", metadata_api_base_url=" ")  # type: ignore
+
+def test_embedding_settings_validation():
+    settings = Settings(
+        internal_api_token="test-token-1234567890123456789012",
+        embedding_processor_enabled=True,
+        embedding_dimension=768,
+        embedding_image_input_size=224,
+        embedding_max_image_bytes=1024,
+        embedding_model_name="openai/clip-vit-large-patch14",
+        embedding_model_version="1",
+        triton_http_url="http://localhost:8000",
+        triton_grpc_url="localhost:8001",
+        triton_model_name="image_embedding",
+        triton_model_version="1",
+        triton_input_tensor_name="pixel_values",
+        triton_output_tensor_name="image_embeds",
+    )
+
+    assert settings.embedding_dimension == 768
+    assert settings.triton_model_name == "image_embedding"
+
+    with pytest.raises(ValidationError):
+        Settings(internal_api_token="test-token-1234567890123456789012", embedding_dimension=0)
+    with pytest.raises(ValidationError):
+        Settings(internal_api_token="test-token-1234567890123456789012", embedding_image_input_size=0)
+    with pytest.raises(ValidationError):
+        Settings(internal_api_token="test-token-1234567890123456789012", embedding_max_image_bytes=0)
+    with pytest.raises(ValidationError):
+        Settings(internal_api_token="test-token-1234567890123456789012", embedding_model_name="")
+    with pytest.raises(ValidationError):
+        Settings(internal_api_token="test-token-1234567890123456789012", triton_http_url="not-a-url")  # type: ignore

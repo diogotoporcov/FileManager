@@ -254,6 +254,37 @@ class SecurityIntegrationTest {
     }
 
     @Test
+    void internalEmbeddingResult_WithoutToken_Returns401() throws Exception {
+        mockMvc.perform(post("/internal/processing/jobs/" + UUID.randomUUID() + "/embedding-result")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void internalEmbeddingResult_WithValidToken_PermitsAccess() throws Exception {
+        UUID jobId = UUID.randomUUID();
+        UUID fileId = UUID.randomUUID();
+        String content = String.format("""
+                {"fileId":"%s","modelName":"openai/clip-vit-large-patch14","modelVersion":"1","dimension":2,"embedding":[0.1,0.2]}
+                """, fileId);
+
+        mockMvc.perform(post("/internal/processing/jobs/" + jobId + "/embedding-result")
+                        .header("Authorization", "Bearer " + VALID_INTERNAL_TOKEN)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(content))
+                .andExpect(status().isOk());
+
+        verify(processingJobService).handleEmbeddingResult(
+                eq(jobId),
+                eq(fileId),
+                eq("openai/clip-vit-large-patch14"),
+                eq("1"),
+                eq(2),
+                eq(List.of(0.1, 0.2)));
+    }
+
+    @Test
     void internalFailureReport_WithValidToken_PermitsAccess() throws Exception {
         UUID jobId = UUID.randomUUID();
         UUID fileId = UUID.randomUUID();

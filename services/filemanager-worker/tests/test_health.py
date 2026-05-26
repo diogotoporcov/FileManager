@@ -9,3 +9,4 @@ def test_health():
     data = response.json()
     assert data["status"] == "UP"
     assert "checksum" in data["processors"]
+    assert "embedding" in data["processors"]

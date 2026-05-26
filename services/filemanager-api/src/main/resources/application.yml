@@ -45,6 +45,13 @@ app:
   phash:
     threshold: ${PHASH_THRESHOLD:10}
     max-candidates: ${PHASH_MAX_CANDIDATES:5000}
+  embedding:
+    enabled: ${EMBEDDING_ENABLED:true}
+    model-name: ${EMBEDDING_MODEL_NAME:openai/clip-vit-large-patch14}
+    model-version: ${EMBEDDING_MODEL_VERSION:1}
+    dimension: ${EMBEDDING_DIMENSION:768}
+    similarity-threshold: ${EMBEDDING_SIMILARITY_THRESHOLD:0.20}
+    max-candidates: ${EMBEDDING_MAX_CANDIDATES:5000}
   quota:
     user-bytes: ${USER_STORAGE_QUOTA_BYTES:16106127360}
     organization-bytes: ${ORGANIZATION_STORAGE_QUOTA_BYTES:107374182400}

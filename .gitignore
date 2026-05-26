@@ -9,6 +9,11 @@
 # AI / Assistant files
 .aiignore
 .aiassistant
+AGENTS.md
+README-CODEX-RULES.md
+.codex
+.agents
+docs/codex
 
 # Application data
 minio/data
