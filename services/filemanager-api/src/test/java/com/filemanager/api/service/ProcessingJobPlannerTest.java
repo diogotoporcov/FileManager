@@ -1,5 +1,6 @@
 package com.filemanager.api.service;
 
+import com.filemanager.api.config.AppProperties;
 import com.filemanager.api.entity.ProcessingJob;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -14,9 +15,11 @@ class ProcessingJobPlannerTest {
 
     @BeforeEach
     void setUp() {
+        AppProperties appProperties = new AppProperties();
         planner = new ProcessingJobPlanner(List.of(
                 new ChecksumJobStrategy(),
-                new PhashJobStrategy()
+                new PhashJobStrategy(),
+                new EmbeddingJobStrategy(appProperties)
         ));
     }
 
@@ -33,8 +36,15 @@ class ProcessingJobPlannerTest {
     }
 
     @Test
+    void planJobs_ShouldIncludeEmbeddingForImages() {
+        List<ProcessingJob.JobType> jobs = planner.planJobs("image/png");
+        assertTrue(jobs.contains(ProcessingJob.JobType.EMBEDDING));
+    }
+
+    @Test
     void planJobs_ShouldHandleUppercaseMimeType() {
         List<ProcessingJob.JobType> jobs = planner.planJobs("IMAGE/JPEG");
         assertTrue(jobs.contains(ProcessingJob.JobType.PHASH));
+        assertTrue(jobs.contains(ProcessingJob.JobType.EMBEDDING));
     }
 }

@@ -9,9 +9,18 @@
 # AI / Assistant files
 .aiignore
 .aiassistant
+AGENTS.md
+README-CODEX-RULES.md
+.codex
+.agents
+docs/codex
 
 # Application data
 minio/data
+
+# Generated Triton model artifacts
+services/filemanager-triton/model_repository/**/model.onnx
+services/filemanager-triton/model_repository/**/model.onnx.data
 
 # Java / Build Tools
 target/

@@ -66,6 +66,11 @@ class ConfigurationValidationTest {
         properties.getAuth().getClaims().setEmailVerified("email_verified");
         properties.getKafka().getTopics().setFileProcessingRequested("topic");
         properties.getPhash().setThreshold(10);
+        properties.getEmbedding().setModelName("openai/clip-vit-large-patch14");
+        properties.getEmbedding().setModelVersion("1");
+        properties.getEmbedding().setDimension(768);
+        properties.getEmbedding().setSimilarityThreshold(0.20);
+        properties.getEmbedding().setMaxCandidates(5000);
 
         Set<ConstraintViolation<AppProperties>> violations = validator.validate(properties);
         assertThat(violations).isEmpty();
@@ -93,6 +98,20 @@ class ConfigurationValidationTest {
         Set<ConstraintViolation<AppProperties>> violations = validator.validate(properties);
         assertThat(violations).hasSize(1);
         assertThat(violations.iterator().next().getPropertyPath().toString()).isEqualTo("kafka.topics.fileProcessingRequested");
+    }
+
+    @Test
+    void appProperties_InvalidEmbeddingValues_Fail() {
+        AppProperties properties = new AppProperties();
+        properties.getEmbedding().setModelName("");
+        properties.getEmbedding().setModelVersion("");
+        properties.getEmbedding().setDimension(0);
+        properties.getEmbedding().setSimilarityThreshold(2.1);
+        properties.getEmbedding().setMaxCandidates(0);
+
+        Set<ConstraintViolation<AppProperties>> violations = validator.validate(properties);
+
+        assertThat(violations).hasSize(5);
     }
 
     @Test

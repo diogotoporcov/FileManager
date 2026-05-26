@@ -1,5 +1,6 @@
 import logging
 from typing import List, Dict, Any
+import math
 from app.events.models import FileProcessingRequestedEvent
 from app.processors.base import Processor
 from app.sinks.base import ProcessingResultSink
@@ -81,6 +82,16 @@ class ProcessingFlow:
             elif job_type == "PHASH":
                 phash = self._extract_result(result, "phash", 16, processor.name)
                 await self.result_sink.report_phash_success(event.processing_job_id, event.file_id, phash)
+            elif job_type == "EMBEDDING":
+                embedding_result = self._extract_embedding_result(result, processor.name)
+                await self.result_sink.report_embedding_success(
+                    event.processing_job_id,
+                    event.file_id,
+                    embedding_result["modelName"],
+                    embedding_result["modelVersion"],
+                    embedding_result["dimension"],
+                    embedding_result["embedding"],
+                )
         except (RetryableProcessingError, NonRetryableProcessingError):
             raise
         except Exception as e:
@@ -95,6 +106,39 @@ class ProcessingFlow:
         if not isinstance(val, str) or len(val) != expected_length or not all(c in "0123456789abcdef" for c in val.lower()):
             raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid '{key}' format: {val}")
         return val
+
+    @staticmethod
+    def _extract_embedding_result(result: Dict[str, Any], processor_name: str) -> Dict[str, Any]:
+        required_keys = {"modelName", "modelVersion", "dimension", "embedding"}
+        missing = required_keys - result.keys()
+        if missing:
+            missing_keys = ", ".join(sorted(missing))
+            raise NonRetryableProcessingError(
+                f"Processor {processor_name} did not produce required embedding output: {missing_keys}"
+            )
+
+        model_name = result["modelName"]
+        model_version = result["modelVersion"]
+        dimension = result["dimension"]
+        embedding = result["embedding"]
+
+        if not isinstance(model_name, str) or not model_name.strip():
+            raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid embedding model name")
+        if not isinstance(model_version, str) or not model_version.strip():
+            raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid embedding model version")
+        if not isinstance(dimension, int) or dimension <= 0:
+            raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid embedding dimension")
+        if not isinstance(embedding, list) or len(embedding) != dimension:
+            raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid embedding vector")
+        if not all(isinstance(value, (int, float)) and math.isfinite(float(value)) for value in embedding):
+            raise NonRetryableProcessingError(f"Processor {processor_name} produced non-finite embedding values")
+
+        return {
+            "modelName": model_name,
+            "modelVersion": model_version,
+            "dimension": dimension,
+            "embedding": [float(value) for value in embedding],
+        }
 
     async def report_failure(self, event: FileProcessingRequestedEvent, error_message: str):
         try:

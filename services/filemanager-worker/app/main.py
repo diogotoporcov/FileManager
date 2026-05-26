@@ -1,9 +1,12 @@
 import logging
 import asyncio
+import secrets
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Response, HTTPException, status, Request
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 from app.config import settings
+from app.embeddings.triton import TritonImageEmbeddingClient
+from app.processors.embedding import ImageEmbeddingProcessor
 from app.processors.impl import ChecksumProcessor, PHashProcessor
 from app.storage.s3 import S3ObjectStorageReader
 from app.sinks.http import HttpProcessingResultSink
@@ -24,6 +27,16 @@ processors = [
     ChecksumProcessor(storage_reader),
     PHashProcessor(storage_reader)
 ]
+
+if settings.embedding_processor_enabled:
+    embedding_client = TritonImageEmbeddingClient(
+        http_url=str(settings.triton_http_url),
+        model_name=settings.triton_model_name,
+        model_version=settings.triton_model_version,
+        input_tensor_name=settings.triton_input_tensor_name,
+        output_tensor_name=settings.triton_output_tensor_name,
+    )
+    processors.append(ImageEmbeddingProcessor(storage_reader, embedding_client))
 
 flow = ProcessingFlow(processors, result_sink)
 handler = WorkerMessageHandler(flow, dlq_publisher)
@@ -76,7 +89,7 @@ async def metrics(request: Request):
         )
     
     token = auth_header[7:]
-    if token != settings.internal_api_token:
+    if not secrets.compare_digest(token, settings.internal_api_token):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication credentials",

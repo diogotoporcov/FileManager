@@ -11,6 +11,7 @@ from app.worker.errors import NonRetryableProcessingError
 
 VALID_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 VALID_PHASH = "1234567890abcdef"
+VALID_EMBEDDING = [0.5, 0.5]
 
 @pytest.fixture
 def sample_event():
@@ -73,6 +74,36 @@ async def test_flow_phash_success(sample_event):
         sample_event.processing_job_id,
         sample_event.file_id,
         VALID_PHASH
+    )
+
+@pytest.mark.asyncio
+async def test_flow_embedding_success(sample_event):
+    sample_event.job_type = "EMBEDDING"
+    sink = MagicMock(spec=ProcessingResultSink)
+    sink.report_embedding_success = AsyncMock()
+
+    processor = MagicMock(spec=Processor)
+    processor.name = "embedding"
+    processor.should_process.return_value = True
+    processor.process = AsyncMock(return_value={
+        "modelName": "openai/clip-vit-large-patch14",
+        "modelVersion": "1",
+        "dimension": 2,
+        "embedding": VALID_EMBEDDING,
+    })
+
+    flow = ProcessingFlow(processors=[processor], result_sink=sink)
+
+    derived_data = await flow.run(sample_event)
+
+    assert derived_data["dimension"] == 2
+    sink.report_embedding_success.assert_called_once_with(
+        sample_event.processing_job_id,
+        sample_event.file_id,
+        "openai/clip-vit-large-patch14",
+        "1",
+        2,
+        VALID_EMBEDDING,
     )
 
 @pytest.mark.asyncio
@@ -141,6 +172,46 @@ async def test_flow_unsupported_job_type_reports_failure(sample_event):
     
     # Assert
     sink.report_failure.assert_not_called()
+
+@pytest.mark.asyncio
+async def test_flow_embedding_missing_required_output_fails(sample_event):
+    sample_event.job_type = "EMBEDDING"
+    sink = MagicMock(spec=ProcessingResultSink)
+    processor = MagicMock(spec=Processor)
+    processor.name = "embedding"
+    processor.should_process.return_value = True
+    processor.process = AsyncMock(return_value={
+        "modelName": "openai/clip-vit-large-patch14",
+        "modelVersion": "1",
+        "dimension": 2,
+    })
+
+    flow = ProcessingFlow(processors=[processor], result_sink=sink)
+
+    with pytest.raises(NonRetryableProcessingError, match="required embedding output"):
+        await flow.run(sample_event)
+
+@pytest.mark.asyncio
+async def test_flow_embedding_invalid_dimension_fails_without_vector_in_error(sample_event):
+    sample_event.job_type = "EMBEDDING"
+    sink = MagicMock(spec=ProcessingResultSink)
+    processor = MagicMock(spec=Processor)
+    processor.name = "embedding"
+    processor.should_process.return_value = True
+    processor.process = AsyncMock(return_value={
+        "modelName": "openai/clip-vit-large-patch14",
+        "modelVersion": "1",
+        "dimension": 3,
+        "embedding": [123.456, 789.012],
+    })
+
+    flow = ProcessingFlow(processors=[processor], result_sink=sink)
+
+    with pytest.raises(NonRetryableProcessingError) as exc_info:
+        await flow.run(sample_event)
+
+    assert "123.456" not in str(exc_info.value)
+    assert "789.012" not in str(exc_info.value)
 
 @pytest.mark.asyncio
 async def test_flow_missing_required_output_reports_failure(sample_event):

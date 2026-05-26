@@ -1,6 +1,6 @@
 services:
   filemanager-postgres:
-    image: pgvector/pgvector:pg16
+    image: ${POSTGRES_IMAGE:-pgvector/pgvector:pg18}
     container_name: filemanager-postgres
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
@@ -13,7 +13,7 @@ services:
     restart: unless-stopped
 
   filemanager-minio:
-    image: minio/minio
+    image: ${MINIO_IMAGE:-minio/minio:RELEASE.2025-09-07T16-13-09Z}
     container_name: filemanager-minio
     command: server /data --console-address ":9001"
     environment:
@@ -27,7 +27,7 @@ services:
     restart: unless-stopped
 
   filemanager-redpanda:
-    image: docker.redpanda.com/redpandadata/redpanda:latest
+    image: ${REDPANDA_IMAGE:-docker.redpanda.com/redpandadata/redpanda:v25.3.11}
     container_name: filemanager-redpanda
     command:
       - redpanda
@@ -53,7 +53,7 @@ services:
     restart: unless-stopped
 
   filemanager-keycloak:
-    image: quay.io/keycloak/keycloak:latest
+    image: ${KEYCLOAK_IMAGE:-quay.io/keycloak/keycloak:26.4}
     container_name: filemanager-keycloak
     command: start-dev
     environment:
@@ -63,6 +63,28 @@ services:
       - "${PORT_KEYCLOAK}:8080"
     networks:
       - filemanager-network
+    restart: unless-stopped
+
+  filemanager-triton:
+    build:
+      context: ./services/filemanager-triton
+      args:
+        TRITON_BASE_IMAGE: ${TRITON_BASE_IMAGE:-nvcr.io/nvidia/tritonserver:25.10-py3}
+    image: ${TRITON_IMAGE:-filemanager-triton:local}
+    container_name: filemanager-triton
+    profiles:
+      - triton
+    ports:
+      - "127.0.0.1:${PORT_TRITON_HTTP}:8000"
+      - "127.0.0.1:${PORT_TRITON_GRPC}:8001"
+      - "127.0.0.1:${PORT_TRITON_METRICS}:8002"
+    expose:
+      - "8000"
+      - "8001"
+      - "8002"
+    networks:
+      - filemanager-network
+    gpus: ${TRITON_GPUS:-all}
     restart: unless-stopped
 
 networks:

@@ -1,6 +1,8 @@
 package com.filemanager.api.config;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -25,6 +27,8 @@ public class AppProperties {
     private final Kafka kafka = new Kafka();
     @Valid
     private final Phash phash = new Phash();
+    @Valid
+    private final Embedding embedding = new Embedding();
     @Valid
     private final Auth auth = new Auth();
     @Valid
@@ -78,6 +82,28 @@ public class AppProperties {
         @Min(0)
         @Max(64)
         private int threshold = 10;
+
+        @Min(1)
+        private int maxCandidates = 5000;
+    }
+
+    @Getter
+    @Setter
+    public static class Embedding {
+        private boolean enabled = true;
+
+        @NotBlank
+        private String modelName = "openai/clip-vit-large-patch14";
+
+        @NotBlank
+        private String modelVersion = "1";
+
+        @Min(1)
+        private int dimension = 768;
+
+        @DecimalMin("0.0")
+        @DecimalMax("2.0")
+        private double similarityThreshold = 0.20;
 
         @Min(1)
         private int maxCandidates = 5000;

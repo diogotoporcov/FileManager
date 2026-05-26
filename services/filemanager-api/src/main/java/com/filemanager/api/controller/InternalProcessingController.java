@@ -1,6 +1,7 @@
 package com.filemanager.api.controller;
 
 import com.filemanager.api.dto.internal.ChecksumResultRequest;
+import com.filemanager.api.dto.internal.EmbeddingResultRequest;
 import com.filemanager.api.dto.internal.PhashResultRequest;
 import com.filemanager.api.dto.internal.ProcessingFailureRequest;
 import com.filemanager.api.service.ProcessingJobService;
@@ -37,6 +38,20 @@ public class InternalProcessingController {
             @PathVariable UUID jobId,
             @RequestBody @Valid PhashResultRequest request) {
         processingJobService.handlePhashResult(jobId, request.getFileId(), request.getPhash());
+        return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/{jobId}/embedding-result")
+    public ResponseEntity<Void> reportEmbeddingResult(
+            @PathVariable UUID jobId,
+            @RequestBody @Valid EmbeddingResultRequest request) {
+        processingJobService.handleEmbeddingResult(
+                jobId,
+                request.getFileId(),
+                request.getModelName(),
+                request.getModelVersion(),
+                request.getDimension(),
+                request.getEmbedding());
         return ResponseEntity.ok().build();
     }
 

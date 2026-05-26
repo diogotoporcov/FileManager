@@ -7,10 +7,14 @@ import com.filemanager.api.entity.Organization;
 import com.filemanager.api.entity.ProcessingJob;
 import com.filemanager.api.entity.User;
 import com.filemanager.api.port.ApplicationMetricsPort;
+import com.filemanager.api.port.EmbeddingSimilarityCandidate;
+import com.filemanager.api.port.EmbeddingSimilaritySearchPort;
+import com.filemanager.api.port.EmbeddingSimilaritySearchRequest;
 import com.filemanager.api.port.SimilarImageCandidate;
 import com.filemanager.api.port.SimilarImageSearchPort;
 import com.filemanager.api.port.SimilarImageSearchRequest;
 import com.filemanager.api.repository.DuplicateCandidateRepository;
+import com.filemanager.api.repository.FileEmbeddingRepository;
 import com.filemanager.api.repository.FileFingerprintRepository;
 import com.filemanager.api.repository.FileRepository;
 import com.filemanager.api.repository.ImageFingerprintRepository;
@@ -28,6 +32,7 @@ import java.util.UUID;
 
 import static com.filemanager.api.entity.FileFingerprint.FingerprintAlgorithm.SHA256;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -46,11 +51,15 @@ class DuplicateScopingTest {
     @Mock
     private ImageFingerprintRepository imageFingerprintRepository;
     @Mock
+    private FileEmbeddingRepository fileEmbeddingRepository;
+    @Mock
     private DuplicateCandidateRepository duplicateCandidateRepository;
     @Mock
     private ApplicationMetricsPort applicationMetricsPort;
     @Mock
     private SimilarImageSearchPort similarImageSearchPort;
+    @Mock
+    private EmbeddingSimilaritySearchPort embeddingSimilaritySearchPort;
     @Mock
     private AppProperties appProperties;
 
@@ -64,8 +73,20 @@ class DuplicateScopingTest {
     void setup() {
         AppProperties.Phash phash = new AppProperties.Phash();
         phash.setThreshold(10);
+        phash.setMaxCandidates(5000);
         lenient().when(appProperties.getPhash()).thenReturn(phash);
+        AppProperties.Embedding embedding = new AppProperties.Embedding();
+        embedding.setEnabled(true);
+        embedding.setModelName("openai/clip-vit-large-patch14");
+        embedding.setModelVersion("1");
+        embedding.setDimension(768);
+        embedding.setSimilarityThreshold(0.20);
+        embedding.setMaxCandidates(5000);
+        lenient().when(appProperties.getEmbedding()).thenReturn(embedding);
         lenient().when(imageFingerprintRepository.findByFileId(any(UUID.class))).thenReturn(Optional.empty());
+        lenient().when(fileEmbeddingRepository.findByFileIdAndModelNameAndModelVersion(
+                any(UUID.class), anyString(), anyString()))
+                .thenReturn(Optional.empty());
 
         user1 = new User(); user1.setId(UUID.randomUUID());
         org1 = new Organization(); org1.setId(UUID.randomUUID());
@@ -173,7 +194,7 @@ class DuplicateScopingTest {
         
         when(similarImageSearchPort.search(any(SimilarImageSearchRequest.class)))
                 .thenReturn(List.of(new SimilarImageCandidate(file2Id, 0)));
-        when(fileRepository.getReferenceById(file2Id)).thenReturn(file2);
+        when(fileRepository.findByIdAndDeletedAtIsNull(file2Id)).thenReturn(Optional.of(file2));
 
         processingJobService.handlePhashResult(jobId, file1Id, phash);
 
@@ -280,7 +301,7 @@ class DuplicateScopingTest {
         
         when(similarImageSearchPort.search(any(SimilarImageSearchRequest.class)))
                 .thenReturn(List.of(new SimilarImageCandidate(file2Id, 0)));
-        when(fileRepository.getReferenceById(file2Id)).thenReturn(file2);
+        when(fileRepository.findByIdAndDeletedAtIsNull(file2Id)).thenReturn(Optional.of(file2));
 
         processingJobService.handlePhashResult(jobId, file1Id, phash);
 
@@ -333,5 +354,170 @@ class DuplicateScopingTest {
         processingJobService.handlePhashResult(jobId, file1Id, phash);
 
         verify(duplicateCandidateRepository, never()).save(any());
+    }
+
+    @Test
+    void handleEmbeddingResult_SameUser_ShouldDetectDuplicate() {
+        UUID jobId = UUID.randomUUID();
+        UUID file1Id = UUID.randomUUID();
+        UUID file2Id = UUID.randomUUID();
+
+        FileEntity file1 = FileEntity.builder().id(file1Id).ownerUser(user1).build();
+        FileEntity file2 = FileEntity.builder().id(file2Id).ownerUser(user1).build();
+
+        ProcessingJob job = new ProcessingJob();
+        job.setId(jobId);
+        job.setFile(file1);
+        job.setJobType(ProcessingJob.JobType.EMBEDDING);
+
+        when(processingJobRepository.findById(jobId)).thenReturn(Optional.of(job));
+        when(fileRepository.findByIdAndDeletedAtIsNull(file1Id)).thenReturn(Optional.of(file1));
+        when(embeddingSimilaritySearchPort.search(any(EmbeddingSimilaritySearchRequest.class)))
+                .thenReturn(List.of(new EmbeddingSimilarityCandidate(file2Id, 0.10)));
+        when(fileRepository.findByIdAndDeletedAtIsNull(file2Id)).thenReturn(Optional.of(file2));
+
+        processingJobService.handleEmbeddingResult(
+                jobId,
+                file1Id,
+                "openai/clip-vit-large-patch14",
+                "1",
+                768,
+                embeddingVector());
+
+        verify(duplicateCandidateRepository, times(1)).save(any());
+        verify(applicationMetricsPort).recordJobCompleted("EMBEDDING");
+    }
+
+    @Test
+    void handleEmbeddingResult_CrossUserCandidate_ShouldNotDetectDuplicate() {
+        UUID jobId = UUID.randomUUID();
+        UUID file1Id = UUID.randomUUID();
+        UUID file2Id = UUID.randomUUID();
+        User otherUser = new User();
+        otherUser.setId(UUID.randomUUID());
+
+        FileEntity file1 = FileEntity.builder().id(file1Id).ownerUser(user1).build();
+        FileEntity file2 = FileEntity.builder().id(file2Id).ownerUser(otherUser).build();
+
+        ProcessingJob job = new ProcessingJob();
+        job.setId(jobId);
+        job.setFile(file1);
+        job.setJobType(ProcessingJob.JobType.EMBEDDING);
+
+        when(processingJobRepository.findById(jobId)).thenReturn(Optional.of(job));
+        when(fileRepository.findByIdAndDeletedAtIsNull(file1Id)).thenReturn(Optional.of(file1));
+        when(embeddingSimilaritySearchPort.search(any(EmbeddingSimilaritySearchRequest.class)))
+                .thenReturn(List.of(new EmbeddingSimilarityCandidate(file2Id, 0.10)));
+        when(fileRepository.findByIdAndDeletedAtIsNull(file2Id)).thenReturn(Optional.of(file2));
+
+        processingJobService.handleEmbeddingResult(
+                jobId,
+                file1Id,
+                "openai/clip-vit-large-patch14",
+                "1",
+                768,
+                embeddingVector());
+
+        verify(duplicateCandidateRepository, never()).save(any());
+    }
+
+    @Test
+    void handleEmbeddingResult_SameOrganization_ShouldDetectDuplicate() {
+        UUID jobId = UUID.randomUUID();
+        UUID file1Id = UUID.randomUUID();
+        UUID file2Id = UUID.randomUUID();
+
+        FileEntity file1 = FileEntity.builder().id(file1Id).ownerOrganization(org1).build();
+        FileEntity file2 = FileEntity.builder().id(file2Id).ownerOrganization(org1).build();
+
+        ProcessingJob job = new ProcessingJob();
+        job.setId(jobId);
+        job.setFile(file1);
+        job.setJobType(ProcessingJob.JobType.EMBEDDING);
+
+        when(processingJobRepository.findById(jobId)).thenReturn(Optional.of(job));
+        when(fileRepository.findByIdAndDeletedAtIsNull(file1Id)).thenReturn(Optional.of(file1));
+        when(embeddingSimilaritySearchPort.search(any(EmbeddingSimilaritySearchRequest.class)))
+                .thenReturn(List.of(new EmbeddingSimilarityCandidate(file2Id, 0.10)));
+        when(fileRepository.findByIdAndDeletedAtIsNull(file2Id)).thenReturn(Optional.of(file2));
+
+        processingJobService.handleEmbeddingResult(
+                jobId,
+                file1Id,
+                "openai/clip-vit-large-patch14",
+                "1",
+                768,
+                embeddingVector());
+
+        verify(duplicateCandidateRepository, times(1)).save(any());
+    }
+
+    @Test
+    void handleEmbeddingResult_CrossOrganizationCandidate_ShouldNotDetectDuplicate() {
+        UUID jobId = UUID.randomUUID();
+        UUID file1Id = UUID.randomUUID();
+        UUID file2Id = UUID.randomUUID();
+        Organization otherOrg = new Organization();
+        otherOrg.setId(UUID.randomUUID());
+
+        FileEntity file1 = FileEntity.builder().id(file1Id).ownerOrganization(org1).build();
+        FileEntity file2 = FileEntity.builder().id(file2Id).ownerOrganization(otherOrg).build();
+
+        ProcessingJob job = new ProcessingJob();
+        job.setId(jobId);
+        job.setFile(file1);
+        job.setJobType(ProcessingJob.JobType.EMBEDDING);
+
+        when(processingJobRepository.findById(jobId)).thenReturn(Optional.of(job));
+        when(fileRepository.findByIdAndDeletedAtIsNull(file1Id)).thenReturn(Optional.of(file1));
+        when(embeddingSimilaritySearchPort.search(any(EmbeddingSimilaritySearchRequest.class)))
+                .thenReturn(List.of(new EmbeddingSimilarityCandidate(file2Id, 0.10)));
+        when(fileRepository.findByIdAndDeletedAtIsNull(file2Id)).thenReturn(Optional.of(file2));
+
+        processingJobService.handleEmbeddingResult(
+                jobId,
+                file1Id,
+                "openai/clip-vit-large-patch14",
+                "1",
+                768,
+                embeddingVector());
+
+        verify(duplicateCandidateRepository, never()).save(any());
+    }
+
+    @Test
+    void handleEmbeddingResult_DeletedCandidate_ShouldNotDetectDuplicate() {
+        UUID jobId = UUID.randomUUID();
+        UUID file1Id = UUID.randomUUID();
+        UUID file2Id = UUID.randomUUID();
+
+        FileEntity file1 = FileEntity.builder().id(file1Id).ownerUser(user1).build();
+
+        ProcessingJob job = new ProcessingJob();
+        job.setId(jobId);
+        job.setFile(file1);
+        job.setJobType(ProcessingJob.JobType.EMBEDDING);
+
+        when(processingJobRepository.findById(jobId)).thenReturn(Optional.of(job));
+        when(fileRepository.findByIdAndDeletedAtIsNull(file1Id)).thenReturn(Optional.of(file1));
+        when(embeddingSimilaritySearchPort.search(any(EmbeddingSimilaritySearchRequest.class)))
+                .thenReturn(List.of(new EmbeddingSimilarityCandidate(file2Id, 0.10)));
+        when(fileRepository.findByIdAndDeletedAtIsNull(file2Id)).thenReturn(Optional.empty());
+
+        processingJobService.handleEmbeddingResult(
+                jobId,
+                file1Id,
+                "openai/clip-vit-large-patch14",
+                "1",
+                768,
+                embeddingVector());
+
+        verify(duplicateCandidateRepository, never()).save(any());
+    }
+
+    private List<Double> embeddingVector() {
+        return java.util.stream.Stream.generate(() -> 1.0)
+                .limit(768)
+                .toList();
     }
 }

@@ -47,6 +47,40 @@ async def test_report_phash_success_includes_token():
         assert kwargs["json"]["phash"] == phash
 
 @pytest.mark.asyncio
+async def test_report_embedding_success_includes_token_and_payload():
+    sink = HttpProcessingResultSink(internal_api_token="test-token")
+    job_id = uuid.uuid4()
+    file_id = uuid.uuid4()
+    embedding = [0.1, 0.2]
+
+    with patch("httpx.AsyncClient.post") as mock_post:
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_post.return_value = mock_response
+
+        await sink.report_embedding_success(
+            job_id,
+            file_id,
+            "openai/clip-vit-large-patch14",
+            "1",
+            2,
+            embedding,
+        )
+
+        assert mock_post.called
+        args, kwargs = mock_post.call_args
+        assert str(args[0]).endswith(f"/internal/processing/jobs/{job_id}/embedding-result")
+        assert kwargs["headers"]["Authorization"] == "Bearer test-token"
+        assert "X-Internal-Api-Token" not in kwargs["headers"]
+        assert kwargs["json"] == {
+            "fileId": str(file_id),
+            "modelName": "openai/clip-vit-large-patch14",
+            "modelVersion": "1",
+            "dimension": 2,
+            "embedding": embedding,
+        }
+
+@pytest.mark.asyncio
 async def test_report_failure_includes_token():
     sink = HttpProcessingResultSink(internal_api_token="test-token")
     job_id = uuid.uuid4()
@@ -153,3 +187,34 @@ async def test_report_failure_failure_does_not_log_token(caplog):
             assert "Authorization" not in record.message
             assert str(job_id) in record.message
             assert "status 403" in record.message
+
+@pytest.mark.asyncio
+async def test_report_embedding_failure_does_not_log_token_or_vector(caplog):
+    import httpx
+    sink = HttpProcessingResultSink(internal_api_token="secret-token-999")
+    job_id = uuid.uuid4()
+    file_id = uuid.uuid4()
+    embedding = [123.456, 789.012]
+
+    with patch("httpx.AsyncClient.post") as mock_post:
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+        mock_post.side_effect = httpx.HTTPStatusError("Internal Error", request=MagicMock(), response=mock_response)
+
+        with pytest.raises(httpx.HTTPStatusError):
+            await sink.report_embedding_success(
+                job_id,
+                file_id,
+                "openai/clip-vit-large-patch14",
+                "1",
+                2,
+                embedding,
+            )
+
+        for record in caplog.records:
+            assert "secret-token-999" not in record.message
+            assert "Authorization" not in record.message
+            assert "123.456" not in record.message
+            assert "789.012" not in record.message
+            assert str(job_id) in record.message
+            assert "status 500" in record.message
