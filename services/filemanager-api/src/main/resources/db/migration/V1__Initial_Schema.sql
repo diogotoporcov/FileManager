@@ -67,11 +67,25 @@ CREATE INDEX idx_fingerprints_file_algo ON file_fingerprints(file_id, algorithm)
 CREATE TABLE image_fingerprints (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     file_id UUID NOT NULL REFERENCES files(id) UNIQUE,
-    phash VARCHAR(255) NOT NULL,
+    phash VARCHAR(255) NOT NULL CHECK (phash ~ '^[0-9a-fA-F]{16}$'),
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX idx_image_fingerprints_phash ON image_fingerprints(phash);
+
+CREATE OR REPLACE FUNCTION hamming_distance_hex64(left_hash TEXT, right_hash TEXT)
+RETURNS INTEGER
+LANGUAGE SQL
+IMMUTABLE
+STRICT
+AS $$
+    WITH decoded AS (
+        SELECT decode(left_hash, 'hex') AS left_bytes,
+               decode(right_hash, 'hex') AS right_bytes
+    )
+    SELECT COALESCE(SUM(bit_count((get_byte(left_bytes, byte_index) # get_byte(right_bytes, byte_index))::bit(8))), 0)::INTEGER
+    FROM decoded, generate_series(0, 7) AS byte_offsets(byte_index);
+$$;
 
 CREATE TABLE file_embeddings (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
