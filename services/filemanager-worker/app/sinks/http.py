@@ -13,6 +13,22 @@ class HttpProcessingResultSink(ProcessingResultSink):
         self.headers = {
             "Authorization": f"Bearer {token}"
         }
+        self._client: httpx.AsyncClient | None = None
+
+    async def close(self) -> None:
+        if self._client is not None:
+            await self._client.aclose()
+            self._client = None
+
+    def _get_client(self) -> httpx.AsyncClient:
+        if self._client is None:
+            self._client = httpx.AsyncClient()
+        return self._client
+
+    async def _post(self, url: str, payload: dict[str, str]) -> httpx.Response:
+        response = await self._get_client().post(url, json=payload, headers=self.headers)
+        response.raise_for_status()
+        return response
 
     async def report_checksum_success(self, job_id: UUID, file_id: UUID, sha256: str):
         url = f"{self.base_url}/internal/processing/jobs/{job_id}/checksum-result"
@@ -20,17 +36,15 @@ class HttpProcessingResultSink(ProcessingResultSink):
             "fileId": str(file_id),
             "sha256": sha256
         }
-        async with httpx.AsyncClient() as client:
-            try:
-                response = await client.post(url, json=payload, headers=self.headers)
-                response.raise_for_status()
-                logger.info(f"Reported checksum success for job {job_id}")
-            except httpx.HTTPStatusError as e:
-                logger.error(f"Failed to report checksum success for job {job_id}: status {e.response.status_code}")
-                raise
-            except httpx.HTTPError as e:
-                logger.error(f"Failed to report checksum success for job {job_id}: {type(e).__name__}")
-                raise
+        try:
+            await self._post(url, payload)
+            logger.info(f"Reported checksum success for job {job_id}")
+        except httpx.HTTPStatusError as e:
+            logger.error(f"Failed to report checksum success for job {job_id}: status {e.response.status_code}")
+            raise
+        except httpx.HTTPError as e:
+            logger.error(f"Failed to report checksum success for job {job_id}: {type(e).__name__}")
+            raise
 
     async def report_phash_success(self, job_id: UUID, file_id: UUID, phash: str):
         url = f"{self.base_url}/internal/processing/jobs/{job_id}/phash-result"
@@ -38,17 +52,15 @@ class HttpProcessingResultSink(ProcessingResultSink):
             "fileId": str(file_id),
             "phash": phash
         }
-        async with httpx.AsyncClient() as client:
-            try:
-                response = await client.post(url, json=payload, headers=self.headers)
-                response.raise_for_status()
-                logger.info(f"Reported pHash success for job {job_id}")
-            except httpx.HTTPStatusError as e:
-                logger.error(f"Failed to report pHash success for job {job_id}: status {e.response.status_code}")
-                raise
-            except httpx.HTTPError as e:
-                logger.error(f"Failed to report pHash success for job {job_id}: {type(e).__name__}")
-                raise
+        try:
+            await self._post(url, payload)
+            logger.info(f"Reported pHash success for job {job_id}")
+        except httpx.HTTPStatusError as e:
+            logger.error(f"Failed to report pHash success for job {job_id}: status {e.response.status_code}")
+            raise
+        except httpx.HTTPError as e:
+            logger.error(f"Failed to report pHash success for job {job_id}: {type(e).__name__}")
+            raise
 
     async def report_failure(self, job_id: UUID, file_id: UUID, error_message: str):
         url = f"{self.base_url}/internal/processing/jobs/{job_id}/failed"
@@ -56,14 +68,12 @@ class HttpProcessingResultSink(ProcessingResultSink):
             "fileId": str(file_id),
             "errorMessage": error_message
         }
-        async with httpx.AsyncClient() as client:
-            try:
-                response = await client.post(url, json=payload, headers=self.headers)
-                response.raise_for_status()
-                logger.info(f"Reported failure for job {job_id}")
-            except httpx.HTTPStatusError as e:
-                logger.error(f"Failed to report failure for job {job_id}: status {e.response.status_code}")
-                raise
-            except httpx.HTTPError as e:
-                logger.error(f"Failed to report failure for job {job_id}: {type(e).__name__}")
-                raise
+        try:
+            await self._post(url, payload)
+            logger.info(f"Reported failure for job {job_id}")
+        except httpx.HTTPStatusError as e:
+            logger.error(f"Failed to report failure for job {job_id}: status {e.response.status_code}")
+            raise
+        except httpx.HTTPError as e:
+            logger.error(f"Failed to report failure for job {job_id}: {type(e).__name__}")
+            raise

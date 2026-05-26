@@ -49,6 +49,7 @@ async def lifespan(_app: FastAPI):
             await consumer_task
         except asyncio.CancelledError:
             pass
+    await result_sink.close()
     await dlq_publisher.stop()
 
 app = FastAPI(title="FileManager Worker", lifespan=lifespan)

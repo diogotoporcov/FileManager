@@ -1,5 +1,5 @@
 import uuid
-from unittest.mock import patch, MagicMock
+from unittest.mock import AsyncMock, patch, MagicMock
 
 import pytest
 
@@ -65,6 +65,29 @@ async def test_report_failure_includes_token():
         assert kwargs["headers"]["Authorization"] == "Bearer test-token"
         assert "X-Internal-Api-Token" not in kwargs["headers"]
         assert kwargs["json"]["errorMessage"] == error_message
+
+@pytest.mark.asyncio
+async def test_reuses_http_client_between_reports():
+    sink = HttpProcessingResultSink(internal_api_token="test-token")
+    job_id = uuid.uuid4()
+    file_id = uuid.uuid4()
+    sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    phash = "fedcba9876543210"
+
+    mock_response = MagicMock()
+    mock_response.raise_for_status = MagicMock()
+    mock_client = MagicMock()
+    mock_client.post = AsyncMock(return_value=mock_response)
+    mock_client.aclose = AsyncMock()
+
+    with patch("app.sinks.http.httpx.AsyncClient", return_value=mock_client) as client_factory:
+        await sink.report_checksum_success(job_id, file_id, sha256)
+        await sink.report_phash_success(job_id, file_id, phash)
+        await sink.close()
+
+    client_factory.assert_called_once()
+    assert mock_client.post.await_count == 2
+    mock_client.aclose.assert_awaited_once()
 
 @pytest.mark.asyncio
 async def test_report_checksum_failure_does_not_log_token(caplog):
