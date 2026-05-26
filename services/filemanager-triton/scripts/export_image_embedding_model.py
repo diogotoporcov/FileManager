@@ -19,7 +19,9 @@ class NormalizedClipImageEncoder(torch.nn.Module):
         self.clip.eval()
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        features = self.clip.get_image_features(pixel_values=pixel_values)
+        vision_outputs = self.clip.vision_model(pixel_values=pixel_values)
+        pooled_output = vision_outputs.pooler_output
+        features = self.clip.visual_projection(pooled_output)
         return functional.normalize(features, p=2, dim=-1)
 
 
@@ -27,6 +29,7 @@ def main() -> None:
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
 
     model = NormalizedClipImageEncoder(MODEL_ID)
+    model.eval()
     dummy_input = torch.zeros(1, 3, INPUT_SIZE, INPUT_SIZE, dtype=torch.float32)
 
     with torch.no_grad():
