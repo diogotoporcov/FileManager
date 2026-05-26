@@ -85,10 +85,7 @@ public class ProcessingJobService {
 
         for (FileFingerprint existing : existingFingerprints) {
             FileEntity candidateFile = existing.getFile();
-
-            if (isEligibleDuplicate(file, candidateFile)) {
-                createDuplicateCandidate(file, candidateFile, DuplicateCandidate.DetectionMethod.EXACT, 0.0, 1.0);
-            }
+            createExactDuplicateCandidate(file, candidateFile);
         }
 
         completeJob(job);
@@ -192,12 +189,12 @@ public class ProcessingJobService {
         return !candidateFile.getId().equals(file.getId()) && candidateFile.getDeletedAt() == null;
     }
 
-    private void createDuplicateCandidate(FileEntity file, FileEntity candidateFile, DuplicateCandidate.DetectionMethod method, Double distance, Double confidenceScore) {
+    private void createExactDuplicateCandidate(FileEntity file, FileEntity candidateFile) {
         if (!isEligibleDuplicate(file, candidateFile)) {
             return;
         }
 
-        createDuplicateCandidate(file, candidateFile.getId(), method, distance, confidenceScore);
+        createDuplicateCandidate(file, candidateFile.getId(), DuplicateCandidate.DetectionMethod.EXACT, 0.0, 1.0);
     }
 
     private void createDuplicateCandidate(FileEntity file, UUID candidateFileId, DuplicateCandidate.DetectionMethod method, Double distance, Double confidenceScore) {
@@ -237,10 +234,13 @@ public class ProcessingJobService {
         if (file.getOwnerUser() != null) {
             return fileFingerprintRepository.findByAlgorithmAndHashValueAndFileOwnerUserIdAndFileDeletedAtIsNull(
                     FileFingerprint.FingerprintAlgorithm.SHA256, hashValue, file.getOwnerUser().getId());
-        } else if (file.getOwnerOrganization() != null) {
+        }
+
+        if (file.getOwnerOrganization() != null) {
             return fileFingerprintRepository.findByAlgorithmAndHashValueAndFileOwnerOrganizationIdAndFileDeletedAtIsNull(
                     FileFingerprint.FingerprintAlgorithm.SHA256, hashValue, file.getOwnerOrganization().getId());
         }
+
         return List.of();
     }
 
@@ -253,7 +253,9 @@ public class ProcessingJobService {
                     phash,
                     appProperties.getPhash().getThreshold(),
                     appProperties.getPhash().getMaxCandidates()));
-        } else if (file.getOwnerOrganization() != null) {
+        }
+
+        if (file.getOwnerOrganization() != null) {
             return similarImageSearchPort.search(new SimilarImageSearchRequest(
                     file.getId(),
                     null,
