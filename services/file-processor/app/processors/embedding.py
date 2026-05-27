@@ -1,7 +1,7 @@
 import logging
 import tempfile
 import warnings
-from typing import Any, Dict, cast
+from typing import Any, Dict, List, cast
 
 import numpy as np
 from PIL import Image, ImageFile, ImageOps
@@ -112,7 +112,7 @@ class ImageEmbeddingProcessor(Processor):
         except Exception as exc:
             raise RetryableProcessingError(f"Failed to read file from storage: {type(exc).__name__}") from exc
 
-    def _normalize_model_output(self, model_output: np.ndarray) -> list[float]:
+    def _normalize_model_output(self, model_output: np.ndarray) -> List[float]:
         output = np.asarray(model_output, dtype=np.float32)
         if output.ndim == 2 and output.shape[0] == 1:
             output = output[0]

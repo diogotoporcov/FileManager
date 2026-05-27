@@ -1,7 +1,7 @@
 import httpx
 import logging
 from uuid import UUID
-from typing import Any, Sequence
+from typing import Any, Dict, Sequence
 from app.sinks.base import ProcessingResultSink
 from app.config import settings
 
@@ -27,7 +27,7 @@ class HttpProcessingResultSink(ProcessingResultSink):
 
         return self._client
 
-    async def _post(self, url: str, payload: dict[str, Any]) -> httpx.Response:
+    async def _post(self, url: str, payload: Dict[str, Any]) -> httpx.Response:
         response = await self._get_client().post(url, json=payload, headers=self.headers)
         response.raise_for_status()
         return response
