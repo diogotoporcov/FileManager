@@ -67,7 +67,7 @@ services:
 
   filemanager-triton:
     build:
-      context: ./services/filemanager-triton
+      context: ./services/embedding-inference
       args:
         TRITON_BASE_IMAGE: ${TRITON_BASE_IMAGE:-nvcr.io/nvidia/tritonserver:25.10-py3}
     image: ${TRITON_IMAGE:-filemanager-triton:local}

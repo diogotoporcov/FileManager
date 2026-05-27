@@ -19,8 +19,8 @@ docs/codex
 minio/data
 
 # Generated Triton model artifacts
-services/filemanager-triton/model_repository/**/model.onnx
-services/filemanager-triton/model_repository/**/model.onnx.data
+services/embedding-inference/model_repository/**/model.onnx
+services/embedding-inference/model_repository/**/model.onnx.data
 
 # Java / Build Tools
 target/

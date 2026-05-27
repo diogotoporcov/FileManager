@@ -8,6 +8,10 @@ plugins {
 group = "com.filemanager"
 version = "0.0.1-SNAPSHOT"
 
+base {
+    archivesName.set("filemanager-gateway")
+}
+
 java {
     toolchain {
         languageVersion.set(JavaLanguageVersion.of(25))
