@@ -6,6 +6,7 @@ import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 import lombok.Setter;
@@ -33,6 +34,29 @@ public class AppProperties {
     private final Auth auth = new Auth();
     @Valid
     private final Quota quota = new Quota();
+    @NotEmpty
+    private Set<@NotBlank String> processableImageMimeTypes = Set.of(
+            "image/apng",
+            "image/avif",
+            "image/bmp",
+            "image/gif",
+            "image/icns",
+            "image/jp2",
+            "image/jpeg",
+            "image/mpo",
+            "image/palm",
+            "image/png",
+            "image/sgi",
+            "image/tiff",
+            "image/vnd.adobe.photoshop",
+            "image/webp",
+            "image/x-icon",
+            "image/x-pcx",
+            "image/x-portable-anymap",
+            "image/x-tga",
+            "image/xbm",
+            "image/xpm"
+    );
 
     @Getter
     @Setter

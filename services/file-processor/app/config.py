@@ -18,8 +18,15 @@ class Settings(BaseSettings):
     worker_retry_backoff_seconds: float = Field(default=1.0, ge=0)
     worker_retry_backoff_multiplier: float = Field(default=2.0, ge=1)
     worker_phash_max_image_bytes: int = Field(default=25 * 1024 * 1024, gt=0)
+    processable_image_mime_types: NonBlankString = (
+        "image/apng,image/avif,image/bmp,image/gif,image/icns,image/jp2,image/jpeg,image/mpo,"
+        "image/palm,image/png,image/sgi,image/tiff,image/vnd.adobe.photoshop,image/webp,"
+        "image/x-icon,image/x-pcx,image/x-portable-anymap,image/x-tga,image/xbm,image/xpm"
+    )
     embedding_processor_enabled: bool = True
-    embedding_max_image_bytes: int = Field(default=25 * 1024 * 1024, gt=0)
+    embedding_max_image_bytes: int = Field(default=100 * 1024 * 1024, gt=0)
+    embedding_max_source_pixels: int = Field(default=400_000_000, gt=0)
+    embedding_direct_decode_max_pixels: int = Field(default=89_478_485, gt=0)
     embedding_image_input_size: int = Field(default=224, gt=0)
     embedding_dimension: int = Field(default=768, gt=0)
     embedding_model_name: NonBlankString = "openai/clip-vit-large-patch14"

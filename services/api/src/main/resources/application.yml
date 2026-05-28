@@ -30,6 +30,7 @@ spring:
           issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8082/realms/filemanager}
 
 app:
+  processable-image-mime-types: ${PROCESSABLE_IMAGE_MIME_TYPES:image/apng,image/avif,image/bmp,image/gif,image/icns,image/jp2,image/jpeg,image/mpo,image/palm,image/png,image/sgi,image/tiff,image/vnd.adobe.photoshop,image/webp,image/x-icon,image/x-pcx,image/x-portable-anymap,image/x-tga,image/xbm,image/xpm}
   auth:
     provider-name: ${AUTH_PROVIDER_NAME:keycloak}
     auto-link-existing-users: ${AUTH_AUTO_LINK_EXISTING_USERS:false}

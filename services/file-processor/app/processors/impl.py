@@ -8,6 +8,7 @@ import imagehash
 from app.config import settings
 from app.events.models import FileProcessingRequestedEvent
 from app.processors.base import Processor
+from app.processors.image_mime_types import is_processable_image_mime_type, parse_processable_image_mime_types
 from app.storage.base import ObjectStorageReader
 
 from app.worker.errors import NonRetryableProcessingError, RetryableProcessingError
@@ -47,15 +48,14 @@ class PHashProcessor(Processor):
     def __init__(self, storage_reader: ObjectStorageReader, max_image_bytes: int | None = None):
         self.storage_reader = storage_reader
         self.max_image_bytes = max_image_bytes or settings.worker_phash_max_image_bytes
+        self.processable_image_mime_types = parse_processable_image_mime_types(settings.processable_image_mime_types)
 
     @property
     def name(self) -> str:
         return "phash"
 
     def should_process(self, event: FileProcessingRequestedEvent) -> bool:
-        if not event.mime_type:
-            return False
-        return event.mime_type.lower().startswith("image/")
+        return is_processable_image_mime_type(event.mime_type, self.processable_image_mime_types)
 
     async def process(self, event: FileProcessingRequestedEvent) -> Dict[str, Any]:
         logger.info(f"Computing pHash for image {event.file_id}")

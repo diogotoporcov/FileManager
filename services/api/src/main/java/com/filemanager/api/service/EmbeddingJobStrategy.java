@@ -20,7 +20,7 @@ public class EmbeddingJobStrategy implements JobStrategy {
         if (!appProperties.getEmbedding().isEnabled()) {
             return Optional.empty();
         }
-        if (mimeType != null && mimeType.toLowerCase().startsWith("image/")) {
+        if (ProcessableImageMimeTypes.contains(appProperties.getProcessableImageMimeTypes(), mimeType)) {
             return Optional.of(ProcessingJob.JobType.EMBEDDING);
         }
         return Optional.empty();

@@ -41,6 +41,30 @@ class CorruptImageStorageReader(ObjectStorageReader):
     async def read_object(self, storage_path: str) -> AsyncIterator[bytes]:
         yield b"not an image"
 
+class PillowImageStorageReader(ObjectStorageReader):
+    def __init__(self, image_format: str):
+        self.image_format = image_format
+
+    async def read_object(self, storage_path: str) -> AsyncIterator[bytes]:
+        img = Image.new("RGB", (64, 48), color="red")
+        buf = io.BytesIO()
+        img.save(buf, format=self.image_format)
+        yield buf.getvalue()
+
+class LargeJpegStorageReader(ObjectStorageReader):
+    async def read_object(self, storage_path: str) -> AsyncIterator[bytes]:
+        img = Image.new("RGB", (512, 512), color="red")
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG")
+        yield buf.getvalue()
+
+class LargeBmpStorageReader(ObjectStorageReader):
+    async def read_object(self, storage_path: str) -> AsyncIterator[bytes]:
+        img = Image.new("RGB", (128, 128), color="red")
+        buf = io.BytesIO()
+        img.save(buf, format="BMP")
+        yield buf.getvalue()
+
 class FakeResultSink(ProcessingResultSink):
     def __init__(self):
         self.checksum_reported = False
@@ -123,9 +147,27 @@ def test_processor_selection(sample_event):
     sample_event.job_type = "EMBEDDING"
     assert embedding.should_process(sample_event) is True
 
+    sample_event.mime_type = "image/jpeg; charset=binary"
+    sample_event.job_type = "PHASH"
+    assert phash.should_process(sample_event) is True
+    sample_event.job_type = "EMBEDDING"
+    assert embedding.should_process(sample_event) is True
+
+    sample_event.mime_type = "image/x-icon"
+    sample_event.job_type = "PHASH"
+    assert phash.should_process(sample_event) is True
+    sample_event.job_type = "EMBEDDING"
+    assert embedding.should_process(sample_event) is True
+
     # Test empty MIME type
     sample_event.mime_type = ""
     assert phash.should_process(sample_event) is False
+    assert embedding.should_process(sample_event) is False
+
+    sample_event.mime_type = "image/svg+xml"
+    sample_event.job_type = "PHASH"
+    assert phash.should_process(sample_event) is False
+    sample_event.job_type = "EMBEDDING"
     assert embedding.should_process(sample_event) is False
 
     sample_event.mime_type = "image/jpeg"
@@ -228,7 +270,66 @@ async def test_embedding_processor_rejects_oversized_image(sample_event):
     storage = OversizedImageStorageReader()
     processor = ImageEmbeddingProcessor(storage, FakeEmbeddingClient(), max_image_bytes=10)
 
-    with pytest.raises(NonRetryableProcessingError, match="maximum embedding processing size"):
+    with pytest.raises(NonRetryableProcessingError, match="maximum embedding source size"):
+        await processor.process(sample_event)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("image_format", ["JPEG", "PNG", "BMP", "GIF"])
+async def test_embedding_processor_accepts_pillow_supported_formats(sample_event, image_format):
+    sample_event.job_type = "EMBEDDING"
+    storage = PillowImageStorageReader(image_format)
+    client = FakeEmbeddingClient()
+    processor = ImageEmbeddingProcessor(
+        storage,
+        client,
+        input_size=32,
+        max_image_bytes=1024 * 1024,
+        max_source_pixels=64 * 48,
+        direct_decode_max_pixels=64 * 48,
+    )
+
+    await processor.process(sample_event)
+
+    assert client.last_pixel_values is not None
+    assert client.last_pixel_values.shape == (1, 3, 32, 32)
+
+
+@pytest.mark.asyncio
+async def test_embedding_processor_downsamples_large_jpeg_before_embedding(sample_event):
+    sample_event.job_type = "EMBEDDING"
+    storage = LargeJpegStorageReader()
+    client = FakeEmbeddingClient()
+    processor = ImageEmbeddingProcessor(
+        storage,
+        client,
+        input_size=32,
+        max_image_bytes=1024 * 1024,
+        max_source_pixels=512 * 512,
+        direct_decode_max_pixels=96 * 96,
+    )
+
+    result = await processor.process(sample_event)
+
+    assert result["dimension"] == 768
+    assert client.last_pixel_values is not None
+    assert client.last_pixel_values.shape == (1, 3, 32, 32)
+
+
+@pytest.mark.asyncio
+async def test_embedding_processor_rejects_large_image_without_safe_decoder_downsample(sample_event):
+    sample_event.job_type = "EMBEDDING"
+    storage = LargeBmpStorageReader()
+    processor = ImageEmbeddingProcessor(
+        storage,
+        FakeEmbeddingClient(),
+        input_size=32,
+        max_image_bytes=1024 * 1024,
+        max_source_pixels=128 * 128,
+        direct_decode_max_pixels=64 * 64,
+    )
+
+    with pytest.raises(NonRetryableProcessingError, match="safe embedding decode size"):
         await processor.process(sample_event)
 
 

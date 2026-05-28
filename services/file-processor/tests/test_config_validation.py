@@ -123,6 +123,9 @@ def test_embedding_settings_validation():
         embedding_dimension=768,
         embedding_image_input_size=224,
         embedding_max_image_bytes=1024,
+        embedding_max_source_pixels=10_000,
+        embedding_direct_decode_max_pixels=5_000,
+        processable_image_mime_types="image/jpeg,image/png",
         embedding_model_name="openai/clip-vit-large-patch14",
         embedding_model_version="1",
         triton_http_url="http://localhost:8000",
@@ -142,6 +145,12 @@ def test_embedding_settings_validation():
         Settings(internal_api_token="test-token-1234567890123456789012", embedding_image_input_size=0)
     with pytest.raises(ValidationError):
         Settings(internal_api_token="test-token-1234567890123456789012", embedding_max_image_bytes=0)
+    with pytest.raises(ValidationError):
+        Settings(internal_api_token="test-token-1234567890123456789012", embedding_max_source_pixels=0)
+    with pytest.raises(ValidationError):
+        Settings(internal_api_token="test-token-1234567890123456789012", embedding_direct_decode_max_pixels=0)
+    with pytest.raises(ValidationError):
+        Settings(internal_api_token="test-token-1234567890123456789012", processable_image_mime_types="")
     with pytest.raises(ValidationError):
         Settings(internal_api_token="test-token-1234567890123456789012", embedding_model_name="")
     with pytest.raises(ValidationError):
