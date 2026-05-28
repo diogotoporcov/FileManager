@@ -1,14 +1,15 @@
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from uuid import UUID
-from typing import Sequence
+
 
 class ProcessingResultSink(ABC):
     @abstractmethod
-    async def report_checksum_success(self, job_id: UUID, file_id: UUID, sha256: str):
+    async def report_checksum_success(self, job_id: UUID, file_id: UUID, sha256: str) -> None:
         pass
 
     @abstractmethod
-    async def report_phash_success(self, job_id: UUID, file_id: UUID, phash: str):
+    async def report_phash_success(self, job_id: UUID, file_id: UUID, phash: str) -> None:
         pass
 
     @abstractmethod
@@ -20,9 +21,9 @@ class ProcessingResultSink(ABC):
         model_version: str,
         dimension: int,
         embedding: Sequence[float],
-    ):
+    ) -> None:
         pass
 
     @abstractmethod
-    async def report_failure(self, job_id: UUID, file_id: UUID, error_message: str):
+    async def report_failure(self, job_id: UUID, file_id: UUID, error_message: str) -> None:
         pass

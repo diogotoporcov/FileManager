@@ -1,8 +1,10 @@
 import pytest
 from unittest.mock import MagicMock
+
 from fastapi.testclient import TestClient
-from app.main import app
+
 from app import metrics
+from app.main import app
 from app.config import settings
 from app.worker.flow import ProcessingFlow
 from app.processors.base import Processor

@@ -1,6 +1,8 @@
 import pytest
 from pydantic import ValidationError
+
 from app.config import Settings
+
 
 def test_settings_validation():
     # Valid settings should work (using defaults or explicit valid values)

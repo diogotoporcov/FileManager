@@ -1,7 +1,9 @@
 import uuid
-import pytest
 from datetime import datetime, timezone
+
+import pytest
 from pydantic import ValidationError
+
 from app.events.models import FileProcessingRequestedEvent
 
 def test_event_parsing():

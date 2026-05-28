@@ -1,8 +1,8 @@
 import hashlib
 import io
 import uuid
+from collections.abc import AsyncIterator, Sequence
 from datetime import datetime, timezone
-from typing import AsyncIterator
 
 import numpy as np
 import pytest
@@ -22,24 +22,25 @@ class FakeStorageReader(ObjectStorageReader):
     async def read_object(self, storage_path: str) -> AsyncIterator[bytes]:
         yield b"test data"
 
+
 class ImageStorageReader(ObjectStorageReader):
     async def read_object(self, storage_path: str) -> AsyncIterator[bytes]:
-        # Generate a real valid small PNG
-        from PIL import Image
-        import io
-        img = Image.new('RGB', (8, 8), color='red')
+        img = Image.new("RGB", (8, 8), color="red")
         buf = io.BytesIO()
-        img.save(buf, format='PNG')
+        img.save(buf, format="PNG")
         yield buf.getvalue()
+
 
 class OversizedImageStorageReader(ObjectStorageReader):
     async def read_object(self, storage_path: str) -> AsyncIterator[bytes]:
         yield b"a" * 6
         yield b"b" * 6
 
+
 class CorruptImageStorageReader(ObjectStorageReader):
     async def read_object(self, storage_path: str) -> AsyncIterator[bytes]:
         yield b"not an image"
+
 
 class PillowImageStorageReader(ObjectStorageReader):
     def __init__(self, image_format: str):
@@ -51,12 +52,14 @@ class PillowImageStorageReader(ObjectStorageReader):
         img.save(buf, format=self.image_format)
         yield buf.getvalue()
 
+
 class LargeJpegStorageReader(ObjectStorageReader):
     async def read_object(self, storage_path: str) -> AsyncIterator[bytes]:
         img = Image.new("RGB", (512, 512), color="red")
         buf = io.BytesIO()
         img.save(buf, format="JPEG")
         yield buf.getvalue()
+
 
 class LargeBmpStorageReader(ObjectStorageReader):
     async def read_object(self, storage_path: str) -> AsyncIterator[bytes]:
@@ -65,12 +68,13 @@ class LargeBmpStorageReader(ObjectStorageReader):
         img.save(buf, format="BMP")
         yield buf.getvalue()
 
+
 class FakeResultSink(ProcessingResultSink):
     def __init__(self):
         self.checksum_reported = False
-        self.reported_sha256 = None
+        self.reported_sha256: str | None = None
         self.phash_reported = False
-        self.reported_phash = None
+        self.reported_phash: str | None = None
         self.failure_reported = False
 
     async def report_checksum_success(self, job_id: uuid.UUID, file_id: uuid.UUID, sha256: str):
@@ -88,7 +92,7 @@ class FakeResultSink(ProcessingResultSink):
         model_name: str,
         model_version: str,
         dimension: int,
-        embedding,
+        embedding: Sequence[float],
     ):
         pass
 
@@ -104,12 +108,15 @@ class FakeEmbeddingClient(ImageEmbeddingInferenceClient):
 
     async def embed_image(self, pixel_values: np.ndarray) -> np.ndarray:
         self.last_pixel_values = pixel_values
+
         if self.error:
             raise self.error
+
         return self.output
 
+
 @pytest.fixture
-def sample_event():
+def sample_event() -> FileProcessingRequestedEvent:
     return FileProcessingRequestedEvent(
         event_id=uuid.uuid4(),
         event_type="file.processing.requested",
@@ -121,10 +128,11 @@ def sample_event():
         mime_type="image/jpeg",
         size=500,
         owner_user_id=uuid.uuid4(),
-        owner_organization_id=None
+        owner_organization_id=None,
     )
 
-def test_processor_selection(sample_event):
+
+def test_processor_selection(sample_event: FileProcessingRequestedEvent):
     storage = FakeStorageReader()
     checksum = ChecksumProcessor(storage)
     phash = PHashProcessor(storage)
@@ -180,12 +188,13 @@ async def test_phash_processor_real_hash(sample_event):
     phash_processor = PHashProcessor(storage, max_image_bytes=1024 * 1024)
     
     result = await phash_processor.process(sample_event)
-    
-    assert "phash" in result
-    assert len(result["phash"]) == 16
-    assert result["phash"] == result["phash"].lower()
+
+    phash = result["phash"]
+    assert isinstance(phash, str)
+    assert len(phash) == 16
+    assert phash == phash.lower()
     # Check if it's a valid hex
-    int(result["phash"], 16)
+    int(phash, 16)
 
 @pytest.mark.asyncio
 async def test_phash_processor_rejects_oversized_image(sample_event):
@@ -237,8 +246,10 @@ async def test_embedding_processor_valid_response(sample_event):
     assert result["modelName"] == "openai/clip-vit-large-patch14"
     assert result["modelVersion"] == "1"
     assert result["dimension"] == 768
-    assert len(result["embedding"]) == 768
-    assert np.isclose(np.linalg.norm(np.array(result["embedding"], dtype=np.float32)), 1.0)
+    embedding = result["embedding"]
+    assert isinstance(embedding, list)
+    assert len(embedding) == 768
+    assert np.isclose(np.linalg.norm(np.array(embedding, dtype=np.float32)), 1.0)
     assert client.last_pixel_values is not None
     assert client.last_pixel_values.shape == (1, 3, 224, 224)
 

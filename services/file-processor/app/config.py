@@ -1,9 +1,11 @@
-from typing import Literal, Annotated, Any
-from pydantic import Field, AnyHttpUrl, field_validator, StringConstraints, AliasChoices
+from typing import Annotated, Literal
+
+from pydantic import AliasChoices, AnyHttpUrl, Field, StringConstraints, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 NonBlankString = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 InternalApiToken = Annotated[str, StringConstraints(strip_whitespace=True, min_length=32)]
+
 
 class Settings(BaseSettings):
     # Kafka/Redpanda
@@ -43,26 +45,26 @@ class Settings(BaseSettings):
     # MinIO/S3
     s3_endpoint: AnyHttpUrl = Field(  # type: ignore
         default=...,
-        validation_alias=AliasChoices("s3_endpoint", "MINIO_ENDPOINT")
+        validation_alias=AliasChoices("s3_endpoint", "MINIO_ENDPOINT"),
     )
     s3_access_key: NonBlankString = Field(
         default=...,
-        validation_alias=AliasChoices("s3_access_key", "MINIO_ROOT_USER")
+        validation_alias=AliasChoices("s3_access_key", "MINIO_ROOT_USER"),
     )
     s3_secret_key: NonBlankString = Field(
         default=...,
-        validation_alias=AliasChoices("s3_secret_key", "MINIO_ROOT_PASSWORD")
+        validation_alias=AliasChoices("s3_secret_key", "MINIO_ROOT_PASSWORD"),
     )
     s3_bucket_name: NonBlankString = Field(
         default="filemanager",
-        validation_alias=AliasChoices("s3_bucket_name", "MINIO_BUCKET_NAME")
+        validation_alias=AliasChoices("s3_bucket_name", "MINIO_BUCKET_NAME"),
     )
 
     # API
     metadata_api_base_url: AnyHttpUrl = Field(default="http://localhost:8081")  # type: ignore
     internal_api_token: InternalApiToken = Field(
         default=...,
-        validation_alias=AliasChoices("internal_api_token", "INTERNAL_API_TOKEN")
+        validation_alias=AliasChoices("internal_api_token", "INTERNAL_API_TOKEN"),
     )
 
     # Metrics
@@ -73,7 +75,7 @@ class Settings(BaseSettings):
 
     @field_validator("s3_endpoint", "metadata_api_base_url", "triton_http_url", mode="before")
     @classmethod
-    def validate_url(cls, v: Any) -> Any:
+    def validate_url(cls, v: object) -> object:
         if isinstance(v, str) and not v.strip():
             raise ValueError("URL cannot be blank")
         return v
@@ -81,7 +83,8 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         extra="ignore",
         env_file=".env",
-        env_file_encoding="utf-8"
+        env_file_encoding="utf-8",
     )
+
 
 settings = Settings()

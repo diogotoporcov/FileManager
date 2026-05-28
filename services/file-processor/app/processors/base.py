@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict
+from collections.abc import Mapping
+
 from app.events.models import FileProcessingRequestedEvent
+
 
 class Processor(ABC):
     @property
@@ -15,6 +17,6 @@ class Processor(ABC):
         pass
 
     @abstractmethod
-    async def process(self, event: FileProcessingRequestedEvent) -> Dict[str, Any]:
+    async def process(self, event: FileProcessingRequestedEvent) -> Mapping[str, object]:
         """Process the file and return derived data."""
         pass

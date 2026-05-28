@@ -1,12 +1,20 @@
 import pytest
 import uuid
 import json
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
+from typing import Final
+
+from pydantic import JsonValue, TypeAdapter
+
 from app.worker.handler import WorkerMessageHandler
 from app.worker.flow import ProcessingFlow
 from app.worker.dlq import DeadLetterPublisher
 from app.worker.errors import RetryableProcessingError, NonRetryableProcessingError, FailureCategory
+
+JSON_OBJECT_ADAPTER: Final[TypeAdapter[Mapping[str, JsonValue]]] = TypeAdapter(Mapping[str, JsonValue])
+
 
 @pytest.fixture
 def dlq_publisher():
@@ -121,9 +129,9 @@ async def test_handle_missing_fields_poison_message(handler, dlq_publisher, mock
 
 @pytest.mark.asyncio
 async def test_handle_invalid_schema_poison_message(handler, dlq_publisher, mock_msg):
-    data = json.loads(mock_msg.value.decode('utf-8'))
+    data = dict(JSON_OBJECT_ADAPTER.validate_python(json.loads(mock_msg.value.decode("utf-8"))))
     data["eventId"] = "not-a-uuid"
-    mock_msg.value = json.dumps(data).encode('utf-8')
+    mock_msg.value = json.dumps(data).encode("utf-8")
     dlq_publisher.publish_failure = AsyncMock()
     
     result = await handler.handle_message(mock_msg)
