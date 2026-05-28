@@ -1,7 +1,11 @@
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
+from typing import TypeAlias
 
 from app.events.models import FileProcessingRequestedEvent
+
+ProcessorResultValue: TypeAlias = str | int | Sequence[float]
+ProcessorResult: TypeAlias = Mapping[str, ProcessorResultValue]
 
 
 class Processor(ABC):
@@ -17,6 +21,6 @@ class Processor(ABC):
         pass
 
     @abstractmethod
-    async def process(self, event: FileProcessingRequestedEvent) -> Mapping[str, object]:
+    async def process(self, event: FileProcessingRequestedEvent) -> ProcessorResult:
         """Process the file and return derived data."""
         pass

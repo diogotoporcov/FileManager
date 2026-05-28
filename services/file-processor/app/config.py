@@ -1,4 +1,4 @@
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import AliasChoices, AnyHttpUrl, Field, StringConstraints, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -35,7 +35,6 @@ class Settings(BaseSettings):
     embedding_model_version: NonBlankString = "1"
 
     # Triton
-    triton_http_url: AnyHttpUrl = Field(default="http://localhost:8000")  # type: ignore
     triton_grpc_url: NonBlankString = "localhost:8001"
     triton_model_name: NonBlankString = "image_embedding"
     triton_model_version: NonBlankString = "1"
@@ -73,11 +72,12 @@ class Settings(BaseSettings):
     # Logging
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
 
-    @field_validator("s3_endpoint", "metadata_api_base_url", "triton_http_url", mode="before")
+    @field_validator("s3_endpoint", "metadata_api_base_url", mode="before")
     @classmethod
-    def validate_url(cls, v: object) -> object:
+    def validate_url(cls, v: Any) -> Any:
         if isinstance(v, str) and not v.strip():
             raise ValueError("URL cannot be blank")
+
         return v
 
     model_config = SettingsConfigDict(

@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import secrets
-from collections.abc import Mapping
+from collections.abc import Mapping, MutableSequence, Sequence
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request, Response, status
@@ -9,6 +9,7 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from app.config import settings
 from app.embeddings.triton import TritonImageEmbeddingClient
+from app.processors.base import Processor
 from app.processors.embedding import ImageEmbeddingProcessor
 from app.processors.impl import ChecksumProcessor, PHashProcessor
 from app.sinks.http import HttpProcessingResultSink
@@ -26,14 +27,14 @@ storage_reader = S3ObjectStorageReader()
 result_sink = HttpProcessingResultSink()
 dlq_publisher = KafkaDeadLetterPublisher()
 
-processors = [
+processors: MutableSequence[Processor] = [
     ChecksumProcessor(storage_reader),
     PHashProcessor(storage_reader),
 ]
 
 if settings.embedding_processor_enabled:
     embedding_client = TritonImageEmbeddingClient(
-        http_url=str(settings.triton_http_url),
+        grpc_url=settings.triton_grpc_url,
         model_name=settings.triton_model_name,
         model_version=settings.triton_model_version,
         input_tensor_name=settings.triton_input_tensor_name,
@@ -80,7 +81,7 @@ app = FastAPI(title="FileManager Worker", lifespan=lifespan)
 
 
 @app.get("/health")
-async def health() -> Mapping[str, object]:
+async def health() -> Mapping[str, str | Sequence[str]]:
     return {
         "status": "UP",
         "version": "0.1.0",

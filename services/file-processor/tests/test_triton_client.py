@@ -1,5 +1,6 @@
 from collections.abc import Callable, Mapping, MutableSequence, Sequence
 from dataclasses import dataclass
+from typing import TypeAlias
 
 import numpy as np
 import pytest
@@ -10,9 +11,12 @@ from app.embeddings.base import (
 )
 from app.embeddings.triton import (
     TritonInferInput,
+    TritonInferRequestedOutput,
     TritonImageEmbeddingClient,
-    _normalize_triton_http_url,
+    _normalize_triton_grpc_url,
 )
+
+FakeInferCallValue: TypeAlias = str | Sequence[TritonInferInput] | Sequence[TritonInferRequestedOutput]
 
 
 class FakeInferInput:
@@ -43,7 +47,7 @@ class FakeInferenceServerClient:
     def __init__(self, response: FakeResponse | None = None, error: Exception | None = None):
         self.response = response or FakeResponse({"image_embeds": np.ones((1, 768), dtype=np.float32)})
         self.error = error
-        self.infer_calls: MutableSequence[Mapping[str, object]] = []
+        self.infer_calls: MutableSequence[Mapping[str, FakeInferCallValue]] = []
 
     def infer(
         self,
@@ -51,7 +55,7 @@ class FakeInferenceServerClient:
         model_name: str,
         inputs: Sequence[TritonInferInput],
         model_version: str,
-        outputs: Sequence[object],
+        outputs: Sequence[TritonInferRequestedOutput],
     ) -> FakeResponse:
         self.infer_calls.append(
             {
@@ -69,7 +73,7 @@ class FakeInferenceServerClient:
 
 
 @dataclass(frozen=True)
-class FakeHttpClientModule:
+class FakeGrpcClientModule:
     server_factory: Callable[[str], FakeInferenceServerClient]
 
     def InferInput(self, name: str, shape: Sequence[int], datatype: str) -> FakeInferInput:
@@ -96,20 +100,20 @@ def make_client(fake_server: FakeInferenceServerClient) -> ClientFixture:
         return fake_server
 
     client = TritonImageEmbeddingClient(
-        http_url="http://localhost:8000",
+        grpc_url="localhost:8001",
         model_name="image_embedding",
         model_version="1",
         input_tensor_name="pixel_values",
         output_tensor_name="image_embeds",
     )
-    client._httpclient = FakeHttpClientModule(create_server)
+    client._grpcclient = FakeGrpcClientModule(create_server)
     return ClientFixture(client=client, created_urls=created_urls)
 
 
-def test_normalizes_triton_http_url_for_client_library():
-    assert _normalize_triton_http_url("http://localhost:8000") == "localhost:8000"
-    assert _normalize_triton_http_url("https://triton.example.test:8443/v2/") == "triton.example.test:8443/v2"
-    assert _normalize_triton_http_url("filemanager-triton:8000/") == "filemanager-triton:8000"
+def test_normalizes_triton_grpc_url_for_client_library():
+    assert _normalize_triton_grpc_url("grpc://localhost:8001") == "localhost:8001"
+    assert _normalize_triton_grpc_url("grpc://triton.example.test:8443/v2/") == "triton.example.test:8443/v2"
+    assert _normalize_triton_grpc_url("filemanager-triton:8001/") == "filemanager-triton:8001"
 
 
 @pytest.mark.asyncio
@@ -121,7 +125,7 @@ async def test_embed_image_sends_expected_triton_request():
     output = await fixture.client.embed_image(pixel_values)
 
     assert output.shape == (1, 768)
-    assert fixture.created_urls == ["localhost:8000"]
+    assert fixture.created_urls == ["localhost:8001"]
     assert len(fake_server.infer_calls) == 1
     call = fake_server.infer_calls[0]
     assert call["model_name"] == "image_embedding"

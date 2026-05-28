@@ -1,18 +1,22 @@
 import json
 import logging
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import NotRequired, Protocol, TypedDict
 
 from aiokafka import AIOKafkaProducer
+from pydantic import JsonValue
 
 from app.config import settings
 
 logger = logging.getLogger(__name__)
 
+KafkaMessageValue = bytes | str | Mapping[str, JsonValue]
+
 
 class KafkaMessageLike(Protocol):
-    value: object
+    value: KafkaMessageValue
     key: bytes | None
     topic: str
     partition: int
@@ -54,12 +58,17 @@ class KafkaDeadLetterPublisher(DeadLetterPublisher):
         self.producer: AIOKafkaProducer | None = None
         self.topic = settings.kafka_topic_dlq
 
-    async def _ensure_producer(self) -> None:
-        if self.producer is None:
-            self.producer = AIOKafkaProducer(
+    async def _ensure_producer(self) -> AIOKafkaProducer:
+        producer = self.producer
+
+        if producer is None:
+            producer = AIOKafkaProducer(
                 bootstrap_servers=settings.kafka_bootstrap_servers,
             )
-            await self.producer.start()
+            self.producer = producer
+            await producer.start()
+
+        return producer
 
     async def publish_failure(
         self,
@@ -71,8 +80,7 @@ class KafkaDeadLetterPublisher(DeadLetterPublisher):
         processing_job_id: str | None = None,
         job_type: str | None = None,
     ) -> None:
-        await self._ensure_producer()
-        assert self.producer is not None
+        producer = await self._ensure_producer()
 
         raw_value = original_msg.value
 
@@ -83,8 +91,11 @@ class KafkaDeadLetterPublisher(DeadLetterPublisher):
             except UnicodeDecodeError:
                 original_value = f"<Binary Data: {len(raw_value)} bytes>"
 
+        elif isinstance(raw_value, str):
+            original_value = raw_value
+
         else:
-            original_value = str(raw_value)
+            original_value = json.dumps(raw_value)
 
         payload: DeadLetterPayload = {
             "originalTopic": original_msg.topic,
@@ -108,7 +119,7 @@ class KafkaDeadLetterPublisher(DeadLetterPublisher):
             payload["jobType"] = job_type
 
         try:
-            await self.producer.send_and_wait(
+            await producer.send_and_wait(
                 self.topic,
                 json.dumps(payload).encode("utf-8"),
             )

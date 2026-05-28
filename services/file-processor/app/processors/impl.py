@@ -2,14 +2,12 @@ import hashlib
 import logging
 import tempfile
 import warnings
-from collections.abc import Mapping
-
 import imagehash
 from PIL import Image, ImageFile
 
 from app.config import settings
 from app.events.models import FileProcessingRequestedEvent
-from app.processors.base import Processor
+from app.processors.base import Processor, ProcessorResult
 from app.processors.image_mime_types import is_processable_image_mime_type, parse_processable_image_mime_types
 from app.storage.base import ObjectStorageReader
 
@@ -32,7 +30,7 @@ class ChecksumProcessor(Processor):
     def should_process(self, event: FileProcessingRequestedEvent) -> bool:
         return True
 
-    async def process(self, event: FileProcessingRequestedEvent) -> Mapping[str, object]:
+    async def process(self, event: FileProcessingRequestedEvent) -> ProcessorResult:
         logger.info(f"Computing SHA-256 for file {event.file_id}")
         sha256_hash = hashlib.sha256()
 
@@ -62,7 +60,7 @@ class PHashProcessor(Processor):
     def should_process(self, event: FileProcessingRequestedEvent) -> bool:
         return is_processable_image_mime_type(event.mime_type, self.processable_image_mime_types)
 
-    async def process(self, event: FileProcessingRequestedEvent) -> Mapping[str, object]:
+    async def process(self, event: FileProcessingRequestedEvent) -> ProcessorResult:
         logger.info(f"Computing pHash for image {event.file_id}")
 
         total_bytes = 0

@@ -2,7 +2,7 @@ import logging
 import tempfile
 import warnings
 from contextlib import contextmanager
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Iterator, Sequence
 from typing import cast
 
 import numpy as np
@@ -15,7 +15,7 @@ from app.embeddings.base import (
     ImageEmbeddingServiceUnavailable,
 )
 from app.events.models import FileProcessingRequestedEvent
-from app.processors.base import Processor
+from app.processors.base import Processor, ProcessorResult
 from app.processors.image_mime_types import is_processable_image_mime_type, parse_processable_image_mime_types
 from app.storage.base import ObjectStorageReader
 from app.worker.errors import NonRetryableProcessingError, RetryableProcessingError
@@ -62,7 +62,7 @@ class ImageEmbeddingProcessor(Processor):
             return False
         return is_processable_image_mime_type(event.mime_type, self.processable_image_mime_types)
 
-    async def process(self, event: FileProcessingRequestedEvent) -> Mapping[str, object]:
+    async def process(self, event: FileProcessingRequestedEvent) -> ProcessorResult:
         logger.info("Computing image embedding for file %s", event.file_id)
 
         pixel_values = await self._read_and_preprocess(event)
@@ -159,7 +159,7 @@ class ImageEmbeddingProcessor(Processor):
         if not np.isfinite(norm) or norm == 0.0:
             raise NonRetryableProcessingError("Image embedding output norm must be finite and non-zero")
 
-        normalized = cast(np.ndarray, output / norm)
+        normalized = np.asarray(output / norm, dtype=np.float32)
         return [float(value) for value in normalized.tolist()]
 
 
@@ -181,7 +181,7 @@ def normalize_embedding_image(
     max_source_pixels: int,
     direct_decode_max_pixels: int,
 ) -> Image.Image:
-    width, height = image.size
+    width, height = cast(tuple[int, int], image.size)
     source_pixels = width * height
 
     if source_pixels <= 0:
@@ -192,7 +192,7 @@ def normalize_embedding_image(
 
     if source_pixels > direct_decode_max_pixels:
         image.draft("RGB", (input_size * 2, input_size * 2))
-        width, height = image.size
+        width, height = cast(tuple[int, int], image.size)
         decoded_pixels = width * height
 
         if decoded_pixels > direct_decode_max_pixels:
@@ -204,13 +204,13 @@ def normalize_embedding_image(
             decoded_pixels,
         )
 
-    transposed = cast(Image.Image, ImageOps.exif_transpose(image))
+    transposed = ImageOps.exif_transpose(image)
     return transposed.convert("RGB")
 
 
 def preprocess_clip_image(image: Image.Image, input_size: int) -> np.ndarray:
     image = image.convert("RGB")
-    width, height = image.size
+    width, height = cast(tuple[int, int], image.size)
     shortest_edge = min(width, height)
 
     if shortest_edge <= 0:

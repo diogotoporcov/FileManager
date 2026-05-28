@@ -1,6 +1,6 @@
 import asyncio
 from collections.abc import Sequence
-from typing import Protocol, cast
+from typing import Any, Protocol, cast
 from urllib.parse import urlparse
 
 import numpy as np
@@ -22,6 +22,10 @@ class TritonInferResponse(Protocol):
         pass
 
 
+class TritonInferRequestedOutput(Protocol):
+    pass
+
+
 class TritonInferenceServerClient(Protocol):
     def infer(
         self,
@@ -29,16 +33,16 @@ class TritonInferenceServerClient(Protocol):
         model_name: str,
         inputs: Sequence[TritonInferInput],
         model_version: str,
-        outputs: Sequence[object],
+        outputs: Sequence[TritonInferRequestedOutput],
     ) -> TritonInferResponse:
         pass
 
 
-class TritonHttpClientModule(Protocol):
+class TritonGrpcClientModule(Protocol):
     def InferInput(self, name: str, shape: Sequence[int], datatype: str) -> TritonInferInput:
         pass
 
-    def InferRequestedOutput(self, name: str) -> object:
+    def InferRequestedOutput(self, name: str) -> TritonInferRequestedOutput:
         pass
 
     def InferenceServerClient(self, *, url: str) -> TritonInferenceServerClient:
@@ -48,34 +52,34 @@ class TritonHttpClientModule(Protocol):
 class TritonImageEmbeddingClient(ImageEmbeddingInferenceClient):
     def __init__(
         self,
-        http_url: str,
+        grpc_url: str,
         model_name: str,
         model_version: str,
         input_tensor_name: str,
         output_tensor_name: str,
     ):
-        self.http_url = _normalize_triton_http_url(http_url)
+        self.grpc_url = _normalize_triton_grpc_url(grpc_url)
         self.model_name = model_name
         self.model_version = model_version
         self.input_tensor_name = input_tensor_name
         self.output_tensor_name = output_tensor_name
         self._client: TritonInferenceServerClient | None = None
-        self._httpclient: TritonHttpClientModule | None = None
+        self._grpcclient: TritonGrpcClientModule | None = None
 
     async def embed_image(self, pixel_values: np.ndarray) -> np.ndarray:
         return await asyncio.to_thread(self._infer, pixel_values)
 
     def _infer(self, pixel_values: np.ndarray) -> np.ndarray:
-        httpclient = self._get_httpclient()
+        grpcclient = self._get_grpcclient()
         try:
-            infer_input = httpclient.InferInput(
+            infer_input = grpcclient.InferInput(
                 self.input_tensor_name,
                 list(pixel_values.shape),
                 "FP32",
             )
             infer_input.set_data_from_numpy(pixel_values)
 
-            requested_output = httpclient.InferRequestedOutput(self.output_tensor_name)
+            requested_output = grpcclient.InferRequestedOutput(self.output_tensor_name)
             response = self._get_client().infer(
                 model_name=self.model_name,
                 inputs=[infer_input],
@@ -95,25 +99,32 @@ class TritonImageEmbeddingClient(ImageEmbeddingInferenceClient):
         except Exception as exc:
             raise ImageEmbeddingServiceUnavailable("Triton image embedding inference failed") from exc
 
-    def _get_httpclient(self) -> TritonHttpClientModule:
-        if self._httpclient is None:
-            import tritonclient.http as httpclient  # type: ignore[import-untyped]
+    def _get_grpcclient(self) -> TritonGrpcClientModule:
+        grpcclient_module = self._grpcclient
 
-            self._httpclient = cast(TritonHttpClientModule, httpclient)
+        if grpcclient_module is None:
+            import tritonclient.grpc as grpcclient
 
-        return self._httpclient
+            imported_grpcclient: Any = grpcclient
+            grpcclient_module = cast(TritonGrpcClientModule, imported_grpcclient)
+            self._grpcclient = grpcclient_module
+
+        return grpcclient_module
 
     def _get_client(self) -> TritonInferenceServerClient:
-        if self._client is None:
-            self._client = self._get_httpclient().InferenceServerClient(url=self.http_url)
+        client = self._client
 
-        return self._client
+        if client is None:
+            client = self._get_grpcclient().InferenceServerClient(url=self.grpc_url)
+            self._client = client
+
+        return client
 
 
-def _normalize_triton_http_url(url: str) -> str:
+def _normalize_triton_grpc_url(url: str) -> str:
     parsed = urlparse(url)
 
-    if parsed.scheme in {"http", "https"} and parsed.netloc:
+    if parsed.scheme == "grpc" and parsed.netloc:
         return parsed.netloc + parsed.path.rstrip("/")
 
     return url.rstrip("/")

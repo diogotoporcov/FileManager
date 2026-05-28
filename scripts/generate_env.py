@@ -9,6 +9,9 @@ from enum import Enum
 from pathlib import Path
 
 import sys
+from typing import TypeAlias
+
+SecretOptionValue: TypeAlias = str | int | bool
 
 
 # Enums
@@ -32,7 +35,7 @@ class BaseSecretGenerator(ABC):
         return []
 
     @abstractmethod
-    def generate(self, **kwargs: object) -> str:
+    def generate(self, **kwargs: SecretOptionValue) -> str:
         """Generate a secret string."""
         pass
 
@@ -41,38 +44,49 @@ class LengthSecretGenerator(BaseSecretGenerator):
     def get_params(self) -> Sequence[str]:
         return ["length"]
 
-    @abstractmethod
-    def generate(self, length: int = 24) -> str:
-        pass
+    @staticmethod
+    def _get_length(kwargs: Mapping[str, SecretOptionValue]) -> int:
+        length = kwargs.get("length", 24)
+
+        if type(length) is not int:
+            raise ValueError(f"Invalid length value: {length}")
+
+        return length
 
 class HexGenerator(LengthSecretGenerator):
-    def generate(self, length: int = 24) -> str:
+    def generate(self, **kwargs: SecretOptionValue) -> str:
+        length = self._get_length(kwargs)
         return secrets.token_hex((length + 1) // 2)[:length]
 
 class UrlsafeGenerator(LengthSecretGenerator):
-    def generate(self, length: int = 24) -> str:
+    def generate(self, **kwargs: SecretOptionValue) -> str:
+        length = self._get_length(kwargs)
         return secrets.token_urlsafe(length)[:length]
 
 class AlphanumericGenerator(LengthSecretGenerator):
-    def generate(self, length: int = 24) -> str:
+    def generate(self, **kwargs: SecretOptionValue) -> str:
+        length = self._get_length(kwargs)
         alphabet = string.ascii_letters + string.digits
         return "".join(secrets.choice(alphabet) for _ in range(length))
 
 class LettersGenerator(LengthSecretGenerator):
-    def generate(self, length: int = 24) -> str:
+    def generate(self, **kwargs: SecretOptionValue) -> str:
+        length = self._get_length(kwargs)
         return "".join(secrets.choice(string.ascii_letters) for _ in range(length))
 
 class NumericGenerator(LengthSecretGenerator):
-    def generate(self, length: int = 24) -> str:
+    def generate(self, **kwargs: SecretOptionValue) -> str:
+        length = self._get_length(kwargs)
         return "".join(secrets.choice(string.digits) for _ in range(length))
 
 class PasswordGenerator(LengthSecretGenerator):
-    def generate(self, length: int = 24) -> str:
+    def generate(self, **kwargs: SecretOptionValue) -> str:
+        length = self._get_length(kwargs)
         alphabet = string.ascii_letters + string.digits + "!@#$%^&*()-_=+[]{}|;:,.<>?"
         return "".join(secrets.choice(alphabet) for _ in range(length))
 
 class UuidGenerator(BaseSecretGenerator):
-    def generate(self, **kwargs: object) -> str:
+    def generate(self, **kwargs: SecretOptionValue) -> str:
         return str(uuid.uuid4())
 
 # Registry
@@ -131,9 +145,9 @@ class SecretGenerator:
         algo: SecretAlgorithm,
         params: Sequence[str],
         options: Sequence[str],
-    ) -> Mapping[str, object]:
+    ) -> Mapping[str, SecretOptionValue]:
         """Parses positional and named options into a keyword argument dictionary."""
-        kwargs: MutableMapping[str, object] = {"length": self.DEFAULT_LENGTH} if "length" in params else {}
+        kwargs: MutableMapping[str, SecretOptionValue] = {"length": self.DEFAULT_LENGTH} if "length" in params else {}
         
         for i, opt in enumerate(options):
             if "=" in opt:
@@ -156,7 +170,7 @@ class SecretGenerator:
         return kwargs
 
     @staticmethod
-    def _cast_value(val: str, param_name: str = "") -> object:
+    def _cast_value(val: str, param_name: str = "") -> SecretOptionValue:
         """Helper to cast string options to appropriate types."""
         if param_name == "length":
             if not val.isdigit():

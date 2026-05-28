@@ -1,12 +1,12 @@
 import logging
 import math
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from typing import TypedDict
 
 from app import metrics
 from app.events.models import FileProcessingRequestedEvent
-from app.processors.base import Processor
+from app.processors.base import Processor, ProcessorResult
 from app.sinks.base import ProcessingResultSink
 from app.worker.errors import NonRetryableProcessingError, RetryableProcessingError
 
@@ -25,7 +25,7 @@ class ProcessingFlow:
         self.processors = {p.name.upper(): p for p in processors}
         self.result_sink = result_sink
 
-    async def run(self, event: FileProcessingRequestedEvent) -> Mapping[str, object]:
+    async def run(self, event: FileProcessingRequestedEvent) -> ProcessorResult:
         logger.info(f"Starting processing flow for job: {event.processing_job_id} ({event.job_type})")
         start_time = time.perf_counter()
 
@@ -54,7 +54,7 @@ class ProcessingFlow:
         return processor
 
     @staticmethod
-    async def _execute_processor(processor: Processor, event: FileProcessingRequestedEvent) -> Mapping[str, object]:
+    async def _execute_processor(processor: Processor, event: FileProcessingRequestedEvent) -> ProcessorResult:
         proc_start = time.perf_counter()
 
         try:
@@ -86,7 +86,7 @@ class ProcessingFlow:
             proc_duration = time.perf_counter() - proc_start
             metrics.PROCESSOR_DURATION.labels(processor=processor.name).observe(proc_duration)
 
-    async def _report_result(self, event: FileProcessingRequestedEvent, processor: Processor, result: Mapping[str, object]):
+    async def _report_result(self, event: FileProcessingRequestedEvent, processor: Processor, result: ProcessorResult):
         job_type = event.job_type.upper()
 
         try:
@@ -116,19 +116,32 @@ class ProcessingFlow:
             raise RetryableProcessingError(f"Failed to report success: {exc}") from exc
 
     @staticmethod
-    def _extract_result(result: Mapping[str, object], key: str, expected_length: int, processor_name: str) -> str:
+    def _extract_result(result: ProcessorResult, key: str, expected_length: int, processor_name: str) -> str:
         if key not in result:
             raise NonRetryableProcessingError(f"Processor {processor_name} did not produce required '{key}' output")
 
         val = result[key]
 
-        if not isinstance(val, str) or len(val) != expected_length or not all(c in "0123456789abcdef" for c in val.lower()):
-            raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid '{key}' format: {val}")
+        if not isinstance(val, str):
+            raise NonRetryableProcessingError(
+                f"Processor {processor_name} produced invalid '{key}' format: expected string, got {type(val).__name__}"
+            )
+
+        if len(val) != expected_length:
+            raise NonRetryableProcessingError(
+                f"Processor {processor_name} produced invalid '{key}' format: "
+                f"expected {expected_length} hex characters, got {len(val)}"
+            )
+
+        if not all(c in "0123456789abcdef" for c in val.lower()):
+            raise NonRetryableProcessingError(
+                f"Processor {processor_name} produced invalid '{key}' format: expected hexadecimal string"
+            )
 
         return val
 
     @staticmethod
-    def _extract_embedding_result(result: Mapping[str, object], processor_name: str) -> EmbeddingResult:
+    def _extract_embedding_result(result: ProcessorResult, processor_name: str) -> EmbeddingResult:
         required_keys = {"modelName", "modelVersion", "dimension", "embedding"}
         missing = required_keys - result.keys()
 
