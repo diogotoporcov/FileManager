@@ -1,3 +1,3 @@
 rootProject.name = "filemanager"
-include("services:filemanager-api")
-include("services:filemanager-gateway")
+include("services:api")
+include("services:gateway")
