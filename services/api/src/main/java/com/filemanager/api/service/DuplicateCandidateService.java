@@ -71,34 +71,20 @@ public class DuplicateCandidateService {
             CandidateStatus status,
             UUID actorUserId,
             BoundedOffsetPageRequest pageRequest) {
-        
-        accessControlService.assertCanViewDuplicates(actorUserId, ownerUserId, ownerOrganizationId);
-        validateOwnerContext(ownerUserId, ownerOrganizationId);
-
-        Page<DuplicateCandidate> candidates = duplicateCandidateSearchPort.search(new DuplicateCandidateSearchRequest(
-                null,
+        return getDuplicatesForOwnerInternal(
                 ownerUserId,
                 ownerOrganizationId,
                 method,
-                status
-        ), PageRequest.of(pageRequest.page(), pageRequest.size(), duplicateCandidateSort()));
-
-        return PageResponse.<DuplicateCandidateResponse>builder()
-                .items(candidates.getContent().stream()
-                        .map(this::mapToDuplicateCandidateResponse)
-                        .collect(Collectors.toList()))
-                .page(pageRequest.page())
-                .pageSize(pageRequest.size())
-                .hasMore(candidates.hasNext())
-                .totalItems(candidates.getTotalElements())
-                .totalPages(candidates.getTotalPages())
-                .build();
+                status,
+                actorUserId,
+                pageRequest);
     }
 
+    @Transactional(readOnly = true)
     public List<DuplicateCandidateResponse> getDuplicatesForOwner(
             UUID ownerUserId, UUID ownerOrganizationId,
             DetectionMethod method, CandidateStatus status, UUID actorUserId) {
-        return getDuplicatesForOwner(
+        return getDuplicatesForOwnerInternal(
                 ownerUserId,
                 ownerOrganizationId,
                 method,
@@ -130,6 +116,36 @@ public class DuplicateCandidateService {
         if ((ownerUserId == null && ownerOrganizationId == null) || (ownerUserId != null && ownerOrganizationId != null)) {
             throw new IllegalArgumentException("Exactly one of ownerUserId or ownerOrganizationId must be provided");
         }
+    }
+
+    private PageResponse<DuplicateCandidateResponse> getDuplicatesForOwnerInternal(
+            UUID ownerUserId,
+            UUID ownerOrganizationId,
+            DetectionMethod method,
+            CandidateStatus status,
+            UUID actorUserId,
+            BoundedOffsetPageRequest pageRequest) {
+        accessControlService.assertCanViewDuplicates(actorUserId, ownerUserId, ownerOrganizationId);
+        validateOwnerContext(ownerUserId, ownerOrganizationId);
+
+        Page<DuplicateCandidate> candidates = duplicateCandidateSearchPort.search(new DuplicateCandidateSearchRequest(
+                null,
+                ownerUserId,
+                ownerOrganizationId,
+                method,
+                status
+        ), PageRequest.of(pageRequest.page(), pageRequest.size(), duplicateCandidateSort()));
+
+        return PageResponse.<DuplicateCandidateResponse>builder()
+                .items(candidates.getContent().stream()
+                        .map(this::mapToDuplicateCandidateResponse)
+                        .collect(Collectors.toList()))
+                .page(pageRequest.page())
+                .pageSize(pageRequest.size())
+                .hasMore(candidates.hasNext())
+                .totalItems(candidates.getTotalElements())
+                .totalPages(candidates.getTotalPages())
+                .build();
     }
 
     private void verifyFileOwnership(FileEntity file, UUID ownerUserId, UUID ownerOrganizationId) {

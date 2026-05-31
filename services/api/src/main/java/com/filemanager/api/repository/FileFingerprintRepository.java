@@ -16,51 +16,9 @@ import java.util.UUID;
 
 @Repository
 public interface FileFingerprintRepository extends JpaRepository<FileFingerprint, UUID> {
-    List<FileFingerprint> findByAlgorithmAndHashValueAndFileOwnerUserIdAndFileDeletedAtIsNull(FingerprintAlgorithm algorithm, String hashValue, UUID ownerUserId);
-    List<FileFingerprint> findByAlgorithmAndHashValueAndFileOwnerOrganizationIdAndFileDeletedAtIsNull(FingerprintAlgorithm algorithm, String hashValue, UUID ownerOrganizationId);
     List<FileFingerprint> findByAlgorithmAndHashValueAndFileOwnerUserIdAndFileDeletedAtIsNull(FingerprintAlgorithm algorithm, String hashValue, UUID ownerUserId, Pageable pageable);
     List<FileFingerprint> findByAlgorithmAndHashValueAndFileOwnerOrganizationIdAndFileDeletedAtIsNull(FingerprintAlgorithm algorithm, String hashValue, UUID ownerOrganizationId, Pageable pageable);
     Optional<FileFingerprint> findByFileIdAndAlgorithm(UUID fileId, FingerprintAlgorithm algorithm);
-
-    @Query("""
-            select fp
-            from FileFingerprint fp
-            join fetch fp.file f
-            where fp.algorithm = :algorithm
-              and f.deletedAt is null
-              and f.ownerUser.id = :ownerUserId
-              and fp.hashValue in (
-                  select grouped.hashValue
-                  from FileFingerprint grouped
-                  where grouped.algorithm = :algorithm
-                    and grouped.file.deletedAt is null
-                    and grouped.file.ownerUser.id = :ownerUserId
-                  group by grouped.hashValue
-                  having count(grouped) > 1
-              )
-            order by fp.hashValue asc, f.createdAt asc, f.id asc
-            """)
-    List<FileFingerprint> findDuplicateSha256FingerprintsForOwnerUser(FingerprintAlgorithm algorithm, UUID ownerUserId);
-
-    @Query("""
-            select fp
-            from FileFingerprint fp
-            join fetch fp.file f
-            where fp.algorithm = :algorithm
-              and f.deletedAt is null
-              and f.ownerOrganization.id = :ownerOrganizationId
-              and fp.hashValue in (
-                  select grouped.hashValue
-                  from FileFingerprint grouped
-                  where grouped.algorithm = :algorithm
-                    and grouped.file.deletedAt is null
-                    and grouped.file.ownerOrganization.id = :ownerOrganizationId
-                  group by grouped.hashValue
-                  having count(grouped) > 1
-              )
-            order by fp.hashValue asc, f.createdAt asc, f.id asc
-            """)
-    List<FileFingerprint> findDuplicateSha256FingerprintsForOwnerOrganization(FingerprintAlgorithm algorithm, UUID ownerOrganizationId);
 
     @Query(value = """
             WITH duplicate_hashes AS (
@@ -76,23 +34,23 @@ public interface FileFingerprintRepository extends JpaRepository<FileFingerprint
             originals AS (
                 SELECT DISTINCT ON (fp.hash_value)
                        fp.hash_value AS "hashValue",
-                       f.created_at AS "originalCreatedAt",
-                       f.id AS "originalFileId"
+                       f.created_at AS original_created_at,
+                       f.id AS original_file_id
                 FROM file_fingerprints fp
                 JOIN files f ON f.id = fp.file_id
                 JOIN duplicate_hashes dh ON dh.hash_value = fp.hash_value
                 WHERE fp.algorithm = :algorithm
                   AND f.deleted_at IS NULL
                   AND f.owner_user_id = :ownerUserId
-                ORDER BY fp.hash_value, f.created_at ASC, f.id ASC
+                ORDER BY fp.hash_value, f.created_at, f.id
             )
-            SELECT "hashValue", "originalCreatedAt", "originalFileId"
+            SELECT "hashValue"
             FROM originals
             WHERE CAST(:cursorCreatedAt AS timestamptz) IS NULL
-               OR "originalCreatedAt" > CAST(:cursorCreatedAt AS timestamptz)
-               OR ("originalCreatedAt" = CAST(:cursorCreatedAt AS timestamptz)
-                   AND "originalFileId" > CAST(:cursorFileId AS uuid))
-            ORDER BY "originalCreatedAt" ASC, "originalFileId" ASC
+               OR original_created_at > CAST(:cursorCreatedAt AS timestamptz)
+               OR (original_created_at = CAST(:cursorCreatedAt AS timestamptz)
+                   AND original_file_id > CAST(:cursorFileId AS uuid))
+            ORDER BY original_created_at, original_file_id
             LIMIT :maxRows
             """, nativeQuery = true)
     List<DuplicateHashGroupProjection> findDuplicateSha256GroupsForOwnerUser(
@@ -116,23 +74,23 @@ public interface FileFingerprintRepository extends JpaRepository<FileFingerprint
             originals AS (
                 SELECT DISTINCT ON (fp.hash_value)
                        fp.hash_value AS "hashValue",
-                       f.created_at AS "originalCreatedAt",
-                       f.id AS "originalFileId"
+                       f.created_at AS original_created_at,
+                       f.id AS original_file_id
                 FROM file_fingerprints fp
                 JOIN files f ON f.id = fp.file_id
                 JOIN duplicate_hashes dh ON dh.hash_value = fp.hash_value
                 WHERE fp.algorithm = :algorithm
                   AND f.deleted_at IS NULL
                   AND f.owner_organization_id = :ownerOrganizationId
-                ORDER BY fp.hash_value, f.created_at ASC, f.id ASC
+                ORDER BY fp.hash_value, f.created_at, f.id
             )
-            SELECT "hashValue", "originalCreatedAt", "originalFileId"
+            SELECT "hashValue"
             FROM originals
             WHERE CAST(:cursorCreatedAt AS timestamptz) IS NULL
-               OR "originalCreatedAt" > CAST(:cursorCreatedAt AS timestamptz)
-               OR ("originalCreatedAt" = CAST(:cursorCreatedAt AS timestamptz)
-                   AND "originalFileId" > CAST(:cursorFileId AS uuid))
-            ORDER BY "originalCreatedAt" ASC, "originalFileId" ASC
+               OR original_created_at > CAST(:cursorCreatedAt AS timestamptz)
+               OR (original_created_at = CAST(:cursorCreatedAt AS timestamptz)
+                   AND original_file_id > CAST(:cursorFileId AS uuid))
+            ORDER BY original_created_at, original_file_id
             LIMIT :maxRows
             """, nativeQuery = true)
     List<DuplicateHashGroupProjection> findDuplicateSha256GroupsForOwnerOrganization(

@@ -38,7 +38,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.OffsetDateTime;
-import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -47,6 +46,8 @@ import static com.filemanager.api.entity.FileFingerprint.FingerprintAlgorithm.SH
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -219,7 +220,7 @@ class DuplicateSearchServiceTest {
                         new SimilarImageCandidate(crossUser.getId(), 1)));
         when(embeddingSimilaritySearchPort.search(any(EmbeddingSimilaritySearchRequest.class)))
                 .thenReturn(List.of(new EmbeddingSimilarityCandidate(duplicate.getId(), 0.04)));
-        when(fileRepository.findByIdInAndDeletedAtIsNull(any(Collection.class)))
+        when(fileRepository.findByIdInAndDeletedAtIsNull(anyCollection()))
                 .thenReturn(List.of(duplicate, crossUser));
 
         FileDuplicateSearchResponse response = duplicateSearchService.findDuplicatesForFile(
@@ -258,7 +259,8 @@ class DuplicateSearchServiceTest {
                 .thenReturn(List.of(
                         new SimilarImageCandidate(activeDuplicate.getId(), 1),
                         new SimilarImageCandidate(deletedDuplicate.getId(), 1)));
-        when(fileRepository.findByIdInAndDeletedAtIsNull(any(Collection.class))).thenReturn(List.of(activeDuplicate));
+        when(fileRepository.findByIdInAndDeletedAtIsNull(anyCollection()))
+                .thenReturn(List.of(activeDuplicate));
 
         FileDuplicateSearchResponse response = duplicateSearchService.findDuplicatesForFile(
                 source.getId(),
@@ -291,7 +293,7 @@ class DuplicateSearchServiceTest {
                 .thenReturn(List.of(
                         new SimilarImageCandidate(duplicateA.getId(), 1),
                         new SimilarImageCandidate(duplicateB.getId(), 2)));
-        when(fileRepository.findByIdInAndDeletedAtIsNull(any(Collection.class)))
+        when(fileRepository.findByIdInAndDeletedAtIsNull(anyCollection()))
                 .thenReturn(List.of(duplicateA, duplicateB));
 
         FileDuplicateSearchResponse response = duplicateSearchService.findDuplicatesForFile(
@@ -312,19 +314,17 @@ class DuplicateSearchServiceTest {
         FileEntity original = userFile("original.jpg", user, 1);
         FileEntity duplicateA = userFile("a.jpg", user, 2);
         FileEntity duplicateB = userFile("b.jpg", user, 3);
-        FileEntity singleton = userFile("single.jpg", user, 4);
-
         when(fileFingerprintRepository.findDuplicateSha256GroupsForOwnerUser(
                 org.mockito.ArgumentMatchers.eq(SHA256.name()),
                 org.mockito.ArgumentMatchers.eq(user.getId()),
                 any(),
                 any(),
                 any(Integer.class)))
-                .thenReturn(List.of(hashGroup(original)));
+                .thenReturn(List.of(hashGroup()));
         when(fileFingerprintRepository.findByOwnerUserAndAlgorithmAndHashValueIn(
                 org.mockito.ArgumentMatchers.eq(SHA256),
                 org.mockito.ArgumentMatchers.eq(user.getId()),
-                any(Collection.class)))
+                anyCollection()))
                 .thenReturn(List.of(
                         fingerprint(original),
                         fingerprint(duplicateA),
@@ -356,7 +356,7 @@ class DuplicateSearchServiceTest {
                 user.getId()))
                 .isInstanceOf(AccessDeniedException.class);
 
-        verify(fileFingerprintRepository, never()).findDuplicateSha256FingerprintsForOwnerUser(any(), any());
+        verify(fileFingerprintRepository, never()).findDuplicateSha256GroupsForOwnerUser(any(), any(), any(), any(), anyInt());
     }
 
     @Test
@@ -366,7 +366,7 @@ class DuplicateSearchServiceTest {
 
         when(similarImagePairSearchPort.search(any(SimilarImagePairSearchRequest.class)))
                 .thenReturn(List.of(new SimilarImagePairCandidate(source.getId(), duplicate.getId(), 2)));
-        when(fileRepository.findByIdInAndDeletedAtIsNull(any(Collection.class)))
+        when(fileRepository.findByIdInAndDeletedAtIsNull(anyCollection()))
                 .thenReturn(List.of(source, duplicate));
 
         List<DuplicateGroupResponse> response = duplicateSearchService.findDuplicateGroups(
@@ -395,7 +395,7 @@ class DuplicateSearchServiceTest {
 
         when(embeddingSimilarityPairSearchPort.search(any(EmbeddingSimilarityPairSearchRequest.class)))
                 .thenReturn(List.of(new EmbeddingSimilarityPairCandidate(source.getId(), duplicate.getId(), 0.04)));
-        when(fileRepository.findByIdInAndDeletedAtIsNull(any(Collection.class)))
+        when(fileRepository.findByIdInAndDeletedAtIsNull(anyCollection()))
                 .thenReturn(List.of(source, duplicate));
 
         List<DuplicateGroupResponse> response = duplicateSearchService.findDuplicateGroups(
@@ -421,34 +421,15 @@ class DuplicateSearchServiceTest {
     }
 
     private FileFingerprint fingerprint(FileEntity file) {
-        return fingerprint(file, HASH);
-    }
-
-    private FileFingerprint fingerprint(FileEntity file, String hash) {
         return FileFingerprint.builder()
                 .file(file)
                 .algorithm(SHA256)
-                .hashValue(hash)
+                .hashValue(HASH)
                 .build();
     }
 
-    private DuplicateHashGroupProjection hashGroup(FileEntity original) {
-        return new DuplicateHashGroupProjection() {
-            @Override
-            public String getHashValue() {
-                return HASH;
-            }
-
-            @Override
-            public OffsetDateTime getOriginalCreatedAt() {
-                return original.getCreatedAt();
-            }
-
-            @Override
-            public UUID getOriginalFileId() {
-                return original.getId();
-            }
-        };
+    private DuplicateHashGroupProjection hashGroup() {
+        return () -> HASH;
     }
 
     private ImageFingerprint imageFingerprint(FileEntity file) {

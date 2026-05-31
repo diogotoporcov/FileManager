@@ -122,9 +122,7 @@ public class DuplicateSearchService {
         return CursorPageResponse.<DuplicateGroupResponse>builder()
                 .items(pageGroups)
                 .hasMore(hasMore)
-                .nextCursor(hasMore ? BoundedPageRequest.encodeCursor(
-                        last.getOriginalFile().getCreatedAt(),
-                        last.getOriginalFile().getId()) : null)
+                .nextCursor(nextGroupCursor(hasMore, last))
                 .pageSize(pageRequest.size())
                 .build();
     }
@@ -176,7 +174,7 @@ public class DuplicateSearchService {
                 .originalFile(mapToFileSummary(sourceFile))
                 .matches(responses)
                 .hasMore(hasMore)
-                .nextCursor(hasMore ? BoundedPageRequest.encodeCursor(last.getFile().getCreatedAt(), last.getFile().getId()) : null)
+                .nextCursor(nextMatchCursor(hasMore, last))
                 .pageSize(pageRequest.size())
                 .build();
     }
@@ -490,7 +488,7 @@ public class DuplicateSearchService {
                 .add(method, distance, confidenceScore);
     }
 
-    private Set<UUID> pairFileIds(List<? extends Object> pairs) {
+    private Set<UUID> pairFileIds(List<?> pairs) {
         Set<UUID> fileIds = new java.util.LinkedHashSet<>();
         for (Object pair : pairs) {
             if (pair instanceof SimilarImagePairCandidate similarPair) {
@@ -528,6 +526,20 @@ public class DuplicateSearchService {
             return EnumSet.of(DuplicateSearchMethod.SHA256);
         }
         return EnumSet.copyOf(methods);
+    }
+
+    private String nextGroupCursor(boolean hasMore, DuplicateGroupResponse last) {
+        if (!hasMore || last == null || last.getOriginalFile() == null) {
+            return null;
+        }
+        return BoundedPageRequest.encodeCursor(last.getOriginalFile().getCreatedAt(), last.getOriginalFile().getId());
+    }
+
+    private String nextMatchCursor(boolean hasMore, DuplicateMatchResponse last) {
+        if (!hasMore || last == null || last.getFile() == null) {
+            return null;
+        }
+        return BoundedPageRequest.encodeCursor(last.getFile().getCreatedAt(), last.getFile().getId());
     }
 
     private Comparator<DuplicateMatchResponse> matchComparator() {

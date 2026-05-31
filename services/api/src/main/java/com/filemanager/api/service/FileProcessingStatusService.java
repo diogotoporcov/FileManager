@@ -52,9 +52,17 @@ public class FileProcessingStatusService {
                 .map(this::mapToResponse)
                 .collect(Collectors.toList()))
                 .hasMore(hasMore)
-                .nextCursor(hasMore ? BoundedPageRequest.encodeCursor(last.getCreatedAt(), last.getId()) : null)
+                .nextCursor(nextJobCursor(hasMore, last))
                 .pageSize(pageRequest.size())
                 .build();
+    }
+
+    private String nextJobCursor(boolean hasMore, ProcessingJob last) {
+        if (!hasMore || last == null) {
+            return null;
+        }
+
+        return BoundedPageRequest.encodeCursor(last.getCreatedAt(), last.getId());
     }
 
     @Transactional(readOnly = true)

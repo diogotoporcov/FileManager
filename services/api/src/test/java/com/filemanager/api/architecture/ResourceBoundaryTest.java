@@ -22,7 +22,7 @@ class ResourceBoundaryTest {
     private static final Path API_SOURCE = resolveApiSource();
 
     @Test
-    void getCollectionEndpoints_ShouldNotReturnRawLists() throws Exception {
+    void getCollectionEndpoints_ShouldNotReturnRawLists() throws ClassNotFoundException {
         List<Class<?>> controllers = List.of(
                 Class.forName("com.filemanager.api.controller.FileController"),
                 Class.forName("com.filemanager.api.controller.DuplicateCandidateController"),
@@ -40,8 +40,8 @@ class ResourceBoundaryTest {
     }
 
     @Test
-    void repositories_ShouldNotExposeUnpagedFindAllByListMethods() throws Exception {
-        List<String> violations = findJavaFiles(API_SOURCE.resolve("repository"))
+    void repositories_ShouldNotExposeUnpagedFindAllByListMethods() {
+        List<String> violations = findJavaFiles(API_SOURCE.resolve("repository")).stream()
                 .flatMap(this::repositoryMethodViolations)
                 .toList();
 
@@ -73,10 +73,11 @@ class ResourceBoundaryTest {
         return method.getReturnType().equals(List.class);
     }
 
-    private Stream<Path> findJavaFiles(Path directory) {
-        try {
-            return Files.list(directory)
-                    .filter(path -> path.getFileName().toString().endsWith(".java"));
+    private List<Path> findJavaFiles(Path directory) {
+        try (Stream<Path> files = Files.list(directory)) {
+            return files
+                    .filter(path -> path.getFileName().toString().endsWith(".java"))
+                    .toList();
         } catch (Exception ex) {
             throw new IllegalStateException("Failed to inspect source files", ex);
         }

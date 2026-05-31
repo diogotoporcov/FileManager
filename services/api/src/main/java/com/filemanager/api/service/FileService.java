@@ -181,9 +181,17 @@ public class FileService {
         return CursorPageResponse.<FileResponse>builder()
                 .items(pageRows.stream().map(this::mapToFileResponse).toList())
                 .hasMore(hasMore)
-                .nextCursor(hasMore ? BoundedPageRequest.encodeCursor(last.getCreatedAt(), last.getId()) : null)
+                .nextCursor(nextFileCursor(hasMore, last))
                 .pageSize(pageRequest.size())
                 .build();
+    }
+
+    private String nextFileCursor(boolean hasMore, FileListItemProjection last) {
+        if (!hasMore || last == null) {
+            return null;
+        }
+
+        return BoundedPageRequest.encodeCursor(last.getCreatedAt(), last.getId());
     }
 
     private FileResponse mapToFileResponse(FileListItemProjection projection) {
