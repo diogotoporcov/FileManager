@@ -1,7 +1,6 @@
 package com.filemanager.api.service;
 
 import com.filemanager.api.config.AppProperties;
-import com.filemanager.api.entity.DuplicateCandidate;
 import com.filemanager.api.entity.FileEmbedding;
 import com.filemanager.api.entity.FileEntity;
 import com.filemanager.api.entity.FileFingerprint;
@@ -9,13 +8,6 @@ import com.filemanager.api.entity.ImageFingerprint;
 import com.filemanager.api.entity.ProcessingJob;
 import com.filemanager.api.exception.ResourceNotFoundException;
 import com.filemanager.api.port.ApplicationMetricsPort;
-import com.filemanager.api.port.EmbeddingSimilarityCandidate;
-import com.filemanager.api.port.EmbeddingSimilaritySearchPort;
-import com.filemanager.api.port.EmbeddingSimilaritySearchRequest;
-import com.filemanager.api.port.SimilarImageCandidate;
-import com.filemanager.api.port.SimilarImageSearchPort;
-import com.filemanager.api.port.SimilarImageSearchRequest;
-import com.filemanager.api.repository.DuplicateCandidateRepository;
 import com.filemanager.api.repository.FileEmbeddingRepository;
 import com.filemanager.api.repository.FileFingerprintRepository;
 import com.filemanager.api.repository.FileRepository;
@@ -27,8 +19,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
 import java.util.Locale;
+import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -42,10 +34,7 @@ public class ProcessingJobService {
     private final FileFingerprintRepository fileFingerprintRepository;
     private final ImageFingerprintRepository imageFingerprintRepository;
     private final FileEmbeddingRepository fileEmbeddingRepository;
-    private final DuplicateCandidateRepository duplicateCandidateRepository;
     private final ApplicationMetricsPort applicationMetricsPort;
-    private final SimilarImageSearchPort similarImageSearchPort;
-    private final EmbeddingSimilaritySearchPort embeddingSimilaritySearchPort;
     private final AppProperties appProperties;
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -85,17 +74,7 @@ public class ProcessingJobService {
         ProcessingJob job = getAndValidateJob(jobId, fileId, ProcessingJob.JobType.CHECKSUM);
         FileEntity file = getActiveFile(fileId);
 
-        // Record or update SHA-256 fingerprint.
         updateFileFingerprint(file, normalizedSha256);
-
-        // Identify exact-match duplicates within the same ownership scope.
-        List<FileFingerprint> existingFingerprints = findExistingChecksumDuplicates(file, normalizedSha256);
-
-        for (FileFingerprint existing : existingFingerprints) {
-            FileEntity candidateFile = existing.getFile();
-            createExactDuplicateCandidate(file, candidateFile);
-        }
-
         completeJob(job);
     }
 
@@ -109,21 +88,7 @@ public class ProcessingJobService {
         ProcessingJob job = getAndValidateJob(jobId, fileId, ProcessingJob.JobType.PHASH);
         FileEntity file = getActiveFile(fileId);
 
-        // Record or update pHash fingerprint.
         updateImageFingerprint(file, normalizedPhash);
-
-        List<SimilarImageCandidate> similarImages = findSimilarPhashCandidates(file, normalizedPhash);
-        int maxCandidates = appProperties.getPhash().getMaxCandidates();
-        if (similarImages.size() == maxCandidates) {
-            log.warn("pHash match cap reached for file {} at {} candidates", fileId, maxCandidates);
-        }
-
-        for (SimilarImageCandidate candidate : similarImages) {
-            double confidenceScore = 1.0 - ((double) candidate.distance() / 64.0);
-            createDuplicateCandidate(file, candidate.fileId(), DuplicateCandidate.DetectionMethod.PHASH,
-                    (double) candidate.distance(), confidenceScore);
-        }
-
         completeJob(job);
     }
 
@@ -145,26 +110,6 @@ public class ProcessingJobService {
 
         float[] normalizedEmbedding = normalizeEmbedding(embedding);
         updateFileEmbedding(file, modelName, modelVersion, dimension, normalizedEmbedding);
-
-        List<EmbeddingSimilarityCandidate> similarImages = findSimilarEmbeddingCandidates(
-                file,
-                modelName,
-                modelVersion);
-        int maxCandidates = embeddingProperties.getMaxCandidates();
-        if (similarImages.size() == maxCandidates) {
-            log.warn("Embedding match cap reached for file {} at {} candidates", fileId, maxCandidates);
-        }
-
-        for (EmbeddingSimilarityCandidate candidate : similarImages) {
-            double confidenceScore = Math.clamp(1.0 - candidate.distance(), 0.0, 1.0);
-            createDuplicateCandidate(
-                    file,
-                    candidate.fileId(),
-                    DuplicateCandidate.DetectionMethod.EMBEDDING,
-                    candidate.distance(),
-                    confidenceScore);
-        }
-
         completeJob(job);
     }
 
@@ -306,138 +251,10 @@ public class ProcessingJobService {
         return normalized;
     }
 
-    private boolean isEligibleDuplicate(FileEntity file, FileEntity candidateFile) {
-        return !candidateFile.getId().equals(file.getId())
-                && candidateFile.getDeletedAt() == null
-                && belongsToSameOwnerScope(file, candidateFile);
-    }
-
-    private void createExactDuplicateCandidate(FileEntity file, FileEntity candidateFile) {
-        if (!isEligibleDuplicate(file, candidateFile)) {
-            return;
-        }
-
-        createDuplicateCandidate(file, candidateFile, DuplicateCandidate.DetectionMethod.EXACT, 0.0, 1.0);
-    }
-
-    private void createDuplicateCandidate(FileEntity file, UUID candidateFileId, DuplicateCandidate.DetectionMethod method, Double distance, Double confidenceScore) {
-        if (candidateFileId.equals(file.getId())) {
-            return;
-        }
-
-        fileRepository.findByIdAndDeletedAtIsNull(candidateFileId)
-                .filter(candidateFile -> isEligibleDuplicate(file, candidateFile))
-                .ifPresent(candidateFile -> createDuplicateCandidate(file, candidateFile, method, distance, confidenceScore));
-    }
-
-    private void createDuplicateCandidate(FileEntity file, FileEntity candidateFile, DuplicateCandidate.DetectionMethod method, Double distance, Double confidenceScore) {
-        if (!isEligibleDuplicate(file, candidateFile)) {
-            return;
-        }
-
-        boolean exists = duplicateCandidateRepository.existsBySourceFileIdAndCandidateFileIdAndDetectionMethod(
-                file.getId(), candidateFile.getId(), method)
-                || duplicateCandidateRepository.existsBySourceFileIdAndCandidateFileIdAndDetectionMethod(
-                candidateFile.getId(), file.getId(), method);
-
-        if (!exists) {
-            DuplicateCandidate candidate = DuplicateCandidate.builder()
-                    .sourceFile(file)
-                    .candidateFile(candidateFile)
-                    .detectionMethod(method)
-                    .distance(distance)
-                    .confidenceScore(confidenceScore)
-                    .status(DuplicateCandidate.CandidateStatus.PENDING)
-                    .build();
-
-            duplicateCandidateRepository.save(candidate);
-            applicationMetricsPort.recordDuplicateCandidateCreated(method.name());
-            log.info("Created {} duplicate candidate: {} and {}", method, file.getId(), candidateFile.getId());
-        }
-    }
-
-    private boolean belongsToSameOwnerScope(FileEntity file, FileEntity candidateFile) {
-        if (file.getOwnerUser() != null) {
-            return candidateFile.getOwnerUser() != null
-                    && file.getOwnerUser().getId().equals(candidateFile.getOwnerUser().getId());
-        }
-        if (file.getOwnerOrganization() != null) {
-            return candidateFile.getOwnerOrganization() != null
-                    && file.getOwnerOrganization().getId().equals(candidateFile.getOwnerOrganization().getId());
-        }
-        return false;
-    }
-
     private void completeJob(ProcessingJob job) {
         job.setStatus(ProcessingJob.JobStatus.COMPLETED);
         job.setErrorMessage(null);
         processingJobRepository.save(job);
         applicationMetricsPort.recordJobCompleted(job.getJobType().name());
-    }
-
-    private List<FileFingerprint> findExistingChecksumDuplicates(FileEntity file, String hashValue) {
-        if (file.getOwnerUser() != null) {
-            return fileFingerprintRepository.findByAlgorithmAndHashValueAndFileOwnerUserIdAndFileDeletedAtIsNull(
-                    FileFingerprint.FingerprintAlgorithm.SHA256, hashValue, file.getOwnerUser().getId());
-        }
-
-        if (file.getOwnerOrganization() != null) {
-            return fileFingerprintRepository.findByAlgorithmAndHashValueAndFileOwnerOrganizationIdAndFileDeletedAtIsNull(
-                    FileFingerprint.FingerprintAlgorithm.SHA256, hashValue, file.getOwnerOrganization().getId());
-        }
-
-        return List.of();
-    }
-
-    private List<SimilarImageCandidate> findSimilarPhashCandidates(FileEntity file, String phash) {
-        if (file.getOwnerUser() != null) {
-            return similarImageSearchPort.search(new SimilarImageSearchRequest(
-                    file.getId(),
-                    file.getOwnerUser().getId(),
-                    null,
-                    phash,
-                    appProperties.getPhash().getThreshold(),
-                    appProperties.getPhash().getMaxCandidates()));
-        }
-
-        if (file.getOwnerOrganization() != null) {
-            return similarImageSearchPort.search(new SimilarImageSearchRequest(
-                    file.getId(),
-                    null,
-                    file.getOwnerOrganization().getId(),
-                    phash,
-                    appProperties.getPhash().getThreshold(),
-                    appProperties.getPhash().getMaxCandidates()));
-        }
-        return List.of();
-    }
-
-    private List<EmbeddingSimilarityCandidate> findSimilarEmbeddingCandidates(
-            FileEntity file,
-            String modelName,
-            String modelVersion) {
-        AppProperties.Embedding embeddingProperties = appProperties.getEmbedding();
-        if (file.getOwnerUser() != null) {
-            return embeddingSimilaritySearchPort.search(new EmbeddingSimilaritySearchRequest(
-                    file.getId(),
-                    file.getOwnerUser().getId(),
-                    null,
-                    modelName,
-                    modelVersion,
-                    embeddingProperties.getSimilarityThreshold(),
-                    embeddingProperties.getMaxCandidates()));
-        }
-
-        if (file.getOwnerOrganization() != null) {
-            return embeddingSimilaritySearchPort.search(new EmbeddingSimilaritySearchRequest(
-                    file.getId(),
-                    null,
-                    file.getOwnerOrganization().getId(),
-                    modelName,
-                    modelVersion,
-                    embeddingProperties.getSimilarityThreshold(),
-                    embeddingProperties.getMaxCandidates()));
-        }
-        return List.of();
     }
 }

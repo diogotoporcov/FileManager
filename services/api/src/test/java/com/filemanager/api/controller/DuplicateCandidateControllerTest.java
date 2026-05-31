@@ -2,10 +2,15 @@ package com.filemanager.api.controller;
 
 import com.filemanager.api.auth.CurrentUserService;
 import com.filemanager.api.dto.DuplicateCandidateResponse;
+import com.filemanager.api.dto.DuplicateGroupResponse;
+import com.filemanager.api.dto.DuplicateSearchMethod;
 import com.filemanager.api.dto.DuplicateStatusUpdateRequest;
-import com.filemanager.api.dto.FileDuplicateResponse;
+import com.filemanager.api.dto.FileDuplicateSearchResponse;
+import com.filemanager.api.dto.CursorPageResponse;
+import com.filemanager.api.dto.PageResponse;
 import com.filemanager.api.entity.DuplicateCandidate.CandidateStatus;
 import com.filemanager.api.service.DuplicateCandidateService;
+import com.filemanager.api.service.DuplicateSearchService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -27,6 +32,9 @@ class DuplicateCandidateControllerTest {
     private DuplicateCandidateService duplicateCandidateService;
 
     @Mock
+    private DuplicateSearchService duplicateSearchService;
+
+    @Mock
     private CurrentUserService currentUserService;
 
     @InjectMocks
@@ -35,28 +43,42 @@ class DuplicateCandidateControllerTest {
     @Test
     void getDuplicatesForFile_ReturnsOk() {
         UUID fileId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+
+        when(currentUserService.getCurrentUserId()).thenReturn(actorId);
+        when(duplicateSearchService.findDuplicatesForFile(eq(fileId), eq(actorId), any(), any()))
+                .thenReturn(FileDuplicateSearchResponse.builder().matches(List.of()).build());
+
+        FileDuplicateSearchResponse result = duplicateCandidateController.getDuplicatesForFile(
+                fileId, List.of(DuplicateSearchMethod.SHA256), null, null);
+
+        assertThat(result).isNotNull();
+    }
+
+    @Test
+    void getDuplicateGroups_ReturnsOk() {
         UUID ownerId = UUID.randomUUID();
 
         when(currentUserService.getCurrentUserId()).thenReturn(ownerId);
-        when(duplicateCandidateService.getDuplicatesForFile(eq(fileId), eq(ownerId), eq(null), any(), any(), eq(ownerId)))
-                .thenReturn(List.of());
+        when(duplicateSearchService.findDuplicateGroups(eq(ownerId), eq(null), any(), eq(ownerId), any()))
+                .thenReturn(CursorPageResponse.<DuplicateGroupResponse>builder().items(List.of()).build());
 
-        List<FileDuplicateResponse> result = duplicateCandidateController.getDuplicatesForFile(
-                fileId, ownerId, null, null, null);
+        CursorPageResponse<DuplicateGroupResponse> result = duplicateCandidateController.getDuplicateGroups(
+                ownerId, null, List.of(DuplicateSearchMethod.SHA256), null, null);
         
         assertThat(result).isNotNull();
     }
 
     @Test
-    void getDuplicatesForOwner_ReturnsOk() {
+    void getPersistedDuplicatesForOwner_ReturnsOk() {
         UUID ownerId = UUID.randomUUID();
 
         when(currentUserService.getCurrentUserId()).thenReturn(ownerId);
-        when(duplicateCandidateService.getDuplicatesForOwner(eq(ownerId), eq(null), any(), any(), eq(ownerId)))
-                .thenReturn(List.of());
+        when(duplicateCandidateService.getDuplicatesForOwner(eq(ownerId), eq(null), any(), any(), eq(ownerId), any()))
+                .thenReturn(PageResponse.<DuplicateCandidateResponse>builder().items(List.of()).build());
 
-        List<DuplicateCandidateResponse> result = duplicateCandidateController.getDuplicatesForOwner(
-                ownerId, null, null, null);
+        PageResponse<DuplicateCandidateResponse> result = duplicateCandidateController.getDuplicatesForOwner(
+                ownerId, null, null, null, null, null);
         
         assertThat(result).isNotNull();
     }

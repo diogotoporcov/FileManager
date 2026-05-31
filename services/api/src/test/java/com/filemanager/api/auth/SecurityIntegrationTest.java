@@ -1,5 +1,8 @@
 package com.filemanager.api.auth;
 
+import com.filemanager.api.dto.BoundedPageRequest;
+import com.filemanager.api.dto.CursorPageResponse;
+import com.filemanager.api.dto.FileResponse;
 import com.filemanager.api.entity.User;
 import com.filemanager.api.exception.AccessDeniedException;
 import com.filemanager.api.service.FileService;
@@ -83,14 +86,15 @@ class SecurityIntegrationTest {
         User user = User.builder().id(userId).email("test@example.com").build();
 
         when(identityResolutionService.resolveUser(any())).thenReturn(user);
-        when(fileService.listFiles(any(), any(), eq(userId))).thenReturn(List.of());
+        when(fileService.listFiles(any(), any(), eq(userId), any(BoundedPageRequest.class)))
+                .thenReturn(CursorPageResponse.<FileResponse>builder().items(java.util.List.of()).build());
 
         mockMvc.perform(get("/files")
                         .with(jwt().jwt(builder -> builder.subject("sub-123"))))
                 .andExpect(status().isOk());
 
         verify(identityResolutionService).resolveUser(any());
-        verify(fileService).listFiles(any(), any(), eq(userId));
+        verify(fileService).listFiles(any(), any(), eq(userId), any(BoundedPageRequest.class));
     }
 
     @Test
@@ -100,15 +104,16 @@ class SecurityIntegrationTest {
         User user = User.builder().id(actualUserId).email("test@example.com").build();
 
         when(identityResolutionService.resolveUser(any())).thenReturn(user);
-        when(fileService.listFiles(any(), any(), eq(actualUserId))).thenReturn(List.of());
+        when(fileService.listFiles(any(), any(), eq(actualUserId), any(BoundedPageRequest.class)))
+                .thenReturn(CursorPageResponse.<FileResponse>builder().items(java.util.List.of()).build());
 
         mockMvc.perform(get("/files")
                         .param("actorUserId", ignoredUserId.toString())
                         .with(jwt().jwt(builder -> builder.subject("sub-123"))))
                 .andExpect(status().isOk());
 
-        verify(fileService).listFiles(any(), any(), eq(actualUserId));
-        verify(fileService, never()).listFiles(any(), any(), eq(ignoredUserId));
+        verify(fileService).listFiles(any(), any(), eq(actualUserId), any(BoundedPageRequest.class));
+        verify(fileService, never()).listFiles(any(), any(), eq(ignoredUserId), any(BoundedPageRequest.class));
     }
 
     @Test
@@ -117,7 +122,7 @@ class SecurityIntegrationTest {
         User user = User.builder().id(userId).email("test@example.com").build();
 
         when(identityResolutionService.resolveUser(any())).thenReturn(user);
-        when(fileService.listFiles(any(), any(), eq(userId)))
+        when(fileService.listFiles(any(), any(), eq(userId), any(BoundedPageRequest.class)))
                 .thenThrow(new AccessDeniedException("Forbidden"));
 
         mockMvc.perform(get("/files")

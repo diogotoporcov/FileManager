@@ -15,6 +15,7 @@ import com.filemanager.api.repository.FileRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.data.domain.PageImpl;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -83,7 +84,7 @@ class DuplicateCandidateServiceTest {
     @Test
     void getDuplicatesForFile_Success() {
         when(fileRepository.findByIdAndDeletedAtIsNull(file1.getId())).thenReturn(Optional.of(file1));
-        when(duplicateCandidateSearchPort.search(any())).thenReturn(List.of(candidate));
+        when(duplicateCandidateSearchPort.search(any(), any())).thenReturn(new PageImpl<>(List.of(candidate)));
 
         List<FileDuplicateResponse> result = duplicateCandidateService.getDuplicatesForFile(
                 file1.getId(), owner.getId(), null, null, null, owner.getId());
@@ -96,7 +97,7 @@ class DuplicateCandidateServiceTest {
     @Test
     void getDuplicatesForFile_Bidirectional_Success() {
         when(fileRepository.findByIdAndDeletedAtIsNull(file2.getId())).thenReturn(Optional.of(file2));
-        when(duplicateCandidateSearchPort.search(any())).thenReturn(List.of(candidate));
+        when(duplicateCandidateSearchPort.search(any(), any())).thenReturn(new PageImpl<>(List.of(candidate)));
 
         List<FileDuplicateResponse> result = duplicateCandidateService.getDuplicatesForFile(
                 file2.getId(), owner.getId(), null, null, null, owner.getId());
@@ -118,7 +119,7 @@ class DuplicateCandidateServiceTest {
 
     @Test
     void getDuplicatesForOwner_Success() {
-        when(duplicateCandidateSearchPort.search(any())).thenReturn(List.of(candidate));
+        when(duplicateCandidateSearchPort.search(any(), any())).thenReturn(new PageImpl<>(List.of(candidate)));
 
         List<DuplicateCandidateResponse> result = duplicateCandidateService.getDuplicatesForOwner(
                 owner.getId(), null, null, null, owner.getId());

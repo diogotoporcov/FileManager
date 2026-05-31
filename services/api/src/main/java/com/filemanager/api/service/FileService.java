@@ -3,6 +3,9 @@ package com.filemanager.api.service;
 import com.filemanager.api.auth.AccessControlService;
 import com.filemanager.api.auth.Permission;
 import com.filemanager.api.config.AppProperties;
+import com.filemanager.api.dto.BoundedPageRequest;
+import com.filemanager.api.dto.CursorPageResponse;
+import com.filemanager.api.dto.FileResponse;
 import com.filemanager.api.event.FileProcessingRequestedEvent;
 import com.filemanager.api.entity.FileEntity;
 import com.filemanager.api.entity.Organization;
@@ -15,6 +18,7 @@ import com.filemanager.api.port.ObjectStoragePort;
 import com.filemanager.api.port.StoreObjectRequest;
 import com.filemanager.api.port.StoreObjectResponse;
 import com.filemanager.api.repository.FileRepository;
+import com.filemanager.api.repository.FileListItemProjection;
 import com.filemanager.api.repository.OrganizationRepository;
 import com.filemanager.api.repository.ProcessingJobRepository;
 import com.filemanager.api.repository.UserRepository;
@@ -134,23 +138,65 @@ public class FileService {
         }
     }
 
-    public List<FileEntity> listFiles(UUID ownerUserId, UUID ownerOrganizationId, UUID actorUserId) {
+    public CursorPageResponse<FileResponse> listFiles(
+            UUID ownerUserId,
+            UUID ownerOrganizationId,
+            UUID actorUserId,
+            BoundedPageRequest pageRequest) {
         validateExactlyOneOwner(ownerUserId, ownerOrganizationId);
+        BoundedPageRequest.SeekCursor cursor = pageRequest.decodedCursor();
+        List<FileListItemProjection> rows;
 
         if (ownerUserId != null) {
             if (!ownerUserId.equals(actorUserId)) {
                 throw new AccessDeniedException("You can only list your own files.");
             }
 
-            User user = userRepository.findById(ownerUserId)
+            userRepository.findById(ownerUserId)
                     .orElseThrow(() -> new ResourceNotFoundException("User not found: " + ownerUserId));
-            return fileRepository.findAllByOwnerUserAndDeletedAtIsNull(user);
+            rows = fileRepository.findPageByOwnerUser(
+                    ownerUserId,
+                    cursor == null ? null : cursor.createdAt(),
+                    cursor == null ? null : cursor.id(),
+                    pageRequest.fetchSize());
+        } else {
+            accessControlService.assertOrganizationPermission(actorUserId, ownerOrganizationId, Permission.FILE_VIEW);
+            organizationRepository.findById(ownerOrganizationId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Organization not found: " + ownerOrganizationId));
+            rows = fileRepository.findPageByOwnerOrganization(
+                    ownerOrganizationId,
+                    cursor == null ? null : cursor.createdAt(),
+                    cursor == null ? null : cursor.id(),
+                    pageRequest.fetchSize());
         }
 
-        accessControlService.assertOrganizationPermission(actorUserId, ownerOrganizationId, Permission.FILE_VIEW);
-        Organization org = organizationRepository.findById(ownerOrganizationId)
-                .orElseThrow(() -> new ResourceNotFoundException("Organization not found: " + ownerOrganizationId));
-        return fileRepository.findAllByOwnerOrganizationAndDeletedAtIsNull(org);
+        return toFilePage(rows, pageRequest);
+    }
+
+    private CursorPageResponse<FileResponse> toFilePage(List<FileListItemProjection> rows, BoundedPageRequest pageRequest) {
+        boolean hasMore = rows.size() > pageRequest.size();
+        List<FileListItemProjection> pageRows = hasMore ? rows.subList(0, pageRequest.size()) : rows;
+        FileListItemProjection last = pageRows.isEmpty() ? null : pageRows.getLast();
+
+        return CursorPageResponse.<FileResponse>builder()
+                .items(pageRows.stream().map(this::mapToFileResponse).toList())
+                .hasMore(hasMore)
+                .nextCursor(hasMore ? BoundedPageRequest.encodeCursor(last.getCreatedAt(), last.getId()) : null)
+                .pageSize(pageRequest.size())
+                .build();
+    }
+
+    private FileResponse mapToFileResponse(FileListItemProjection projection) {
+        return FileResponse.builder()
+                .id(projection.getId())
+                .name(projection.getName())
+                .mimeType(projection.getMimeType())
+                .size(projection.getSize())
+                .ownerUserId(projection.getOwnerUserId())
+                .ownerOrganizationId(projection.getOwnerOrganizationId())
+                .createdAt(projection.getCreatedAt())
+                .updatedAt(projection.getUpdatedAt())
+                .build();
     }
 
     private void validateExactlyOneOwner(UUID ownerUserId, UUID ownerOrganizationId) {

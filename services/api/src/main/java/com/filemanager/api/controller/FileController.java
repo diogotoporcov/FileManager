@@ -1,6 +1,8 @@
 package com.filemanager.api.controller;
 
 import com.filemanager.api.auth.CurrentUserService;
+import com.filemanager.api.dto.BoundedPageRequest;
+import com.filemanager.api.dto.CursorPageResponse;
 import com.filemanager.api.dto.FileResponse;
 import com.filemanager.api.entity.FileEntity;
 import com.filemanager.api.service.FileService;
@@ -30,9 +32,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/files")
@@ -79,15 +79,18 @@ public class FileController {
     @Operation(summary = "List files", description = "Lists files based on ownership/organization filters. Actor is derived from JWT.")
     @ApiResponse(responseCode = "200", description = "List of files")
     @GetMapping
-    public List<FileResponse> listFiles(
+    public CursorPageResponse<FileResponse> listFiles(
             @Parameter(description = "Filter by owner User ID") @RequestParam(value = "ownerUserId", required = false) UUID ownerUserId,
-            @Parameter(description = "Filter by owner Organization ID") @RequestParam(value = "ownerOrganizationId", required = false) UUID ownerOrganizationId
+            @Parameter(description = "Filter by owner Organization ID") @RequestParam(value = "ownerOrganizationId", required = false) UUID ownerOrganizationId,
+            @Parameter(description = "Maximum items to return") @RequestParam(value = "size", required = false) Integer size,
+            @Parameter(description = "Cursor returned by the previous page") @RequestParam(value = "cursor", required = false) String cursor
     ) {
         UUID actorUserId = currentUserService.getCurrentUserId();
-        return fileService.listFiles(ownerUserId, ownerOrganizationId, actorUserId)
-                .stream()
-                .map(this::mapToResponse)
-                .collect(Collectors.toList());
+        return fileService.listFiles(
+                ownerUserId,
+                ownerOrganizationId,
+                actorUserId,
+                BoundedPageRequest.of(size, cursor));
     }
 
     @Operation(summary = "Get file metadata", description = "Retrieves metadata for a specific file.")

@@ -2,9 +2,11 @@ package com.filemanager.api.service;
 
 import com.filemanager.api.auth.AccessControlService;
 import com.filemanager.api.auth.Permission;
+import com.filemanager.api.dto.BoundedOffsetPageRequest;
 import com.filemanager.api.dto.DuplicateCandidateResponse;
 import com.filemanager.api.dto.FileDuplicateResponse;
 import com.filemanager.api.dto.FileSummaryResponse;
+import com.filemanager.api.dto.PageResponse;
 import com.filemanager.api.entity.DuplicateCandidate;
 import com.filemanager.api.entity.DuplicateCandidate.CandidateStatus;
 import com.filemanager.api.entity.DuplicateCandidate.DetectionMethod;
@@ -15,6 +17,9 @@ import com.filemanager.api.port.DuplicateCandidateSearchRequest;
 import com.filemanager.api.repository.DuplicateCandidateRepository;
 import com.filemanager.api.repository.FileRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -52,7 +57,7 @@ public class DuplicateCandidateService {
                 ownerOrganizationId,
                 method,
                 status
-        ));
+        ), PageRequest.of(0, BoundedOffsetPageRequest.MAX_SIZE, duplicateCandidateSort())).getContent();
 
         return candidates.stream()
                 .map(dc -> mapToFileDuplicateResponse(dc, fileId))
@@ -60,24 +65,47 @@ public class DuplicateCandidateService {
     }
 
     @Transactional(readOnly = true)
-    public List<DuplicateCandidateResponse> getDuplicatesForOwner(
+    public PageResponse<DuplicateCandidateResponse> getDuplicatesForOwner(
             UUID ownerUserId, UUID ownerOrganizationId,
-            DetectionMethod method, CandidateStatus status, UUID actorUserId) {
+            DetectionMethod method,
+            CandidateStatus status,
+            UUID actorUserId,
+            BoundedOffsetPageRequest pageRequest) {
         
         accessControlService.assertCanViewDuplicates(actorUserId, ownerUserId, ownerOrganizationId);
         validateOwnerContext(ownerUserId, ownerOrganizationId);
 
-        List<DuplicateCandidate> candidates = duplicateCandidateSearchPort.search(new DuplicateCandidateSearchRequest(
+        Page<DuplicateCandidate> candidates = duplicateCandidateSearchPort.search(new DuplicateCandidateSearchRequest(
                 null,
                 ownerUserId,
                 ownerOrganizationId,
                 method,
                 status
-        ));
+        ), PageRequest.of(pageRequest.page(), pageRequest.size(), duplicateCandidateSort()));
 
-        return candidates.stream()
-                .map(this::mapToDuplicateCandidateResponse)
-                .collect(Collectors.toList());
+        return PageResponse.<DuplicateCandidateResponse>builder()
+                .items(candidates.getContent().stream()
+                        .map(this::mapToDuplicateCandidateResponse)
+                        .collect(Collectors.toList()))
+                .page(pageRequest.page())
+                .pageSize(pageRequest.size())
+                .hasMore(candidates.hasNext())
+                .totalItems(candidates.getTotalElements())
+                .totalPages(candidates.getTotalPages())
+                .build();
+    }
+
+    public List<DuplicateCandidateResponse> getDuplicatesForOwner(
+            UUID ownerUserId, UUID ownerOrganizationId,
+            DetectionMethod method, CandidateStatus status, UUID actorUserId) {
+        return getDuplicatesForOwner(
+                ownerUserId,
+                ownerOrganizationId,
+                method,
+                status,
+                actorUserId,
+                BoundedOffsetPageRequest.of(null, null))
+                .getItems();
     }
 
     @Transactional
@@ -176,5 +204,9 @@ public class DuplicateCandidateService {
                 .createdAt(file.getCreatedAt())
                 .updatedAt(file.getUpdatedAt())
                 .build();
+    }
+
+    private Sort duplicateCandidateSort() {
+        return Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id"));
     }
 }
