@@ -49,6 +49,9 @@ public class FileSearchSpecificationBuilder {
     }
 
     private void addDateTimeRange(List<Predicate> predicates, CriteriaBuilder cb, Path<OffsetDateTime> path, DateTimeRange range) {
+        if (!range.hasBounds()) {
+            return;
+        }
         if (range.from() != null) {
             predicates.add(cb.greaterThanOrEqualTo(path, range.from()));
         }
@@ -58,6 +61,9 @@ public class FileSearchSpecificationBuilder {
     }
 
     private void addLongRange(List<Predicate> predicates, CriteriaBuilder cb, Path<Long> path, LongRange range) {
+        if (!range.hasBounds()) {
+            return;
+        }
         if (range.min() != null) {
             predicates.add(cb.greaterThanOrEqualTo(path, range.min()));
         }

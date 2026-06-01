@@ -5,7 +5,6 @@ import com.filemanager.api.auth.Permission;
 import com.filemanager.api.dto.BoundedOffsetPageRequest;
 import com.filemanager.api.dto.DuplicateCandidateResponse;
 import com.filemanager.api.dto.FileDuplicateResponse;
-import com.filemanager.api.dto.FileSummaryResponse;
 import com.filemanager.api.dto.PageResponse;
 import com.filemanager.api.entity.DuplicateCandidate;
 import com.filemanager.api.entity.DuplicateCandidate.CandidateStatus;

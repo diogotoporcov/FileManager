@@ -34,9 +34,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.OffsetDateTime;
@@ -83,10 +81,6 @@ class DuplicateSearchServiceTest {
     @Mock
     private AppProperties appProperties;
 
-    @Spy
-    private FileSummaryResponseMapper fileSummaryResponseMapper = new FileSummaryResponseMapper();
-
-    @InjectMocks
     private DuplicateSearchService duplicateSearchService;
 
     private User user;
@@ -109,6 +103,19 @@ class DuplicateSearchServiceTest {
         embedding.setSimilarityThreshold(0.20);
         embedding.setMaxCandidates(25);
         lenient().when(appProperties.getEmbedding()).thenReturn(embedding);
+
+        duplicateSearchService = new DuplicateSearchService(
+                fileRepository,
+                fileFingerprintRepository,
+                imageFingerprintRepository,
+                fileEmbeddingRepository,
+                similarImageSearchPort,
+                similarImagePairSearchPort,
+                embeddingSimilaritySearchPort,
+                embeddingSimilarityPairSearchPort,
+                accessControlService,
+                appProperties,
+                new FileSummaryResponseMapper());
 
         user = User.builder().id(UUID.randomUUID()).build();
         otherUser = User.builder().id(UUID.randomUUID()).build();

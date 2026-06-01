@@ -266,9 +266,9 @@ class FileServiceTest {
         query.setSize(2);
         when(userRepository.findById(userId)).thenReturn(Optional.of(user));
 
-        FileEntity first = file("a.txt", 10L, "text/plain", OffsetDateTime.parse("2026-01-03T00:00:00Z"));
-        FileEntity second = file("b.txt", 20L, "text/plain", OffsetDateTime.parse("2026-01-02T00:00:00Z"));
-        FileEntity extra = file("c.txt", 30L, "text/plain", OffsetDateTime.parse("2026-01-01T00:00:00Z"));
+        FileEntity first = file("a.txt", 10L, OffsetDateTime.parse("2026-01-03T00:00:00Z"));
+        FileEntity second = file("b.txt", 20L, OffsetDateTime.parse("2026-01-02T00:00:00Z"));
+        FileEntity extra = file("c.txt", 30L, OffsetDateTime.parse("2026-01-01T00:00:00Z"));
         when(fileRepository.findAll(org.mockito.ArgumentMatchers.<Specification<FileEntity>>any(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(first, second, extra)));
 
@@ -314,12 +314,12 @@ class FileServiceTest {
         verify(fileRepository).findAll(org.mockito.ArgumentMatchers.<Specification<FileEntity>>any(), any(Pageable.class));
     }
 
-    private FileEntity file(String name, Long size, String mimeType, OffsetDateTime createdAt) {
+    private FileEntity file(String name, Long size, OffsetDateTime createdAt) {
         FileEntity file = new FileEntity();
         file.setId(UUID.randomUUID());
         file.setName(name);
         file.setSize(size);
-        file.setMimeType(mimeType);
+        file.setMimeType("text/plain");
         file.setOwnerUser(user);
         file.setCreatedAt(createdAt);
         file.setUpdatedAt(createdAt);

@@ -15,7 +15,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class PostgresSimilarImagePairSearchAdapter implements SimilarImagePairSearchPort {
 
-    private static final String BASE_SQL = """
+    private static final String OWNER_USER_SQL = """
             SELECT source.file_id,
                    candidate.file_id,
                    hamming_distance_hex64(source.phash, candidate.phash) AS distance
@@ -25,7 +25,39 @@ public class PostgresSimilarImagePairSearchAdapter implements SimilarImagePairSe
             JOIN files candidate_file ON candidate_file.id = candidate.file_id
             WHERE source_file.deleted_at IS NULL
               AND candidate_file.deleted_at IS NULL
-              AND %s
+              AND source_file.owner_user_id = :ownerId
+              AND candidate_file.owner_user_id = :ownerId
+              AND (
+                    CAST(:cursorCreatedAt AS timestamptz) IS NULL
+                    OR source_file.created_at > CAST(:cursorCreatedAt AS timestamptz)
+                    OR (source_file.created_at = CAST(:cursorCreatedAt AS timestamptz)
+                        AND source.file_id > CAST(:cursorFileId AS uuid))
+                  )
+              AND (
+                    source_file.created_at < candidate_file.created_at
+                    OR (source_file.created_at = candidate_file.created_at AND source.file_id < candidate.file_id)
+                  )
+              AND hamming_distance_hex64(source.phash, candidate.phash) <= :threshold
+            ORDER BY source_file.created_at ASC,
+                     source.file_id ASC,
+                     distance ASC,
+                     candidate_file.created_at ASC,
+                     candidate.file_id ASC
+            LIMIT :maxResults
+            """;
+
+    private static final String OWNER_ORGANIZATION_SQL = """
+            SELECT source.file_id,
+                   candidate.file_id,
+                   hamming_distance_hex64(source.phash, candidate.phash) AS distance
+            FROM image_fingerprints source
+            JOIN files source_file ON source_file.id = source.file_id
+            JOIN image_fingerprints candidate ON candidate.file_id <> source.file_id
+            JOIN files candidate_file ON candidate_file.id = candidate.file_id
+            WHERE source_file.deleted_at IS NULL
+              AND candidate_file.deleted_at IS NULL
+              AND source_file.owner_organization_id = :ownerId
+              AND candidate_file.owner_organization_id = :ownerId
               AND (
                     CAST(:cursorCreatedAt AS timestamptz) IS NULL
                     OR source_file.created_at > CAST(:cursorCreatedAt AS timestamptz)
@@ -49,9 +81,8 @@ public class PostgresSimilarImagePairSearchAdapter implements SimilarImagePairSe
 
     @Override
     public List<SimilarImagePairCandidate> search(SimilarImagePairSearchRequest request) {
-        Query query = entityManager.createNativeQuery(BASE_SQL.formatted(
-                NativeOwnerScopeSql.pairFilePredicate(request.ownerUserId())));
-        query.setParameter("ownerId", NativeOwnerScopeSql.ownerId(request.ownerUserId(), request.ownerOrganizationId()));
+        Query query = entityManager.createNativeQuery(ownerSql(request.ownerUserId()));
+        query.setParameter("ownerId", ownerId(request.ownerUserId(), request.ownerOrganizationId()));
         query.setParameter("threshold", request.threshold());
         query.setParameter("maxResults", request.maxResults());
         query.setParameter("cursorCreatedAt", request.cursorCreatedAt());
@@ -61,6 +92,14 @@ public class PostgresSimilarImagePairSearchAdapter implements SimilarImagePairSe
         return rows.stream()
                 .map(this::toCandidate)
                 .toList();
+    }
+
+    private String ownerSql(UUID ownerUserId) {
+        return ownerUserId != null ? OWNER_USER_SQL : OWNER_ORGANIZATION_SQL;
+    }
+
+    private UUID ownerId(UUID ownerUserId, UUID ownerOrganizationId) {
+        return ownerUserId != null ? ownerUserId : ownerOrganizationId;
     }
 
     private SimilarImagePairCandidate toCandidate(Object row) {

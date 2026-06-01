@@ -15,7 +15,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class PostgresEmbeddingSimilarityPairSearchAdapter implements EmbeddingSimilarityPairSearchPort {
 
-    private static final String BASE_SQL = """
+    private static final String OWNER_USER_SQL = """
             SELECT source.file_id,
                    candidate.file_id,
                    (candidate.embedding <=> source.embedding) AS distance
@@ -30,7 +30,44 @@ public class PostgresEmbeddingSimilarityPairSearchAdapter implements EmbeddingSi
               AND source.model_version = :modelVersion
               AND source_file.deleted_at IS NULL
               AND candidate_file.deleted_at IS NULL
-              AND %s
+              AND source_file.owner_user_id = :ownerId
+              AND candidate_file.owner_user_id = :ownerId
+              AND (
+                    CAST(:cursorCreatedAt AS timestamptz) IS NULL
+                    OR source_file.created_at > CAST(:cursorCreatedAt AS timestamptz)
+                    OR (source_file.created_at = CAST(:cursorCreatedAt AS timestamptz)
+                        AND source.file_id > CAST(:cursorFileId AS uuid))
+                  )
+              AND (
+                    source_file.created_at < candidate_file.created_at
+                    OR (source_file.created_at = candidate_file.created_at AND source.file_id < candidate.file_id)
+                  )
+              AND (candidate.embedding <=> source.embedding) <= :threshold
+            ORDER BY source_file.created_at ASC,
+                     source.file_id ASC,
+                     distance ASC,
+                     candidate_file.created_at ASC,
+                     candidate.file_id ASC
+            LIMIT :maxResults
+            """;
+
+    private static final String OWNER_ORGANIZATION_SQL = """
+            SELECT source.file_id,
+                   candidate.file_id,
+                   (candidate.embedding <=> source.embedding) AS distance
+            FROM file_embeddings source
+            JOIN file_embeddings candidate
+              ON candidate.model_name = source.model_name
+             AND candidate.model_version = source.model_version
+             AND candidate.file_id <> source.file_id
+            JOIN files source_file ON source_file.id = source.file_id
+            JOIN files candidate_file ON candidate_file.id = candidate.file_id
+            WHERE source.model_name = :modelName
+              AND source.model_version = :modelVersion
+              AND source_file.deleted_at IS NULL
+              AND candidate_file.deleted_at IS NULL
+              AND source_file.owner_organization_id = :ownerId
+              AND candidate_file.owner_organization_id = :ownerId
               AND (
                     CAST(:cursorCreatedAt AS timestamptz) IS NULL
                     OR source_file.created_at > CAST(:cursorCreatedAt AS timestamptz)
@@ -54,9 +91,8 @@ public class PostgresEmbeddingSimilarityPairSearchAdapter implements EmbeddingSi
 
     @Override
     public List<EmbeddingSimilarityPairCandidate> search(EmbeddingSimilarityPairSearchRequest request) {
-        Query query = entityManager.createNativeQuery(BASE_SQL.formatted(
-                NativeOwnerScopeSql.pairFilePredicate(request.ownerUserId())));
-        query.setParameter("ownerId", NativeOwnerScopeSql.ownerId(request.ownerUserId(), request.ownerOrganizationId()));
+        Query query = entityManager.createNativeQuery(ownerSql(request.ownerUserId()));
+        query.setParameter("ownerId", ownerId(request.ownerUserId(), request.ownerOrganizationId()));
         query.setParameter("modelName", request.modelName());
         query.setParameter("modelVersion", request.modelVersion());
         query.setParameter("threshold", request.maxCosineDistance());
@@ -68,6 +104,14 @@ public class PostgresEmbeddingSimilarityPairSearchAdapter implements EmbeddingSi
         return rows.stream()
                 .map(this::toCandidate)
                 .toList();
+    }
+
+    private String ownerSql(UUID ownerUserId) {
+        return ownerUserId != null ? OWNER_USER_SQL : OWNER_ORGANIZATION_SQL;
+    }
+
+    private UUID ownerId(UUID ownerUserId, UUID ownerOrganizationId) {
+        return ownerUserId != null ? ownerUserId : ownerOrganizationId;
     }
 
     private EmbeddingSimilarityPairCandidate toCandidate(Object row) {

@@ -15,7 +15,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class PostgresEmbeddingSimilaritySearchAdapter implements EmbeddingSimilaritySearchPort {
 
-    private static final String BASE_SQL = """
+    private static final String OWNER_USER_SQL = """
             SELECT candidate.file_id, (candidate.embedding <=> source.embedding) AS distance
             FROM file_embeddings source
             JOIN file_embeddings candidate
@@ -29,7 +29,29 @@ public class PostgresEmbeddingSimilaritySearchAdapter implements EmbeddingSimila
               AND source.model_version = :modelVersion
               AND source_file.deleted_at IS NULL
               AND candidate_file.deleted_at IS NULL
-              AND %s
+              AND source_file.owner_user_id = :ownerId
+              AND candidate_file.owner_user_id = :ownerId
+              AND (candidate.embedding <=> source.embedding) <= :threshold
+            ORDER BY distance ASC, candidate.created_at ASC
+            LIMIT :maxResults
+            """;
+
+    private static final String OWNER_ORGANIZATION_SQL = """
+            SELECT candidate.file_id, (candidate.embedding <=> source.embedding) AS distance
+            FROM file_embeddings source
+            JOIN file_embeddings candidate
+              ON candidate.model_name = source.model_name
+             AND candidate.model_version = source.model_version
+             AND candidate.file_id <> source.file_id
+            JOIN files source_file ON source_file.id = source.file_id
+            JOIN files candidate_file ON candidate_file.id = candidate.file_id
+            WHERE source.file_id = :sourceFileId
+              AND source.model_name = :modelName
+              AND source.model_version = :modelVersion
+              AND source_file.deleted_at IS NULL
+              AND candidate_file.deleted_at IS NULL
+              AND source_file.owner_organization_id = :ownerId
+              AND candidate_file.owner_organization_id = :ownerId
               AND (candidate.embedding <=> source.embedding) <= :threshold
             ORDER BY distance ASC, candidate.created_at ASC
             LIMIT :maxResults
@@ -39,10 +61,9 @@ public class PostgresEmbeddingSimilaritySearchAdapter implements EmbeddingSimila
 
     @Override
     public List<EmbeddingSimilarityCandidate> search(EmbeddingSimilaritySearchRequest request) {
-        Query query = entityManager.createNativeQuery(BASE_SQL.formatted(
-                NativeOwnerScopeSql.pairFilePredicate(request.ownerUserId())));
+        Query query = entityManager.createNativeQuery(ownerSql(request.ownerUserId()));
         query.setParameter("sourceFileId", request.sourceFileId());
-        query.setParameter("ownerId", NativeOwnerScopeSql.ownerId(request.ownerUserId(), request.ownerOrganizationId()));
+        query.setParameter("ownerId", ownerId(request.ownerUserId(), request.ownerOrganizationId()));
         query.setParameter("modelName", request.modelName());
         query.setParameter("modelVersion", request.modelVersion());
         query.setParameter("threshold", request.maxCosineDistance());
@@ -52,6 +73,14 @@ public class PostgresEmbeddingSimilaritySearchAdapter implements EmbeddingSimila
         return rows.stream()
                 .map(this::toCandidate)
                 .toList();
+    }
+
+    private String ownerSql(UUID ownerUserId) {
+        return ownerUserId != null ? OWNER_USER_SQL : OWNER_ORGANIZATION_SQL;
+    }
+
+    private UUID ownerId(UUID ownerUserId, UUID ownerOrganizationId) {
+        return ownerUserId != null ? ownerUserId : ownerOrganizationId;
     }
 
     private EmbeddingSimilarityCandidate toCandidate(Object row) {

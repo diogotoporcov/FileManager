@@ -17,9 +17,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.data.domain.PageImpl;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.OffsetDateTime;
@@ -50,10 +48,6 @@ class DuplicateCandidateServiceTest {
     @Mock
     private DuplicateCandidateSearchPort duplicateCandidateSearchPort;
 
-    @Spy
-    private FileSummaryResponseMapper fileSummaryResponseMapper = new FileSummaryResponseMapper();
-
-    @InjectMocks
     private DuplicateCandidateService duplicateCandidateService;
 
     private User owner;
@@ -63,6 +57,13 @@ class DuplicateCandidateServiceTest {
 
     @BeforeEach
     void setUp() {
+        duplicateCandidateService = new DuplicateCandidateService(
+                duplicateCandidateRepository,
+                fileRepository,
+                accessControlService,
+                duplicateCandidateSearchPort,
+                new FileSummaryResponseMapper());
+
         owner = User.builder().id(UUID.randomUUID()).build();
         file1 = FileEntity.builder()
                 .id(UUID.randomUUID())
