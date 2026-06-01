@@ -20,6 +20,15 @@ class Settings(BaseSettings):
     worker_retry_backoff_seconds: float = Field(default=1.0, ge=0)
     worker_retry_backoff_multiplier: float = Field(default=2.0, ge=1)
     worker_phash_max_image_bytes: int = Field(default=25 * 1024 * 1024, gt=0)
+    worker_video_enabled: bool = True
+    worker_video_max_file_bytes: int = Field(default=512 * 1024 * 1024, gt=0)
+    worker_video_max_duration_seconds: float = Field(default=30 * 60, gt=0)
+    worker_video_max_sampled_frames: int = Field(default=32, ge=1)
+    worker_video_min_sampled_frames: int = Field(default=4, ge=1)
+    worker_video_target_interval_seconds: float = Field(default=10.0, gt=0)
+    worker_video_frame_timeout_seconds: float = Field(default=15.0, gt=0)
+    worker_video_max_frame_bytes: int = Field(default=25 * 1024 * 1024, gt=0)
+    worker_video_supported_mime_types: NonBlankString = "video/mp4,video/webm,video/quicktime"
     processable_image_mime_types: NonBlankString = (
         "image/apng,image/avif,image/bmp,image/gif,image/icns,image/jp2,image/jpeg,image/mpo,"
         "image/palm,image/png,image/sgi,image/tiff,image/vnd.adobe.photoshop,image/webp,"

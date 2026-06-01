@@ -27,19 +27,23 @@ import java.time.OffsetDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "file_embeddings", indexes = {
-    @Index(name = "idx_embeddings_file_model", columnList = "file_id, model_name, model_version")
+@Table(name = "video_frame_embeddings", indexes = {
+    @Index(name = "idx_video_frame_embeddings_file_model", columnList = "file_id, model_name, model_version")
 }, uniqueConstraints = {
-    @UniqueConstraint(name = "uk_embeddings_file_model", columnNames = {"file_id", "model_name", "model_version"})
+    @UniqueConstraint(
+            name = "uk_video_frame_embeddings_file_frame_model",
+            columnNames = {"file_id", "frame_index", "model_name", "model_version"})
 }, check = {
-    @CheckConstraint(name = "chk_dimension_768", constraint = EmbeddingDimensions.IMAGE_EMBEDDING_DIMENSION_CHECK)
+    @CheckConstraint(
+            name = "chk_video_frame_embedding_dimension_768",
+            constraint = EmbeddingDimensions.IMAGE_EMBEDDING_DIMENSION_CHECK)
 })
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class FileEmbedding {
+public class VideoFrameEmbedding {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
@@ -47,6 +51,12 @@ public class FileEmbedding {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "file_id", nullable = false)
     private FileEntity file;
+
+    @Column(name = "timestamp_ms", nullable = false)
+    private Long timestampMs;
+
+    @Column(name = "frame_index", nullable = false)
+    private Integer frameIndex;
 
     @Column(name = "model_name", nullable = false)
     private String modelName;

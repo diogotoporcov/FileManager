@@ -108,6 +108,42 @@ async def test_flow_embedding_success(sample_event):
     )
 
 @pytest.mark.asyncio
+async def test_flow_video_analysis_success(sample_event):
+    sample_event.job_type = "VIDEO_ANALYSIS"
+    sink = MagicMock(spec=ProcessingResultSink)
+    sink.report_video_analysis_success = AsyncMock()
+
+    result = {
+        "durationMs": 1000,
+        "width": 320,
+        "height": 240,
+        "frameCount": 30,
+        "codec": "h264",
+        "sampledFrameCount": 1,
+        "samplingStrategy": "even_interval:min=1,max=32,target_seconds=10",
+        "modelName": "openai/clip-vit-large-patch14",
+        "modelVersion": "1",
+        "dimension": 2,
+        "frames": [{
+            "timestampMs": 500,
+            "frameIndex": 0,
+            "phash": VALID_PHASH,
+            "embedding": VALID_EMBEDDING,
+        }],
+    }
+    processor = MagicMock(spec=Processor)
+    processor.name = "video_analysis"
+    processor.should_process.return_value = True
+    processor.process = AsyncMock(return_value=result)
+
+    flow = ProcessingFlow(processors=[processor], result_sink=sink)
+
+    derived_data = await flow.run(sample_event)
+
+    assert derived_data["sampledFrameCount"] == 1
+    sink.report_video_analysis_success.assert_called_once()
+
+@pytest.mark.asyncio
 async def test_flow_processor_failure_handled(sample_event):
     # Arrange
     sink = MagicMock(spec=ProcessingResultSink)

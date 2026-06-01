@@ -130,6 +130,21 @@ class ConfigurationValidationTest {
     }
 
     @Test
+    void appProperties_InvalidProcessableVideoMimeTypes_Fail() {
+        AppProperties properties = new AppProperties();
+        properties.setProcessableVideoMimeTypes(Set.of());
+
+        Set<ConstraintViolation<AppProperties>> violations = validator.validate(properties);
+        assertThat(violations).hasSize(1);
+        assertThat(violations.iterator().next().getPropertyPath().toString()).isEqualTo("processableVideoMimeTypes");
+
+        properties.setProcessableVideoMimeTypes(Set.of(""));
+        violations = validator.validate(properties);
+        assertThat(violations).hasSize(1);
+        assertThat(violations.iterator().next().getPropertyPath().toString()).isEqualTo("processableVideoMimeTypes[].<iterable element>");
+    }
+
+    @Test
     void appProperties_BlankAuthValues_Fail() {
         AppProperties properties = new AppProperties();
         properties.getAuth().setProviderName("");

@@ -1,18 +1,26 @@
 package com.filemanager.api.service;
 
 import com.filemanager.api.config.AppProperties;
+import com.filemanager.api.config.EmbeddingDimensions;
+import com.filemanager.api.dto.internal.VideoAnalysisResultRequest;
 import com.filemanager.api.entity.FileEmbedding;
 import com.filemanager.api.entity.FileEntity;
 import com.filemanager.api.entity.FileFingerprint;
 import com.filemanager.api.entity.ImageFingerprint;
 import com.filemanager.api.entity.ProcessingJob;
 import com.filemanager.api.entity.User;
+import com.filemanager.api.entity.VideoFingerprint;
+import com.filemanager.api.entity.VideoFrameEmbedding;
+import com.filemanager.api.entity.VideoFrameFingerprint;
 import com.filemanager.api.port.ApplicationMetricsPort;
 import com.filemanager.api.repository.FileEmbeddingRepository;
 import com.filemanager.api.repository.FileFingerprintRepository;
 import com.filemanager.api.repository.FileRepository;
 import com.filemanager.api.repository.ImageFingerprintRepository;
 import com.filemanager.api.repository.ProcessingJobRepository;
+import com.filemanager.api.repository.VideoFingerprintRepository;
+import com.filemanager.api.repository.VideoFrameEmbeddingRepository;
+import com.filemanager.api.repository.VideoFrameFingerprintRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -46,6 +54,12 @@ class ProcessingJobServiceTest {
     @Mock
     private FileEmbeddingRepository fileEmbeddingRepository;
     @Mock
+    private VideoFingerprintRepository videoFingerprintRepository;
+    @Mock
+    private VideoFrameFingerprintRepository videoFrameFingerprintRepository;
+    @Mock
+    private VideoFrameEmbeddingRepository videoFrameEmbeddingRepository;
+    @Mock
     private ApplicationMetricsPort applicationMetricsPort;
     @Mock
     private AppProperties appProperties;
@@ -61,7 +75,7 @@ class ProcessingJobServiceTest {
         embedding.setEnabled(true);
         embedding.setModelName("openai/clip-vit-large-patch14");
         embedding.setModelVersion("1");
-        embedding.setDimension(768);
+        embedding.setDimension(EmbeddingDimensions.IMAGE_EMBEDDING_DIMENSION);
         embedding.setSimilarityThreshold(0.20);
         embedding.setMaxCandidates(5000);
         lenient().when(appProperties.getEmbedding()).thenReturn(embedding);
@@ -133,13 +147,13 @@ class ProcessingJobServiceTest {
                 fileId,
                 "openai/clip-vit-large-patch14",
                 "1",
-                768,
-                embeddingVector(768));
+                EmbeddingDimensions.IMAGE_EMBEDDING_DIMENSION,
+                embeddingVector(EmbeddingDimensions.IMAGE_EMBEDDING_DIMENSION));
 
         ArgumentCaptor<FileEmbedding> embeddingCaptor = ArgumentCaptor.forClass(FileEmbedding.class);
         verify(fileEmbeddingRepository).save(embeddingCaptor.capture());
         assertThat(embeddingCaptor.getValue().getFile()).isEqualTo(file);
-        assertThat(embeddingCaptor.getValue().getEmbedding()).hasSize(768);
+        assertThat(embeddingCaptor.getValue().getEmbedding()).hasSize(EmbeddingDimensions.IMAGE_EMBEDDING_DIMENSION);
         assertThat(job.getStatus()).isEqualTo(ProcessingJob.JobStatus.COMPLETED);
         verify(applicationMetricsPort).recordJobCompleted("EMBEDDING");
     }
@@ -154,8 +168,8 @@ class ProcessingJobServiceTest {
                 .file(file)
                 .modelName("openai/clip-vit-large-patch14")
                 .modelVersion("1")
-                .dimension(768)
-                .embedding(new float[768])
+                .dimension(EmbeddingDimensions.IMAGE_EMBEDDING_DIMENSION)
+                .embedding(new float[EmbeddingDimensions.IMAGE_EMBEDDING_DIMENSION])
                 .build();
 
         when(processingJobRepository.findById(jobId)).thenReturn(Optional.of(job));
@@ -171,12 +185,150 @@ class ProcessingJobServiceTest {
                 fileId,
                 "openai/clip-vit-large-patch14",
                 "1",
-                768,
-                embeddingVector(768));
+                EmbeddingDimensions.IMAGE_EMBEDDING_DIMENSION,
+                embeddingVector(EmbeddingDimensions.IMAGE_EMBEDDING_DIMENSION));
 
         verify(fileEmbeddingRepository).save(existing);
-        assertThat(existing.getEmbedding()).hasSize(768);
+        assertThat(existing.getEmbedding()).hasSize(EmbeddingDimensions.IMAGE_EMBEDDING_DIMENSION);
         assertThat(job.getStatus()).isEqualTo(ProcessingJob.JobStatus.COMPLETED);
+    }
+
+    @Test
+    void handleVideoAnalysisResult_PersistsMetadataFramesAndEmbeddings() {
+        UUID jobId = UUID.randomUUID();
+        UUID fileId = UUID.randomUUID();
+        FileEntity file = file(fileId);
+        ProcessingJob job = job(jobId, file, ProcessingJob.JobType.VIDEO_ANALYSIS);
+        VideoAnalysisResultRequest request = videoAnalysisRequest(fileId);
+
+        when(processingJobRepository.findById(jobId)).thenReturn(Optional.of(job));
+        when(fileRepository.findByIdAndDeletedAtIsNull(fileId)).thenReturn(Optional.of(file));
+        when(videoFingerprintRepository.findByFileId(fileId)).thenReturn(Optional.empty());
+
+        processingJobService.handleVideoAnalysisResult(jobId, request);
+
+        ArgumentCaptor<VideoFingerprint> fingerprintCaptor = ArgumentCaptor.forClass(VideoFingerprint.class);
+        ArgumentCaptor<List<VideoFrameFingerprint>> frameFingerprintsCaptor = ArgumentCaptor.forClass(List.class);
+        ArgumentCaptor<List<VideoFrameEmbedding>> frameEmbeddingsCaptor = ArgumentCaptor.forClass(List.class);
+
+        verify(videoFingerprintRepository).save(fingerprintCaptor.capture());
+        assertThat(fingerprintCaptor.getValue().getFile()).isEqualTo(file);
+        assertThat(fingerprintCaptor.getValue().getDurationMs()).isEqualTo(12_000L);
+        assertThat(fingerprintCaptor.getValue().getSampledFrameCount()).isEqualTo(2);
+
+        verify(videoFrameFingerprintRepository).deleteByFileId(fileId);
+        verify(videoFrameEmbeddingRepository).deleteByFileId(fileId);
+        verify(videoFrameFingerprintRepository).saveAll(frameFingerprintsCaptor.capture());
+        verify(videoFrameEmbeddingRepository).saveAll(frameEmbeddingsCaptor.capture());
+
+        assertThat(frameFingerprintsCaptor.getValue()).hasSize(2);
+        assertThat(frameFingerprintsCaptor.getValue().getFirst().getPhash()).isEqualTo("fedcba9876543210");
+        assertThat(frameEmbeddingsCaptor.getValue()).hasSize(2);
+        assertThat(frameEmbeddingsCaptor.getValue().getFirst().getEmbedding())
+                .hasSize(EmbeddingDimensions.IMAGE_EMBEDDING_DIMENSION);
+        assertThat(job.getStatus()).isEqualTo(ProcessingJob.JobStatus.COMPLETED);
+        verify(applicationMetricsPort).recordJobCompleted("VIDEO_ANALYSIS");
+    }
+
+    @Test
+    void handleVideoAnalysisResult_RejectsRequestDimensionMismatch() {
+        UUID jobId = UUID.randomUUID();
+        UUID fileId = UUID.randomUUID();
+        VideoAnalysisResultRequest request = videoAnalysisRequest(fileId);
+        request.setDimension(512);
+        request.getFrames().forEach(frame -> frame.setEmbedding(embeddingVector(512)));
+
+        assertThrows(IllegalArgumentException.class, () -> processingJobService.handleVideoAnalysisResult(jobId, request));
+    }
+
+    @Test
+    void handleVideoAnalysisResult_RejectsFrameEmbeddingLengthMismatch() {
+        UUID jobId = UUID.randomUUID();
+        UUID fileId = UUID.randomUUID();
+        VideoAnalysisResultRequest request = videoAnalysisRequest(fileId);
+        request.getFrames().getFirst().setEmbedding(embeddingVector(512));
+
+        assertThrows(IllegalArgumentException.class, () -> processingJobService.handleVideoAnalysisResult(jobId, request));
+    }
+
+    @Test
+    void handleVideoAnalysisResult_RejectsModelNameMismatch() {
+        UUID jobId = UUID.randomUUID();
+        UUID fileId = UUID.randomUUID();
+        VideoAnalysisResultRequest request = videoAnalysisRequest(fileId);
+        request.setModelName("other-model");
+
+        assertThrows(IllegalArgumentException.class, () -> processingJobService.handleVideoAnalysisResult(jobId, request));
+    }
+
+    @Test
+    void handleVideoAnalysisResult_RejectsModelVersionMismatch() {
+        UUID jobId = UUID.randomUUID();
+        UUID fileId = UUID.randomUUID();
+        VideoAnalysisResultRequest request = videoAnalysisRequest(fileId);
+        request.setModelVersion("2");
+
+        assertThrows(IllegalArgumentException.class, () -> processingJobService.handleVideoAnalysisResult(jobId, request));
+    }
+
+    @Test
+    void handleVideoAnalysisResult_RejectsNonFiniteEmbeddingValue() {
+        UUID jobId = UUID.randomUUID();
+        UUID fileId = UUID.randomUUID();
+        VideoAnalysisResultRequest request = videoAnalysisRequest(fileId);
+        request.getFrames().getFirst().getEmbedding().set(0, Double.NaN);
+
+        assertThrows(IllegalArgumentException.class, () -> processingJobService.handleVideoAnalysisResult(jobId, request));
+    }
+
+    @Test
+    void handleVideoAnalysisResult_RejectsSampledFrameCountMismatch() {
+        UUID jobId = UUID.randomUUID();
+        UUID fileId = UUID.randomUUID();
+        VideoAnalysisResultRequest request = videoAnalysisRequest(fileId);
+        request.setSampledFrameCount(1);
+
+        assertThrows(IllegalArgumentException.class, () -> processingJobService.handleVideoAnalysisResult(jobId, request));
+    }
+
+    @Test
+    void handleVideoAnalysisResult_RejectsWrongJobType() {
+        UUID jobId = UUID.randomUUID();
+        UUID fileId = UUID.randomUUID();
+        FileEntity file = file(fileId);
+        ProcessingJob job = job(jobId, file, ProcessingJob.JobType.EMBEDDING);
+        VideoAnalysisResultRequest request = videoAnalysisRequest(fileId);
+
+        when(processingJobRepository.findById(jobId)).thenReturn(Optional.of(job));
+
+        assertThrows(IllegalArgumentException.class, () -> processingJobService.handleVideoAnalysisResult(jobId, request));
+    }
+
+    @Test
+    void handleVideoAnalysisResult_RejectsJobFileMismatch() {
+        UUID jobId = UUID.randomUUID();
+        UUID fileId = UUID.randomUUID();
+        UUID otherFileId = UUID.randomUUID();
+        ProcessingJob job = job(jobId, file(otherFileId), ProcessingJob.JobType.VIDEO_ANALYSIS);
+        VideoAnalysisResultRequest request = videoAnalysisRequest(fileId);
+
+        when(processingJobRepository.findById(jobId)).thenReturn(Optional.of(job));
+
+        assertThrows(IllegalArgumentException.class, () -> processingJobService.handleVideoAnalysisResult(jobId, request));
+    }
+
+    @Test
+    void handleVideoAnalysisResult_RejectsDeletedFile() {
+        UUID jobId = UUID.randomUUID();
+        UUID fileId = UUID.randomUUID();
+        FileEntity file = file(fileId);
+        ProcessingJob job = job(jobId, file, ProcessingJob.JobType.VIDEO_ANALYSIS);
+        VideoAnalysisResultRequest request = videoAnalysisRequest(fileId);
+
+        when(processingJobRepository.findById(jobId)).thenReturn(Optional.of(job));
+        when(fileRepository.findByIdAndDeletedAtIsNull(fileId)).thenReturn(Optional.empty());
+
+        assertThrows(RuntimeException.class, () -> processingJobService.handleVideoAnalysisResult(jobId, request));
     }
 
     @Test
@@ -229,8 +381,37 @@ class ProcessingJobServiceTest {
     }
 
     private List<Double> embeddingVector(int dimension) {
-        return java.util.stream.Stream.generate(() -> 1.0)
+        return new java.util.ArrayList<>(java.util.stream.Stream.generate(() -> 1.0)
                 .limit(dimension)
-                .toList();
+                .toList());
+    }
+
+    private VideoAnalysisResultRequest videoAnalysisRequest(UUID fileId) {
+        return VideoAnalysisResultRequest.builder()
+                .fileId(fileId)
+                .durationMs(12_000L)
+                .width(640)
+                .height(360)
+                .frameCount(360L)
+                .codec("h264")
+                .sampledFrameCount(2)
+                .samplingStrategy("even_interval:min=2,max=32,target_seconds=10")
+                .modelName("openai/clip-vit-large-patch14")
+                .modelVersion("1")
+                .dimension(EmbeddingDimensions.IMAGE_EMBEDDING_DIMENSION)
+                .frames(List.of(
+                        VideoAnalysisResultRequest.FrameResult.builder()
+                                .timestampMs(500L)
+                                .frameIndex(0)
+                                .phash("FEDCBA9876543210")
+                                .embedding(embeddingVector(EmbeddingDimensions.IMAGE_EMBEDDING_DIMENSION))
+                                .build(),
+                        VideoAnalysisResultRequest.FrameResult.builder()
+                                .timestampMs(11_500L)
+                                .frameIndex(1)
+                                .phash("0123456789abcdef")
+                                .embedding(embeddingVector(EmbeddingDimensions.IMAGE_EMBEDDING_DIMENSION))
+                                .build()))
+                .build();
     }
 }

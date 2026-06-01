@@ -1,11 +1,15 @@
 package com.filemanager.api.service;
 
 import com.filemanager.api.config.AppProperties;
+import com.filemanager.api.dto.internal.VideoAnalysisResultRequest;
 import com.filemanager.api.entity.FileEmbedding;
 import com.filemanager.api.entity.FileEntity;
 import com.filemanager.api.entity.FileFingerprint;
 import com.filemanager.api.entity.ImageFingerprint;
 import com.filemanager.api.entity.ProcessingJob;
+import com.filemanager.api.entity.VideoFingerprint;
+import com.filemanager.api.entity.VideoFrameEmbedding;
+import com.filemanager.api.entity.VideoFrameFingerprint;
 import com.filemanager.api.exception.ResourceNotFoundException;
 import com.filemanager.api.port.ApplicationMetricsPort;
 import com.filemanager.api.repository.FileEmbeddingRepository;
@@ -13,14 +17,17 @@ import com.filemanager.api.repository.FileFingerprintRepository;
 import com.filemanager.api.repository.FileRepository;
 import com.filemanager.api.repository.ImageFingerprintRepository;
 import com.filemanager.api.repository.ProcessingJobRepository;
+import com.filemanager.api.repository.VideoFingerprintRepository;
+import com.filemanager.api.repository.VideoFrameEmbeddingRepository;
+import com.filemanager.api.repository.VideoFrameFingerprintRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Locale;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -34,6 +41,9 @@ public class ProcessingJobService {
     private final FileFingerprintRepository fileFingerprintRepository;
     private final ImageFingerprintRepository imageFingerprintRepository;
     private final FileEmbeddingRepository fileEmbeddingRepository;
+    private final VideoFingerprintRepository videoFingerprintRepository;
+    private final VideoFrameFingerprintRepository videoFrameFingerprintRepository;
+    private final VideoFrameEmbeddingRepository videoFrameEmbeddingRepository;
     private final ApplicationMetricsPort applicationMetricsPort;
     private final AppProperties appProperties;
 
@@ -113,6 +123,24 @@ public class ProcessingJobService {
         completeJob(job);
     }
 
+    @Transactional
+    public void handleVideoAnalysisResult(UUID jobId, VideoAnalysisResultRequest request) {
+        if (request == null) {
+            throw new IllegalArgumentException("Video analysis result request must not be null");
+        }
+        log.info("Handling video analysis result for job {} and file {}", jobId, request.getFileId());
+
+        AppProperties.Embedding embeddingProperties = appProperties.getEmbedding();
+        validateVideoAnalysisRequest(request, embeddingProperties);
+
+        ProcessingJob job = getAndValidateJob(jobId, request.getFileId(), ProcessingJob.JobType.VIDEO_ANALYSIS);
+        FileEntity file = getActiveFile(request.getFileId());
+
+        updateVideoFingerprint(file, request);
+        replaceVideoFrameSignals(file, request);
+        completeJob(job);
+    }
+
     private void validateChecksumFormat(String sha256) {
         if (sha256 == null || !sha256.matches("^[a-fA-F0-9]{64}$")) {
             throw new IllegalArgumentException("Invalid SHA-256 format");
@@ -131,6 +159,40 @@ public class ProcessingJobService {
             Integer dimension,
             List<Double> embedding,
             AppProperties.Embedding embeddingProperties) {
+        validateEmbeddingModel(modelName, modelVersion, dimension, embeddingProperties);
+        validateEmbeddingValues(dimension, embedding);
+    }
+
+    private void validateVideoAnalysisRequest(
+            VideoAnalysisResultRequest request,
+            AppProperties.Embedding embeddingProperties) {
+        if (request == null) {
+            throw new IllegalArgumentException("Video analysis result request must not be null");
+        }
+        if (request.getFrames() == null || request.getFrames().isEmpty()) {
+            throw new IllegalArgumentException("Video analysis frames must not be empty");
+        }
+        if (request.getSampledFrameCount() == null || request.getSampledFrameCount() != request.getFrames().size()) {
+            throw new IllegalArgumentException("Sampled frame count must match frame results");
+        }
+        if (request.getSampledFrameCount() > VideoAnalysisResultRequest.MAX_FRAMES) {
+            throw new IllegalArgumentException("Sampled frame count exceeds maximum");
+        }
+        validateEmbeddingModel(request.getModelName(), request.getModelVersion(), request.getDimension(), embeddingProperties);
+        for (VideoAnalysisResultRequest.FrameResult frame : request.getFrames()) {
+            if (frame == null) {
+                throw new IllegalArgumentException("Video analysis frame must not be null");
+            }
+            validatePhashFormat(frame.getPhash());
+            validateEmbeddingValues(request.getDimension(), frame.getEmbedding());
+        }
+    }
+
+    private void validateEmbeddingModel(
+            String modelName,
+            String modelVersion,
+            Integer dimension,
+            AppProperties.Embedding embeddingProperties) {
         if (!embeddingProperties.isEnabled()) {
             throw new IllegalArgumentException("Embedding processing is disabled");
         }
@@ -143,6 +205,9 @@ public class ProcessingJobService {
         if (dimension == null || dimension != embeddingProperties.getDimension()) {
             throw new IllegalArgumentException("Embedding dimension mismatch");
         }
+    }
+
+    private void validateEmbeddingValues(Integer dimension, List<Double> embedding) {
         if (embedding == null || embedding.isEmpty()) {
             throw new IllegalArgumentException("Embedding must not be empty");
         }
@@ -232,6 +297,67 @@ public class ProcessingJobService {
                             fileEmbeddingRepository.save(fileEmbedding);
                         }
                 );
+    }
+
+    private void updateVideoFingerprint(FileEntity file, VideoAnalysisResultRequest request) {
+        videoFingerprintRepository.findByFileId(file.getId())
+                .ifPresentOrElse(
+                        existing -> {
+                            existing.setDurationMs(request.getDurationMs());
+                            existing.setWidth(request.getWidth());
+                            existing.setHeight(request.getHeight());
+                            existing.setFrameCount(request.getFrameCount());
+                            existing.setCodec(normalizeNullableText(request.getCodec()));
+                            existing.setSampledFrameCount(request.getSampledFrameCount());
+                            existing.setSamplingStrategy(request.getSamplingStrategy());
+                            videoFingerprintRepository.save(existing);
+                        },
+                        () -> videoFingerprintRepository.save(VideoFingerprint.builder()
+                                .file(file)
+                                .durationMs(request.getDurationMs())
+                                .width(request.getWidth())
+                                .height(request.getHeight())
+                                .frameCount(request.getFrameCount())
+                                .codec(normalizeNullableText(request.getCodec()))
+                                .sampledFrameCount(request.getSampledFrameCount())
+                                .samplingStrategy(request.getSamplingStrategy())
+                                .build())
+                );
+    }
+
+    private void replaceVideoFrameSignals(FileEntity file, VideoAnalysisResultRequest request) {
+        videoFrameFingerprintRepository.deleteByFileId(file.getId());
+        videoFrameEmbeddingRepository.deleteByFileId(file.getId());
+
+        List<VideoFrameFingerprint> fingerprints = request.getFrames().stream()
+                .map(frame -> VideoFrameFingerprint.builder()
+                        .file(file)
+                        .timestampMs(frame.getTimestampMs())
+                        .frameIndex(frame.getFrameIndex())
+                        .phash(frame.getPhash().toLowerCase(Locale.ROOT))
+                        .build())
+                .toList();
+        videoFrameFingerprintRepository.saveAll(fingerprints);
+
+        List<VideoFrameEmbedding> embeddings = request.getFrames().stream()
+                .map(frame -> VideoFrameEmbedding.builder()
+                        .file(file)
+                        .timestampMs(frame.getTimestampMs())
+                        .frameIndex(frame.getFrameIndex())
+                        .modelName(request.getModelName())
+                        .modelVersion(request.getModelVersion())
+                        .dimension(request.getDimension())
+                        .embedding(normalizeEmbedding(frame.getEmbedding()))
+                        .build())
+                .toList();
+        videoFrameEmbeddingRepository.saveAll(embeddings);
+    }
+
+    private String normalizeNullableText(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim();
     }
 
     private float[] normalizeEmbedding(List<Double> embedding) {

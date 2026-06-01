@@ -2,16 +2,15 @@ package com.filemanager.api.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -24,37 +23,45 @@ import java.time.OffsetDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "processing_jobs", indexes = {
-    @Index(name = "idx_processing_jobs_file", columnList = "file_id"),
-    @Index(name = "idx_processing_jobs_status", columnList = "status")
+@Table(name = "video_fingerprints", indexes = {
+    @Index(name = "idx_video_fingerprints_file", columnList = "file_id")
+}, uniqueConstraints = {
+    @UniqueConstraint(name = "uk_video_fingerprints_file", columnNames = {"file_id"})
 })
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class ProcessingJob {
+public class VideoFingerprint {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "file_id", nullable = false)
     private FileEntity file;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "job_type", nullable = false)
-    private JobType jobType;
+    @Column(name = "duration_ms", nullable = false)
+    private Long durationMs;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 50)
-    private JobStatus status;
+    @Column
+    private Integer width;
 
-    @Column(name = "error_message")
-    private String errorMessage;
+    @Column
+    private Integer height;
 
-    @Column(name = "external_job_id")
-    private String externalJobId;
+    @Column(name = "frame_count")
+    private Long frameCount;
+
+    @Column
+    private String codec;
+
+    @Column(name = "sampled_frame_count", nullable = false)
+    private Integer sampledFrameCount;
+
+    @Column(name = "sampling_strategy", nullable = false)
+    private String samplingStrategy;
 
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
@@ -63,18 +70,4 @@ public class ProcessingJob {
     @UpdateTimestamp
     @Column(name = "updated_at")
     private OffsetDateTime updatedAt;
-
-    public enum JobType {
-        CHECKSUM,
-        PHASH,
-        EMBEDDING,
-        VIDEO_ANALYSIS
-    }
-
-    public enum JobStatus {
-        PENDING,
-        IN_PROGRESS,
-        COMPLETED,
-        FAILED
-    }
 }

@@ -57,6 +57,12 @@ public class AppProperties {
             "image/xbm",
             "image/xpm"
     );
+    @NotEmpty
+    private Set<@NotBlank String> processableVideoMimeTypes = Set.of(
+            "video/mp4",
+            "video/webm",
+            "video/quicktime"
+    );
 
     @Getter
     @Setter
@@ -123,7 +129,7 @@ public class AppProperties {
         private String modelVersion = "1";
 
         @Min(1)
-        private int dimension = 768;
+        private int dimension = EmbeddingDimensions.IMAGE_EMBEDDING_DIMENSION;
 
         @DecimalMin("0.0")
         @DecimalMax("2.0")

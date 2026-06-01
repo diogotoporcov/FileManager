@@ -1,7 +1,5 @@
 package com.filemanager.api.entity;
 
-import com.filemanager.api.config.EmbeddingDimensions;
-import jakarta.persistence.CheckConstraint;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -18,28 +16,24 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import org.hibernate.annotations.Array;
 import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
 
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "file_embeddings", indexes = {
-    @Index(name = "idx_embeddings_file_model", columnList = "file_id, model_name, model_version")
+@Table(name = "video_frame_fingerprints", indexes = {
+    @Index(name = "idx_video_frame_fingerprints_file", columnList = "file_id"),
+    @Index(name = "idx_video_frame_fingerprints_phash", columnList = "phash")
 }, uniqueConstraints = {
-    @UniqueConstraint(name = "uk_embeddings_file_model", columnNames = {"file_id", "model_name", "model_version"})
-}, check = {
-    @CheckConstraint(name = "chk_dimension_768", constraint = EmbeddingDimensions.IMAGE_EMBEDDING_DIMENSION_CHECK)
+    @UniqueConstraint(name = "uk_video_frame_fingerprints_file_frame", columnNames = {"file_id", "frame_index"})
 })
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class FileEmbedding {
+public class VideoFrameFingerprint {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
@@ -48,19 +42,14 @@ public class FileEmbedding {
     @JoinColumn(name = "file_id", nullable = false)
     private FileEntity file;
 
-    @Column(name = "model_name", nullable = false)
-    private String modelName;
+    @Column(name = "timestamp_ms", nullable = false)
+    private Long timestampMs;
 
-    @Column(name = "model_version", nullable = false)
-    private String modelVersion;
+    @Column(name = "frame_index", nullable = false)
+    private Integer frameIndex;
 
     @Column(nullable = false)
-    private Integer dimension;
-
-    @JdbcTypeCode(SqlTypes.VECTOR)
-    @Array(length = EmbeddingDimensions.IMAGE_EMBEDDING_DIMENSION)
-    @Column(nullable = false)
-    private float[] embedding;
+    private String phash;
 
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)

@@ -156,3 +156,34 @@ def test_embedding_settings_validation():
         Settings(internal_api_token="test-token-1234567890123456789012", embedding_model_name="")
     with pytest.raises(ValidationError):
         Settings(internal_api_token="test-token-1234567890123456789012", triton_grpc_url="")
+
+def test_video_settings_validation():
+    settings = Settings(
+        internal_api_token="test-token-1234567890123456789012",
+        worker_video_enabled=True,
+        worker_video_max_file_bytes=1024,
+        worker_video_max_duration_seconds=60,
+        worker_video_max_sampled_frames=8,
+        worker_video_min_sampled_frames=2,
+        worker_video_target_interval_seconds=5,
+        worker_video_frame_timeout_seconds=2,
+        worker_video_max_frame_bytes=1024,
+        worker_video_supported_mime_types="video/mp4,video/webm",
+    )
+
+    assert settings.worker_video_supported_mime_types == "video/mp4,video/webm"
+
+    with pytest.raises(ValidationError):
+        Settings(internal_api_token="test-token-1234567890123456789012", worker_video_max_file_bytes=0)
+    with pytest.raises(ValidationError):
+        Settings(internal_api_token="test-token-1234567890123456789012", worker_video_max_duration_seconds=0)
+    with pytest.raises(ValidationError):
+        Settings(internal_api_token="test-token-1234567890123456789012", worker_video_max_sampled_frames=0)
+    with pytest.raises(ValidationError):
+        Settings(internal_api_token="test-token-1234567890123456789012", worker_video_min_sampled_frames=0)
+    with pytest.raises(ValidationError):
+        Settings(internal_api_token="test-token-1234567890123456789012", worker_video_target_interval_seconds=0)
+    with pytest.raises(ValidationError):
+        Settings(internal_api_token="test-token-1234567890123456789012", worker_video_frame_timeout_seconds=0)
+    with pytest.raises(ValidationError):
+        Settings(internal_api_token="test-token-1234567890123456789012", worker_video_supported_mime_types="")

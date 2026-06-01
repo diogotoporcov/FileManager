@@ -21,7 +21,8 @@ class ProcessingJobPlannerTest {
         planner = new ProcessingJobPlanner(List.of(
                 new ChecksumJobStrategy(),
                 new PhashJobStrategy(appProperties),
-                new EmbeddingJobStrategy(appProperties)
+                new EmbeddingJobStrategy(appProperties),
+                new VideoAnalysisJobStrategy(appProperties)
         ));
     }
 
@@ -58,6 +59,31 @@ class ProcessingJobPlannerTest {
     }
 
     @Test
+    void planJobs_ShouldIncludeVideoAnalysisForSupportedVideo() {
+        List<ProcessingJob.JobType> jobs = planner.planJobs("video/mp4");
+
+        assertTrue(jobs.contains(ProcessingJob.JobType.CHECKSUM));
+        assertTrue(jobs.contains(ProcessingJob.JobType.VIDEO_ANALYSIS));
+        assertFalse(jobs.contains(ProcessingJob.JobType.PHASH));
+        assertFalse(jobs.contains(ProcessingJob.JobType.EMBEDDING));
+    }
+
+    @Test
+    void planJobs_ShouldHandleVideoMimeTypeWithParameters() {
+        List<ProcessingJob.JobType> jobs = planner.planJobs("video/quicktime; charset=binary");
+
+        assertTrue(jobs.contains(ProcessingJob.JobType.VIDEO_ANALYSIS));
+    }
+
+    @Test
+    void planJobs_ShouldNotIncludeVideoAnalysisForUnsupportedVideo() {
+        List<ProcessingJob.JobType> jobs = planner.planJobs("video/x-msvideo");
+
+        assertTrue(jobs.contains(ProcessingJob.JobType.CHECKSUM));
+        assertFalse(jobs.contains(ProcessingJob.JobType.VIDEO_ANALYSIS));
+    }
+
+    @Test
     void planJobs_ShouldNotIncludeImageJobsForUnsupportedImageMimeType() {
         List<ProcessingJob.JobType> jobs = planner.planJobs("image/svg+xml");
         assertTrue(jobs.contains(ProcessingJob.JobType.CHECKSUM));
@@ -72,7 +98,8 @@ class ProcessingJobPlannerTest {
         ProcessingJobPlanner customPlanner = new ProcessingJobPlanner(List.of(
                 new ChecksumJobStrategy(),
                 new PhashJobStrategy(appProperties),
-                new EmbeddingJobStrategy(appProperties)
+                new EmbeddingJobStrategy(appProperties),
+                new VideoAnalysisJobStrategy(appProperties)
         ));
 
         List<ProcessingJob.JobType> supportedJobs = customPlanner.planJobs("image/example");
@@ -82,5 +109,23 @@ class ProcessingJobPlannerTest {
         assertTrue(supportedJobs.contains(ProcessingJob.JobType.EMBEDDING));
         assertFalse(defaultImageJobs.contains(ProcessingJob.JobType.PHASH));
         assertFalse(defaultImageJobs.contains(ProcessingJob.JobType.EMBEDDING));
+    }
+
+    @Test
+    void planJobs_ShouldUseConfiguredProcessableVideoMimeTypes() {
+        AppProperties appProperties = new AppProperties();
+        appProperties.setProcessableVideoMimeTypes(Set.of("video/example"));
+        ProcessingJobPlanner customPlanner = new ProcessingJobPlanner(List.of(
+                new ChecksumJobStrategy(),
+                new PhashJobStrategy(appProperties),
+                new EmbeddingJobStrategy(appProperties),
+                new VideoAnalysisJobStrategy(appProperties)
+        ));
+
+        List<ProcessingJob.JobType> supportedJobs = customPlanner.planJobs("video/example");
+        List<ProcessingJob.JobType> defaultVideoJobs = customPlanner.planJobs("video/mp4");
+
+        assertTrue(supportedJobs.contains(ProcessingJob.JobType.VIDEO_ANALYSIS));
+        assertFalse(defaultVideoJobs.contains(ProcessingJob.JobType.VIDEO_ANALYSIS));
     }
 }

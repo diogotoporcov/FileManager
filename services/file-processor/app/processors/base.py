@@ -1,10 +1,10 @@
 from abc import ABC, abstractmethod
-from collections.abc import Mapping, Sequence
-from typing import TypeAlias
+from collections.abc import Mapping
+from typing import Any, TypeAlias
 
 from app.events.models import FileProcessingRequestedEvent
 
-ProcessorResultValue: TypeAlias = str | int | Sequence[float]
+ProcessorResultValue: TypeAlias = Any
 ProcessorResult: TypeAlias = Mapping[str, ProcessorResultValue]
 
 
