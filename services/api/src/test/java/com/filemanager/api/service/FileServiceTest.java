@@ -72,6 +72,8 @@ class FileServiceTest {
     private AccessControlService accessControlService;
     @Mock
     private ApplicationMetricsPort applicationMetricsPort;
+    @Mock
+    private TagService tagService;
 
     private FileService fileService;
 
@@ -99,7 +101,8 @@ class FileServiceTest {
                 new FileSearchCriteriaMapper(fileSortMapper),
                 new FileSearchSpecificationBuilder(),
                 fileSortMapper,
-                new FileResponseMapper()
+                new FileResponseMapper(),
+                tagService
         );
     }
 
@@ -366,6 +369,22 @@ class FileServiceTest {
         verify(accessControlService).assertCanAccessFolder(userId, folderId, Permission.FOLDER_VIEW);
         verify(fileRepository).findAll(org.mockito.ArgumentMatchers.<Specification<FileEntity>>any(), any(Pageable.class));
         assertEquals(userId, query.getOwnerUserId());
+    }
+
+    @Test
+    void searchFilesWithTagIdValidatesTagBeforeQueryExecution() {
+        UUID tagId = UUID.randomUUID();
+        FileSearchQuery query = new FileSearchQuery();
+        query.setOwnerUserId(userId);
+        query.setTagId(tagId);
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(fileRepository.findAll(org.mockito.ArgumentMatchers.<Specification<FileEntity>>any(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        fileService.searchFiles(query, userId);
+
+        verify(tagService).assertCanUseTagForFileSearch(tagId, userId, userId, null, null);
+        verify(fileRepository).findAll(org.mockito.ArgumentMatchers.<Specification<FileEntity>>any(), any(Pageable.class));
     }
 
     @Test

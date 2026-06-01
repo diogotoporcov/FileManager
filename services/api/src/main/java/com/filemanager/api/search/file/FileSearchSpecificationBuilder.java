@@ -1,11 +1,14 @@
 package com.filemanager.api.search.file;
 
 import com.filemanager.api.entity.FileEntity;
+import com.filemanager.api.entity.FileTagEntity;
 import com.filemanager.api.search.SearchValidationException;
 import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.Path;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
+import jakarta.persistence.criteria.Subquery;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Component;
@@ -18,7 +21,7 @@ import java.util.UUID;
 @Component
 public class FileSearchSpecificationBuilder {
     public Specification<FileEntity> build(FileSearchCriteria criteria) {
-        return (root, ignoredQuery, cb) -> {
+        return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
             predicates.add(cb.isNull(root.get("deletedAt")));
 
@@ -32,6 +35,10 @@ public class FileSearchSpecificationBuilder {
 
             if (criteria.folderId() != null) {
                 predicates.add(cb.equal(root.get("folder").get("id"), criteria.folderId()));
+            }
+
+            if (criteria.tagId() != null) {
+                predicates.add(tagAssignmentExists(root, query, cb, criteria.tagId()));
             }
 
             addDateTimeRange(predicates, cb, root.get("createdAt"), criteria.createdAt());
@@ -48,6 +55,21 @@ public class FileSearchSpecificationBuilder {
 
             return cb.and(predicates.toArray(Predicate[]::new));
         };
+    }
+
+    private Predicate tagAssignmentExists(
+            Root<FileEntity> root,
+            CriteriaQuery<?> query,
+            CriteriaBuilder cb,
+            UUID tagId) {
+        Subquery<UUID> subquery = query.subquery(UUID.class);
+        Root<FileTagEntity> assignment = subquery.from(FileTagEntity.class);
+        subquery.select(assignment.get("file").get("id"));
+        subquery.where(
+                cb.equal(assignment.get("file").get("id"), root.get("id")),
+                cb.equal(assignment.get("tag").get("id"), tagId),
+                cb.isNull(assignment.get("tag").get("deletedAt")));
+        return cb.exists(subquery);
     }
 
     private void addDateTimeRange(List<Predicate> predicates, CriteriaBuilder cb, Path<OffsetDateTime> path, DateTimeRange range) {

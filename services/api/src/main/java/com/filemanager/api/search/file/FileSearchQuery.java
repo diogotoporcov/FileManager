@@ -20,6 +20,9 @@ public class FileSearchQuery {
     @Schema(description = "Folder ID. When set, lists files directly inside that folder only.")
     private UUID folderId;
 
+    @Schema(description = "Tag ID. When set, filters files through file tag assignments.")
+    private UUID tagId;
+
     @Schema(description = "Inclusive created-at lower bound, ISO-8601 offset date-time.")
     private String createdAtFrom;
 

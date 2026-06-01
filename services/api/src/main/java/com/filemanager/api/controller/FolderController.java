@@ -70,11 +70,13 @@ public class FolderController {
     @GetMapping
     public FolderChildrenResponse listRootFolders(
             @Parameter(description = "Owner user ID") @RequestParam(required = false) UUID ownerUserId,
-            @Parameter(description = "Owner organization ID") @RequestParam(required = false) UUID ownerOrganizationId) {
+            @Parameter(description = "Owner organization ID") @RequestParam(required = false) UUID ownerOrganizationId,
+            @Parameter(description = "Tag ID to filter root folders by assignment") @RequestParam(required = false) UUID tagId) {
         return FolderChildrenResponse.builder()
                 .folders(folderService.listRootFolders(
                         ownerUserId,
                         ownerOrganizationId,
+                        tagId,
                         currentUserService.getCurrentUserId()))
                 .build();
     }
@@ -109,8 +111,9 @@ public class FolderController {
     @Operation(summary = "List child folders", description = "Lists direct child folders only.")
     @GetMapping("/{folderId}/children")
     public FolderChildrenResponse listChildFolders(
-            @Parameter(description = "ID of the folder") @PathVariable UUID folderId) {
-        return folderService.listChildFolders(folderId, currentUserService.getCurrentUserId());
+            @Parameter(description = "ID of the folder") @PathVariable UUID folderId,
+            @Parameter(description = "Tag ID to filter child folders by assignment") @RequestParam(required = false) UUID tagId) {
+        return folderService.listChildFolders(folderId, tagId, currentUserService.getCurrentUserId());
     }
 
     @Operation(summary = "Create child folder", description = "Creates a direct child folder under the parent folder.")

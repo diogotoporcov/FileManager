@@ -37,6 +37,7 @@ public class FolderService {
     private final OrganizationRepository organizationRepository;
     private final AccessControlService accessControlService;
     private final FolderResponseMapper folderResponseMapper;
+    private final TagService tagService;
 
     @Transactional
     public FolderResponse createFolder(CreateFolderRequest request, UUID actorUserId) {
@@ -113,31 +114,50 @@ public class FolderService {
     }
 
     @Transactional(readOnly = true)
-    public List<FolderSummaryResponse> listRootFolders(UUID ownerUserId, UUID ownerOrganizationId, UUID actorUserId) {
+    public List<FolderSummaryResponse> listRootFolders(
+            UUID ownerUserId,
+            UUID ownerOrganizationId,
+            UUID tagId,
+            UUID actorUserId) {
         validateExactlyOneOwner(ownerUserId, ownerOrganizationId);
         accessControlService.assertCanViewContext(actorUserId, ownerUserId, ownerOrganizationId);
+        tagService.assertCanUseTagForFolderListing(tagId, actorUserId, ownerUserId, ownerOrganizationId, null);
 
         if (ownerUserId != null) {
             User ownerUser = resolveOwnerUser(ownerUserId);
-            return folderRepository.findByOwnerUserAndParentFolderIsNullAndDeletedAtIsNullOrderByNameAsc(ownerUser)
+            List<FolderEntity> folders = tagId == null
+                    ? folderRepository.findByOwnerUserAndParentFolderIsNullAndDeletedAtIsNullOrderByNameAsc(ownerUser)
+                    : folderRepository.findTaggedRootFoldersByOwnerUser(ownerUser, tagId);
+            return folders
                     .stream()
                     .map(folderResponseMapper::toSummary)
                     .toList();
         }
 
         Organization ownerOrganization = resolveOwnerOrganization(ownerOrganizationId);
-        return folderRepository
-                .findByOwnerOrganizationAndParentFolderIsNullAndDeletedAtIsNullOrderByNameAsc(ownerOrganization)
+        List<FolderEntity> folders = tagId == null
+                ? folderRepository
+                        .findByOwnerOrganizationAndParentFolderIsNullAndDeletedAtIsNullOrderByNameAsc(ownerOrganization)
+                : folderRepository.findTaggedRootFoldersByOwnerOrganization(ownerOrganization, tagId);
+        return folders
                 .stream()
                 .map(folderResponseMapper::toSummary)
                 .toList();
     }
 
     @Transactional(readOnly = true)
-    public FolderChildrenResponse listChildFolders(UUID folderId, UUID actorUserId) {
+    public FolderChildrenResponse listChildFolders(UUID folderId, UUID tagId, UUID actorUserId) {
         FolderEntity parentFolder = findAccessibleFolder(folderId, actorUserId, Permission.FOLDER_VIEW);
-        List<FolderSummaryResponse> folders = folderRepository
-                .findByParentFolderAndDeletedAtIsNullOrderByNameAsc(parentFolder)
+        tagService.assertCanUseTagForFolderListing(
+                tagId,
+                actorUserId,
+                parentFolder.getOwnerUser() != null ? parentFolder.getOwnerUser().getId() : null,
+                parentFolder.getOwnerOrganization() != null ? parentFolder.getOwnerOrganization().getId() : null,
+                folderId);
+        List<FolderEntity> folderEntities = tagId == null
+                ? folderRepository.findByParentFolderAndDeletedAtIsNullOrderByNameAsc(parentFolder)
+                : folderRepository.findTaggedChildFolders(parentFolder, tagId);
+        List<FolderSummaryResponse> folders = folderEntities
                 .stream()
                 .map(folderResponseMapper::toSummary)
                 .toList();

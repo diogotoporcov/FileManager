@@ -88,6 +88,7 @@ public class FileController {
             description = """
                     Lists files for exactly one owner scope. Filters are applied in the database before sorting and limiting.
                     When folderId is provided, the actor must be able to view the folder and only direct files in that folder are listed.
+                    tagId filters files by reusable tag assignment through the database.
                     Dates use ISO-8601 offset date-time values. Repeat mimeType to match any listed exact MIME type.
                     Sort syntax is field,direction with allowed fields createdAt, updatedAt, name, and size. Default is createdAt,desc.
                     size and limit are bounded aliases with default 50 and maximum 200. Invalid search parameters return 400.

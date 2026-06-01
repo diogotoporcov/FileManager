@@ -9,6 +9,7 @@ public record FileSearchCriteria(
         UUID ownerUserId,
         UUID ownerOrganizationId,
         UUID folderId,
+        UUID tagId,
         DateTimeRange createdAt,
         DateTimeRange updatedAt,
         LongRange size,

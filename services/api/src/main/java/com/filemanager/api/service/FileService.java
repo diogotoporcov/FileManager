@@ -64,6 +64,7 @@ public class FileService {
     private final FileSearchSpecificationBuilder fileSearchSpecificationBuilder;
     private final FileSortMapper fileSortMapper;
     private final FileResponseMapper fileResponseMapper;
+    private final TagService tagService;
 
     @Transactional
     public FileEntity uploadFile(
@@ -209,9 +210,15 @@ public class FileService {
         } else {
             accessControlService.assertOrganizationPermission(actorUserId, query.getOwnerOrganizationId(), Permission.FILE_VIEW);
             organizationRepository.findById(query.getOwnerOrganizationId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Organization not found: " + query.getOwnerOrganizationId()));
+                .orElseThrow(() -> new ResourceNotFoundException("Organization not found: " + query.getOwnerOrganizationId()));
         }
 
+        tagService.assertCanUseTagForFileSearch(
+                query.getTagId(),
+                actorUserId,
+                query.getOwnerUserId(),
+                query.getOwnerOrganizationId(),
+                query.getFolderId());
         FileSearchCriteria criteria = fileSearchCriteriaMapper.toCriteria(query);
         Specification<FileEntity> specification = fileSearchSpecificationBuilder.build(criteria);
         Pageable pageable = PageRequest.of(

@@ -187,6 +187,17 @@ class FileSearchCriteriaMapperTest {
         assertEquals(folderId, criteria.folderId());
     }
 
+    @Test
+    void tagIdIsMappedToCriteria() {
+        UUID tagId = UUID.randomUUID();
+        FileSearchQuery query = baseQuery();
+        query.setTagId(tagId);
+
+        var criteria = mapper.toCriteria(query);
+
+        assertEquals(tagId, criteria.tagId());
+    }
+
     private FileSearchQuery baseQuery() {
         FileSearchQuery query = new FileSearchQuery();
         query.setOwnerUserId(UUID.randomUUID());

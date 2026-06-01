@@ -43,6 +43,8 @@ class FolderServiceTest {
     private OrganizationRepository organizationRepository;
     @Mock
     private AccessControlService accessControlService;
+    @Mock
+    private TagService tagService;
 
     private FolderService folderService;
     private UUID actorUserId;
@@ -58,7 +60,8 @@ class FolderServiceTest {
                 userRepository,
                 organizationRepository,
                 accessControlService,
-                new FolderResponseMapper());
+                new FolderResponseMapper(),
+                tagService);
     }
 
     @Test
@@ -248,10 +251,29 @@ class FolderServiceTest {
         when(folderRepository.findByParentFolderAndDeletedAtIsNullOrderByNameAsc(parent))
                 .thenReturn(List.of(child));
 
-        var response = folderService.listChildFolders(parentId, actorUserId);
+        var response = folderService.listChildFolders(parentId, null, actorUserId);
 
         verify(accessControlService).assertCanAccessFolder(actorUserId, parentId, Permission.FOLDER_VIEW);
         assertEquals(1, response.getFolders().size());
         assertEquals("Child", response.getFolders().getFirst().getName());
+    }
+
+    @Test
+    void listRootFoldersWithTagIdValidatesTagAndFiltersThroughRepository() {
+        UUID tagId = UUID.randomUUID();
+        FolderEntity folder = FolderEntity.builder()
+                .id(UUID.randomUUID())
+                .name("Tagged")
+                .ownerUser(actorUser)
+                .createdByUser(actorUser)
+                .build();
+        when(userRepository.findById(actorUserId)).thenReturn(Optional.of(actorUser));
+        when(folderRepository.findTaggedRootFoldersByOwnerUser(actorUser, tagId)).thenReturn(List.of(folder));
+
+        var response = folderService.listRootFolders(actorUserId, null, tagId, actorUserId);
+
+        verify(tagService).assertCanUseTagForFolderListing(tagId, actorUserId, actorUserId, null, null);
+        assertEquals(1, response.size());
+        assertEquals("Tagged", response.getFirst().getName());
     }
 }
