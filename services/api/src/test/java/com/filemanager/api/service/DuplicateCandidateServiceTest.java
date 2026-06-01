@@ -9,6 +9,7 @@ import com.filemanager.api.entity.DuplicateCandidate.DetectionMethod;
 import com.filemanager.api.entity.FileEntity;
 import com.filemanager.api.entity.User;
 import com.filemanager.api.exception.ResourceNotFoundException;
+import com.filemanager.api.mapper.FileSummaryResponseMapper;
 import com.filemanager.api.port.DuplicateCandidateSearchPort;
 import com.filemanager.api.repository.DuplicateCandidateRepository;
 import com.filemanager.api.repository.FileRepository;
@@ -18,6 +19,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.data.domain.PageImpl;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.OffsetDateTime;
@@ -47,6 +49,9 @@ class DuplicateCandidateServiceTest {
 
     @Mock
     private DuplicateCandidateSearchPort duplicateCandidateSearchPort;
+
+    @Spy
+    private FileSummaryResponseMapper fileSummaryResponseMapper = new FileSummaryResponseMapper();
 
     @InjectMocks
     private DuplicateCandidateService duplicateCandidateService;

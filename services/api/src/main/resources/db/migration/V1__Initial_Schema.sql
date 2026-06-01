@@ -52,6 +52,14 @@ CREATE TABLE files (
     )
 );
 
+CREATE INDEX idx_files_owner_user_active_created
+    ON files(owner_user_id, created_at DESC, id DESC)
+    WHERE deleted_at IS NULL AND owner_user_id IS NOT NULL;
+
+CREATE INDEX idx_files_owner_organization_active_created
+    ON files(owner_organization_id, created_at DESC, id DESC)
+    WHERE deleted_at IS NULL AND owner_organization_id IS NOT NULL;
+
 CREATE TABLE file_fingerprints (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     file_id UUID NOT NULL REFERENCES files(id),

@@ -8,6 +8,7 @@ import com.filemanager.api.entity.FileEntity;
 import com.filemanager.api.entity.Organization;
 import com.filemanager.api.entity.ProcessingJob;
 import com.filemanager.api.entity.User;
+import com.filemanager.api.mapper.FileResponseMapper;
 import com.filemanager.api.port.ApplicationMetricsPort;
 import com.filemanager.api.port.ObjectStoragePort;
 import com.filemanager.api.port.StoreObjectResponse;
@@ -15,6 +16,10 @@ import com.filemanager.api.repository.FileRepository;
 import com.filemanager.api.repository.OrganizationRepository;
 import com.filemanager.api.repository.ProcessingJobRepository;
 import com.filemanager.api.repository.UserRepository;
+import com.filemanager.api.search.file.FileSearchCriteriaMapper;
+import com.filemanager.api.search.file.FileSearchQuery;
+import com.filemanager.api.search.file.FileSearchSpecificationBuilder;
+import com.filemanager.api.search.file.FileSortMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -22,19 +27,25 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -68,6 +79,7 @@ class FileServiceTest {
         userId = UUID.randomUUID();
         user = new User();
         user.setId(userId);
+        FileSortMapper fileSortMapper = new FileSortMapper();
         fileService = new FileService(
                 fileRepository,
                 userRepository,
@@ -78,7 +90,11 @@ class FileServiceTest {
                 applicationEventPublisher,
                 accessControlService,
                 applicationMetricsPort,
-                new AppProperties()
+                new AppProperties(),
+                new FileSearchCriteriaMapper(fileSortMapper),
+                new FileSearchSpecificationBuilder(),
+                fileSortMapper,
+                new FileResponseMapper()
         );
     }
 
@@ -241,5 +257,72 @@ class FileServiceTest {
 
         verify(accessControlService).assertCanAccessFile(userId, fileId, Permission.FILE_VIEW);
         verify(applicationMetricsPort).recordFileDownload();
+    }
+
+    @Test
+    void searchFilesWithoutSearchParamsUsesSpecificationAndDefaultSort() {
+        FileSearchQuery query = new FileSearchQuery();
+        query.setOwnerUserId(userId);
+        query.setSize(2);
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+
+        FileEntity first = file("a.txt", 10L, "text/plain", OffsetDateTime.parse("2026-01-03T00:00:00Z"));
+        FileEntity second = file("b.txt", 20L, "text/plain", OffsetDateTime.parse("2026-01-02T00:00:00Z"));
+        FileEntity extra = file("c.txt", 30L, "text/plain", OffsetDateTime.parse("2026-01-01T00:00:00Z"));
+        when(fileRepository.findAll(org.mockito.ArgumentMatchers.<Specification<FileEntity>>any(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(first, second, extra)));
+
+        var result = fileService.searchFiles(query, userId);
+
+        assertEquals(2, result.getItems().size());
+        assertTrue(result.isHasMore());
+        assertNotNull(result.getNextCursor());
+        assertEquals(2, result.getPageSize());
+
+        ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
+        verify(fileRepository).findAll(org.mockito.ArgumentMatchers.<Specification<FileEntity>>any(), pageableCaptor.capture());
+        Pageable pageable = pageableCaptor.getValue();
+        assertEquals(3, pageable.getPageSize());
+        assertEquals("createdAt: DESC,id: DESC", pageable.getSort().toString());
+    }
+
+    @Test
+    void searchFilesRejectsDifferentOwnerUserBeforeQueryExecution() {
+        FileSearchQuery query = new FileSearchQuery();
+        query.setOwnerUserId(UUID.randomUUID());
+
+        assertThrows(com.filemanager.api.exception.AccessDeniedException.class, () -> fileService.searchFiles(query, userId));
+
+        verify(fileRepository, never()).findAll(org.mockito.ArgumentMatchers.<Specification<FileEntity>>any(), any(Pageable.class));
+    }
+
+    @Test
+    void searchFilesAppliesOrganizationAuthorizationBeforeQueryExecution() {
+        UUID organizationId = UUID.randomUUID();
+        Organization organization = new Organization();
+        organization.setId(organizationId);
+
+        FileSearchQuery query = new FileSearchQuery();
+        query.setOwnerOrganizationId(organizationId);
+        when(organizationRepository.findById(organizationId)).thenReturn(Optional.of(organization));
+        when(fileRepository.findAll(org.mockito.ArgumentMatchers.<Specification<FileEntity>>any(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        fileService.searchFiles(query, userId);
+
+        verify(accessControlService).assertOrganizationPermission(userId, organizationId, Permission.FILE_VIEW);
+        verify(fileRepository).findAll(org.mockito.ArgumentMatchers.<Specification<FileEntity>>any(), any(Pageable.class));
+    }
+
+    private FileEntity file(String name, Long size, String mimeType, OffsetDateTime createdAt) {
+        FileEntity file = new FileEntity();
+        file.setId(UUID.randomUUID());
+        file.setName(name);
+        file.setSize(size);
+        file.setMimeType(mimeType);
+        file.setOwnerUser(user);
+        file.setCreatedAt(createdAt);
+        file.setUpdatedAt(createdAt);
+        return file;
     }
 }

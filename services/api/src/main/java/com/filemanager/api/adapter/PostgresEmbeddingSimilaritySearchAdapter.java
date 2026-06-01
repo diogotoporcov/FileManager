@@ -39,15 +39,10 @@ public class PostgresEmbeddingSimilaritySearchAdapter implements EmbeddingSimila
 
     @Override
     public List<EmbeddingSimilarityCandidate> search(EmbeddingSimilaritySearchRequest request) {
-        String ownerPredicate = request.ownerUserId() != null
-                ? "source_file.owner_user_id = :ownerId AND candidate_file.owner_user_id = :ownerId"
-                : "source_file.owner_organization_id = :ownerId AND candidate_file.owner_organization_id = :ownerId";
-
-        Query query = entityManager.createNativeQuery(BASE_SQL.formatted(ownerPredicate));
+        Query query = entityManager.createNativeQuery(BASE_SQL.formatted(
+                NativeOwnerScopeSql.pairFilePredicate(request.ownerUserId())));
         query.setParameter("sourceFileId", request.sourceFileId());
-        query.setParameter("ownerId", request.ownerUserId() != null
-                ? request.ownerUserId()
-                : request.ownerOrganizationId());
+        query.setParameter("ownerId", NativeOwnerScopeSql.ownerId(request.ownerUserId(), request.ownerOrganizationId()));
         query.setParameter("modelName", request.modelName());
         query.setParameter("modelVersion", request.modelVersion());
         query.setParameter("threshold", request.maxCosineDistance());

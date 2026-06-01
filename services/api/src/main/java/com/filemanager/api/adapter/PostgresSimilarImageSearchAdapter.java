@@ -31,13 +31,10 @@ public class PostgresSimilarImageSearchAdapter implements SimilarImageSearchPort
 
     @Override
     public List<SimilarImageCandidate> search(SimilarImageSearchRequest request) {
-        String ownerPredicate = request.ownerUserId() != null
-                ? "f.owner_user_id = :ownerId"
-                : "f.owner_organization_id = :ownerId";
-
-        Query query = entityManager.createNativeQuery(BASE_SQL.formatted(ownerPredicate));
+        Query query = entityManager.createNativeQuery(BASE_SQL.formatted(
+                NativeOwnerScopeSql.singleFilePredicate(request.ownerUserId())));
         query.setParameter("sourceFileId", request.sourceFileId());
-        query.setParameter("ownerId", request.ownerUserId() != null ? request.ownerUserId() : request.ownerOrganizationId());
+        query.setParameter("ownerId", NativeOwnerScopeSql.ownerId(request.ownerUserId(), request.ownerOrganizationId()));
         query.setParameter("phash", request.phash());
         query.setParameter("threshold", request.threshold());
         query.setParameter("maxResults", request.maxResults());

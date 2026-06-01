@@ -12,6 +12,7 @@ import com.filemanager.api.entity.DuplicateCandidate.CandidateStatus;
 import com.filemanager.api.entity.DuplicateCandidate.DetectionMethod;
 import com.filemanager.api.entity.FileEntity;
 import com.filemanager.api.exception.ResourceNotFoundException;
+import com.filemanager.api.mapper.FileSummaryResponseMapper;
 import com.filemanager.api.port.DuplicateCandidateSearchPort;
 import com.filemanager.api.port.DuplicateCandidateSearchRequest;
 import com.filemanager.api.repository.DuplicateCandidateRepository;
@@ -35,6 +36,7 @@ public class DuplicateCandidateService {
     private final FileRepository fileRepository;
     private final AccessControlService accessControlService;
     private final DuplicateCandidateSearchPort duplicateCandidateSearchPort;
+    private final FileSummaryResponseMapper fileSummaryResponseMapper;
 
     @Transactional(readOnly = true)
     public List<FileDuplicateResponse> getDuplicatesForFile(
@@ -188,8 +190,8 @@ public class DuplicateCandidateService {
 
         return FileDuplicateResponse.builder()
                 .id(dc.getId())
-                .requestedFile(mapToFileSummary(requestedFile))
-                .duplicateFile(mapToFileSummary(duplicateFile))
+                .requestedFile(fileSummaryResponseMapper.toSummary(requestedFile))
+                .duplicateFile(fileSummaryResponseMapper.toSummary(duplicateFile))
                 .detectionMethod(dc.getDetectionMethod())
                 .distance(dc.getDistance())
                 .confidenceScore(dc.getConfidenceScore())
@@ -201,24 +203,13 @@ public class DuplicateCandidateService {
     private DuplicateCandidateResponse mapToDuplicateCandidateResponse(DuplicateCandidate dc) {
         return DuplicateCandidateResponse.builder()
                 .id(dc.getId())
-                .sourceFile(mapToFileSummary(dc.getSourceFile()))
-                .candidateFile(mapToFileSummary(dc.getCandidateFile()))
+                .sourceFile(fileSummaryResponseMapper.toSummary(dc.getSourceFile()))
+                .candidateFile(fileSummaryResponseMapper.toSummary(dc.getCandidateFile()))
                 .detectionMethod(dc.getDetectionMethod())
                 .distance(dc.getDistance())
                 .confidenceScore(dc.getConfidenceScore())
                 .status(dc.getStatus())
                 .createdAt(dc.getCreatedAt())
-                .build();
-    }
-
-    private FileSummaryResponse mapToFileSummary(FileEntity file) {
-        return FileSummaryResponse.builder()
-                .id(file.getId())
-                .name(file.getName())
-                .mimeType(file.getMimeType())
-                .size(file.getSize())
-                .createdAt(file.getCreatedAt())
-                .updatedAt(file.getUpdatedAt())
                 .build();
     }
 

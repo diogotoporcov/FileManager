@@ -49,14 +49,9 @@ public class PostgresSimilarImagePairSearchAdapter implements SimilarImagePairSe
 
     @Override
     public List<SimilarImagePairCandidate> search(SimilarImagePairSearchRequest request) {
-        String ownerPredicate = request.ownerUserId() != null
-                ? "source_file.owner_user_id = :ownerId AND candidate_file.owner_user_id = :ownerId"
-                : "source_file.owner_organization_id = :ownerId AND candidate_file.owner_organization_id = :ownerId";
-
-        Query query = entityManager.createNativeQuery(BASE_SQL.formatted(ownerPredicate));
-        query.setParameter("ownerId", request.ownerUserId() != null
-                ? request.ownerUserId()
-                : request.ownerOrganizationId());
+        Query query = entityManager.createNativeQuery(BASE_SQL.formatted(
+                NativeOwnerScopeSql.pairFilePredicate(request.ownerUserId())));
+        query.setParameter("ownerId", NativeOwnerScopeSql.ownerId(request.ownerUserId(), request.ownerOrganizationId()));
         query.setParameter("threshold", request.threshold());
         query.setParameter("maxResults", request.maxResults());
         query.setParameter("cursorCreatedAt", request.cursorCreatedAt());

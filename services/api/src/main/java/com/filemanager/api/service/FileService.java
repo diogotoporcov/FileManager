@@ -3,7 +3,6 @@ package com.filemanager.api.service;
 import com.filemanager.api.auth.AccessControlService;
 import com.filemanager.api.auth.Permission;
 import com.filemanager.api.config.AppProperties;
-import com.filemanager.api.dto.BoundedPageRequest;
 import com.filemanager.api.dto.CursorPageResponse;
 import com.filemanager.api.dto.FileResponse;
 import com.filemanager.api.event.FileProcessingRequestedEvent;
@@ -13,18 +12,27 @@ import com.filemanager.api.entity.ProcessingJob;
 import com.filemanager.api.entity.User;
 import com.filemanager.api.exception.AccessDeniedException;
 import com.filemanager.api.exception.ResourceNotFoundException;
+import com.filemanager.api.mapper.FileResponseMapper;
 import com.filemanager.api.port.ApplicationMetricsPort;
 import com.filemanager.api.port.ObjectStoragePort;
 import com.filemanager.api.port.StoreObjectRequest;
 import com.filemanager.api.port.StoreObjectResponse;
 import com.filemanager.api.repository.FileRepository;
-import com.filemanager.api.repository.FileListItemProjection;
+import com.filemanager.api.search.file.FileSearchCriteria;
+import com.filemanager.api.search.file.FileSearchCriteriaMapper;
+import com.filemanager.api.search.file.FileSearchCursor;
+import com.filemanager.api.search.file.FileSearchQuery;
+import com.filemanager.api.search.file.FileSearchSpecificationBuilder;
+import com.filemanager.api.search.file.FileSortMapper;
 import com.filemanager.api.repository.OrganizationRepository;
 import com.filemanager.api.repository.ProcessingJobRepository;
 import com.filemanager.api.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -48,6 +56,10 @@ public class FileService {
     private final AccessControlService accessControlService;
     private final ApplicationMetricsPort applicationMetricsPort;
     private final AppProperties appProperties;
+    private final FileSearchCriteriaMapper fileSearchCriteriaMapper;
+    private final FileSearchSpecificationBuilder fileSearchSpecificationBuilder;
+    private final FileSortMapper fileSortMapper;
+    private final FileResponseMapper fileResponseMapper;
 
     @Transactional
     public FileEntity uploadFile(String fileName, String contentType, long size, InputStream content, UUID ownerUserId, UUID ownerOrganizationId, UUID actorUserId) {
@@ -138,73 +150,53 @@ public class FileService {
         }
     }
 
-    public CursorPageResponse<FileResponse> listFiles(
-            UUID ownerUserId,
-            UUID ownerOrganizationId,
-            UUID actorUserId,
-            BoundedPageRequest pageRequest) {
-        validateExactlyOneOwner(ownerUserId, ownerOrganizationId);
-        BoundedPageRequest.SeekCursor cursor = pageRequest.decodedCursor();
-        List<FileListItemProjection> rows;
+    @Transactional(readOnly = true)
+    public CursorPageResponse<FileResponse> searchFiles(FileSearchQuery query, UUID actorUserId) {
+        validateExactlyOneOwner(query.getOwnerUserId(), query.getOwnerOrganizationId());
 
-        if (ownerUserId != null) {
-            if (!ownerUserId.equals(actorUserId)) {
+        if (query.getOwnerUserId() != null) {
+            if (!query.getOwnerUserId().equals(actorUserId)) {
                 throw new AccessDeniedException("You can only list your own files.");
             }
 
-            userRepository.findById(ownerUserId)
-                    .orElseThrow(() -> new ResourceNotFoundException("User not found: " + ownerUserId));
-            rows = fileRepository.findPageByOwnerUser(
-                    ownerUserId,
-                    cursor == null ? null : cursor.createdAt(),
-                    cursor == null ? null : cursor.id(),
-                    pageRequest.fetchSize());
+            userRepository.findById(query.getOwnerUserId())
+                    .orElseThrow(() -> new ResourceNotFoundException("User not found: " + query.getOwnerUserId()));
         } else {
-            accessControlService.assertOrganizationPermission(actorUserId, ownerOrganizationId, Permission.FILE_VIEW);
-            organizationRepository.findById(ownerOrganizationId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Organization not found: " + ownerOrganizationId));
-            rows = fileRepository.findPageByOwnerOrganization(
-                    ownerOrganizationId,
-                    cursor == null ? null : cursor.createdAt(),
-                    cursor == null ? null : cursor.id(),
-                    pageRequest.fetchSize());
+            accessControlService.assertOrganizationPermission(actorUserId, query.getOwnerOrganizationId(), Permission.FILE_VIEW);
+            organizationRepository.findById(query.getOwnerOrganizationId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Organization not found: " + query.getOwnerOrganizationId()));
         }
 
-        return toFilePage(rows, pageRequest);
+        FileSearchCriteria criteria = fileSearchCriteriaMapper.toCriteria(query);
+        Specification<FileEntity> specification = fileSearchSpecificationBuilder.build(criteria);
+        Pageable pageable = PageRequest.of(
+                0,
+                criteria.pageRequest().fetchSize(),
+                fileSortMapper.toSort(criteria.sort()));
+        List<FileEntity> rows = fileRepository.findAll(specification, pageable).getContent();
+
+        return toFilePage(rows, criteria);
     }
 
-    private CursorPageResponse<FileResponse> toFilePage(List<FileListItemProjection> rows, BoundedPageRequest pageRequest) {
-        boolean hasMore = rows.size() > pageRequest.size();
-        List<FileListItemProjection> pageRows = hasMore ? rows.subList(0, pageRequest.size()) : rows;
-        FileListItemProjection last = pageRows.isEmpty() ? null : pageRows.getLast();
+    private CursorPageResponse<FileResponse> toFilePage(List<FileEntity> rows, FileSearchCriteria criteria) {
+        boolean hasMore = rows.size() > criteria.pageRequest().size();
+        List<FileEntity> pageRows = hasMore ? rows.subList(0, criteria.pageRequest().size()) : rows;
+        FileEntity last = pageRows.isEmpty() ? null : pageRows.getLast();
 
         return CursorPageResponse.<FileResponse>builder()
-                .items(pageRows.stream().map(this::mapToFileResponse).toList())
+                .items(pageRows.stream().map(fileResponseMapper::toResponse).toList())
                 .hasMore(hasMore)
-                .nextCursor(nextFileCursor(hasMore, last))
-                .pageSize(pageRequest.size())
+                .nextCursor(nextFileCursor(hasMore, last, criteria))
+                .pageSize(criteria.pageRequest().size())
                 .build();
     }
 
-    private String nextFileCursor(boolean hasMore, FileListItemProjection last) {
+    private String nextFileCursor(boolean hasMore, FileEntity last, FileSearchCriteria criteria) {
         if (!hasMore || last == null) {
             return null;
         }
 
-        return BoundedPageRequest.encodeCursor(last.getCreatedAt(), last.getId());
-    }
-
-    private FileResponse mapToFileResponse(FileListItemProjection projection) {
-        return FileResponse.builder()
-                .id(projection.getId())
-                .name(projection.getName())
-                .mimeType(projection.getMimeType())
-                .size(projection.getSize())
-                .ownerUserId(projection.getOwnerUserId())
-                .ownerOrganizationId(projection.getOwnerOrganizationId())
-                .createdAt(projection.getCreatedAt())
-                .updatedAt(projection.getUpdatedAt())
-                .build();
+        return FileSearchCursor.encode(criteria.sort(), last);
     }
 
     private void validateExactlyOneOwner(UUID ownerUserId, UUID ownerOrganizationId) {

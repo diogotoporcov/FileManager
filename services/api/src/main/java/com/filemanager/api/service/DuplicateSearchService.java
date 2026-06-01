@@ -10,10 +10,10 @@ import com.filemanager.api.dto.DuplicateMatchResponse;
 import com.filemanager.api.dto.DuplicateMethodMatchResponse;
 import com.filemanager.api.dto.DuplicateSearchMethod;
 import com.filemanager.api.dto.FileDuplicateSearchResponse;
-import com.filemanager.api.dto.FileSummaryResponse;
 import com.filemanager.api.entity.FileEntity;
 import com.filemanager.api.entity.FileFingerprint;
 import com.filemanager.api.exception.ResourceNotFoundException;
+import com.filemanager.api.mapper.FileSummaryResponseMapper;
 import com.filemanager.api.port.EmbeddingSimilarityCandidate;
 import com.filemanager.api.port.EmbeddingSimilarityPairCandidate;
 import com.filemanager.api.port.EmbeddingSimilarityPairSearchPort;
@@ -70,6 +70,7 @@ public class DuplicateSearchService {
     private final EmbeddingSimilarityPairSearchPort embeddingSimilarityPairSearchPort;
     private final AccessControlService accessControlService;
     private final AppProperties appProperties;
+    private final FileSummaryResponseMapper fileSummaryResponseMapper;
 
     @Transactional(readOnly = true)
     public List<DuplicateGroupResponse> findDuplicateGroups(
@@ -171,7 +172,7 @@ public class DuplicateSearchService {
         DuplicateMatchResponse last = responses.isEmpty() ? null : responses.getLast();
 
         return FileDuplicateSearchResponse.builder()
-                .originalFile(mapToFileSummary(sourceFile))
+                .originalFile(fileSummaryResponseMapper.toSummary(sourceFile))
                 .matches(responses)
                 .hasMore(hasMore)
                 .nextCursor(nextMatchCursor(hasMore, last))
@@ -583,17 +584,6 @@ public class DuplicateSearchService {
         return Math.clamp(1.0 - distance, 0.0, 1.0);
     }
 
-    private FileSummaryResponse mapToFileSummary(FileEntity file) {
-        return FileSummaryResponse.builder()
-                .id(file.getId())
-                .name(file.getName())
-                .mimeType(file.getMimeType())
-                .size(file.getSize())
-                .createdAt(file.getCreatedAt())
-                .updatedAt(file.getUpdatedAt())
-                .build();
-    }
-
     private record OwnerContext(UUID ownerUserId, UUID ownerOrganizationId) {
         static OwnerContext of(UUID ownerUserId, UUID ownerOrganizationId) {
             if ((ownerUserId == null && ownerOrganizationId == null)
@@ -641,7 +631,7 @@ public class DuplicateSearchService {
                     .orElse(DuplicateSearchMethod.SHA256);
             return DuplicateGroupResponse.builder()
                     .method(method)
-                    .originalFile(mapToFileSummary(original))
+                    .originalFile(fileSummaryResponseMapper.toSummary(original))
                     .duplicates(duplicates)
                     .groupSize(duplicates.size() + 1)
                     .build();
@@ -686,7 +676,7 @@ public class DuplicateSearchService {
                     .min(Comparator.comparingInt(DuplicateSearchService.this::methodStrength))
                     .orElse(DuplicateSearchMethod.SHA256);
             return DuplicateMatchResponse.builder()
-                    .file(mapToFileSummary(file))
+                    .file(fileSummaryResponseMapper.toSummary(file))
                     .bestMethod(bestMethod)
                     .matches(matches)
                     .build();

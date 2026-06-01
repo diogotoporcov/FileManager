@@ -12,6 +12,7 @@ import com.filemanager.api.entity.ImageFingerprint;
 import com.filemanager.api.entity.Organization;
 import com.filemanager.api.entity.User;
 import com.filemanager.api.exception.AccessDeniedException;
+import com.filemanager.api.mapper.FileSummaryResponseMapper;
 import com.filemanager.api.port.EmbeddingSimilarityCandidate;
 import com.filemanager.api.port.EmbeddingSimilarityPairCandidate;
 import com.filemanager.api.port.EmbeddingSimilarityPairSearchPort;
@@ -35,6 +36,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.OffsetDateTime;
@@ -80,6 +82,9 @@ class DuplicateSearchServiceTest {
     private AccessControlService accessControlService;
     @Mock
     private AppProperties appProperties;
+
+    @Spy
+    private FileSummaryResponseMapper fileSummaryResponseMapper = new FileSummaryResponseMapper();
 
     @InjectMocks
     private DuplicateSearchService duplicateSearchService;
