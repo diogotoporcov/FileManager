@@ -31,8 +31,8 @@ jobs:
       - name: Run Tests
         run: ./gradlew test
 
-      - name: Generate API Coverage Report
-        run: ./gradlew :services:api:jacocoTestReport
+      - name: Generate Java Coverage Reports
+        run: ./gradlew :services:api:jacocoTestReport :services:gateway:jacocoTestReport
 
       - name: Upload API Coverage Report
         uses: actions/upload-artifact@v4
@@ -41,6 +41,14 @@ jobs:
           path: |
             services/api/build/reports/jacoco/test/html
             services/api/build/reports/jacoco/test/jacocoTestReport.xml
+
+      - name: Upload Gateway Coverage Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: gateway-jacoco-report
+          path: |
+            services/gateway/build/reports/jacoco/test/html
+            services/gateway/build/reports/jacoco/test/jacocoTestReport.xml
 
   python-ci:
     name: Python CI (Worker)
