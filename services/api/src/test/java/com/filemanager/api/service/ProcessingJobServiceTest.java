@@ -25,6 +25,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.Captor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -63,6 +64,12 @@ class ProcessingJobServiceTest {
     private ApplicationMetricsPort applicationMetricsPort;
     @Mock
     private AppProperties appProperties;
+
+    @Captor
+    private ArgumentCaptor<List<VideoFrameFingerprint>> frameFingerprintsCaptor;
+
+    @Captor
+    private ArgumentCaptor<List<VideoFrameEmbedding>> frameEmbeddingsCaptor;
 
     @InjectMocks
     private ProcessingJobService processingJobService;
@@ -208,8 +215,6 @@ class ProcessingJobServiceTest {
         processingJobService.handleVideoAnalysisResult(jobId, request);
 
         ArgumentCaptor<VideoFingerprint> fingerprintCaptor = ArgumentCaptor.forClass(VideoFingerprint.class);
-        ArgumentCaptor<List<VideoFrameFingerprint>> frameFingerprintsCaptor = ArgumentCaptor.forClass(List.class);
-        ArgumentCaptor<List<VideoFrameEmbedding>> frameEmbeddingsCaptor = ArgumentCaptor.forClass(List.class);
 
         verify(videoFingerprintRepository).save(fingerprintCaptor.capture());
         assertThat(fingerprintCaptor.getValue().getFile()).isEqualTo(file);
