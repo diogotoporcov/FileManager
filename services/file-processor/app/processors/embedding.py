@@ -205,6 +205,9 @@ def normalize_embedding_image(
         )
 
     transposed = ImageOps.exif_transpose(image)
+    if transposed is None:
+        raise NonRetryableProcessingError("Failed to transpose image using EXIF metadata")
+
     return transposed.convert("RGB")
 
 

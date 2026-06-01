@@ -29,7 +29,7 @@ repositories {
     mavenCentral()
 }
 
-val springCloudVersion = "2025.1.0"
+val springCloudVersion = "2025.1.1"
 
 dependencies {
     implementation("org.springframework.cloud:spring-cloud-starter-gateway-server-webflux")
@@ -43,7 +43,7 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-starter-webflux")
     testImplementation("org.springframework.cloud:spring-cloud-contract-wiremock")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
-    mockitoAgent("org.mockito:mockito-core:5.20.0") { isTransitive = false }
+    mockitoAgent("org.mockito:mockito-core:5.23.0") { isTransitive = false }
 }
 
 dependencyManagement {

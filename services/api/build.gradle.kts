@@ -44,10 +44,10 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-flyway")
     implementation("org.springframework.boot:spring-boot-starter-kafka")
-    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.5")
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.3")
     implementation("org.flywaydb:flyway-database-postgresql")
 
-    runtimeOnly("org.postgresql:postgresql")
+    runtimeOnly("org.postgresql:postgresql:42.7.11")
     implementation("org.hibernate.orm:hibernate-vector:7.1.0.Final")
     implementation("io.minio:minio:8.6.0")
 
@@ -60,7 +60,7 @@ dependencies {
     testImplementation("org.springframework.security:spring-security-test")
     testRuntimeOnly("com.h2database:h2")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
-    mockitoAgent("org.mockito:mockito-core:5.20.0") { isTransitive = false }
+    mockitoAgent("org.mockito:mockito-core:5.23.0") { isTransitive = false }
 }
 
 tasks.withType<Test> {
