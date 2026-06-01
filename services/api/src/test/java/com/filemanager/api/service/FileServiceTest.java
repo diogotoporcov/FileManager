@@ -5,6 +5,7 @@ import com.filemanager.api.auth.Permission;
 import com.filemanager.api.config.AppProperties;
 import com.filemanager.api.event.FileProcessingRequestedEvent;
 import com.filemanager.api.entity.FileEntity;
+import com.filemanager.api.entity.FolderEntity;
 import com.filemanager.api.entity.Organization;
 import com.filemanager.api.entity.ProcessingJob;
 import com.filemanager.api.entity.User;
@@ -13,6 +14,7 @@ import com.filemanager.api.port.ApplicationMetricsPort;
 import com.filemanager.api.port.ObjectStoragePort;
 import com.filemanager.api.port.StoreObjectResponse;
 import com.filemanager.api.repository.FileRepository;
+import com.filemanager.api.repository.FolderRepository;
 import com.filemanager.api.repository.OrganizationRepository;
 import com.filemanager.api.repository.ProcessingJobRepository;
 import com.filemanager.api.repository.UserRepository;
@@ -53,6 +55,8 @@ class FileServiceTest {
     @Mock
     private FileRepository fileRepository;
     @Mock
+    private FolderRepository folderRepository;
+    @Mock
     private UserRepository userRepository;
     @Mock
     private OrganizationRepository organizationRepository;
@@ -82,6 +86,7 @@ class FileServiceTest {
         FileSortMapper fileSortMapper = new FileSortMapper();
         fileService = new FileService(
                 fileRepository,
+                folderRepository,
                 userRepository,
                 organizationRepository,
                 processingJobRepository,
@@ -148,6 +153,10 @@ class FileServiceTest {
         assertEquals(ProcessingJob.JobType.CHECKSUM.name(), publishedEvent.jobType());
         assertEquals("file.processing.requested", publishedEvent.eventType());
         assertEquals(userId, publishedEvent.ownerUserId());
+
+        ArgumentCaptor<FileEntity> fileCaptor = ArgumentCaptor.forClass(FileEntity.class);
+        verify(fileRepository).save(fileCaptor.capture());
+        assertEquals(user, fileCaptor.getValue().getCreatedByUser());
     }
 
     @Test
@@ -213,6 +222,7 @@ class FileServiceTest {
         org.setId(orgId);
 
         when(organizationRepository.findById(orgId)).thenReturn(Optional.of(org));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
 
         FileEntity fileEntity = new FileEntity();
         fileEntity.setId(UUID.randomUUID());
@@ -239,6 +249,55 @@ class FileServiceTest {
 
         verify(accessControlService).assertCanUploadToContext(userId, null, orgId);
         verify(applicationMetricsPort).recordFileUpload(size, "ORGANIZATION");
+    }
+
+    @Test
+    void uploadFileIntoFolderSetsFolderAndCreatedByUser() throws java.io.IOException {
+        UUID folderId = UUID.randomUUID();
+        FolderEntity folder = FolderEntity.builder()
+                .id(folderId)
+                .ownerUser(user)
+                .build();
+        when(folderRepository.findByIdAndDeletedAtIsNull(folderId)).thenReturn(Optional.of(folder));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(fileRepository.save(any(FileEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(objectStoragePort.putObject(any())).thenReturn(StoreObjectResponse.builder()
+                .storagePath("storage-path")
+                .etag("test-etag")
+                .build());
+        when(processingJobPlanner.planJobs("text/plain")).thenReturn(List.of());
+
+        try (ByteArrayInputStream content = new ByteArrayInputStream("hello".getBytes())) {
+            fileService.uploadFile("folder.txt", "text/plain", 5L, content, userId, null, folderId, userId);
+        }
+
+        verify(accessControlService).assertCanAccessFolder(userId, folderId, Permission.FOLDER_UPLOAD_FILE);
+        ArgumentCaptor<FileEntity> fileCaptor = ArgumentCaptor.forClass(FileEntity.class);
+        verify(fileRepository).save(fileCaptor.capture());
+        assertEquals(folder, fileCaptor.getValue().getFolder());
+        assertEquals(user, fileCaptor.getValue().getCreatedByUser());
+    }
+
+    @Test
+    void uploadFileIntoFolderRejectsMismatchedOwnerContext() {
+        UUID folderId = UUID.randomUUID();
+        FolderEntity folder = FolderEntity.builder()
+                .id(folderId)
+                .ownerUser(user)
+                .build();
+        when(folderRepository.findByIdAndDeletedAtIsNull(folderId)).thenReturn(Optional.of(folder));
+
+        assertThrows(IllegalArgumentException.class, () -> fileService.uploadFile(
+                "folder.txt",
+                "text/plain",
+                5L,
+                new ByteArrayInputStream("hello".getBytes()),
+                UUID.randomUUID(),
+                null,
+                folderId,
+                userId));
+
+        verify(fileRepository, never()).save(any(FileEntity.class));
     }
 
     @Test
@@ -284,6 +343,29 @@ class FileServiceTest {
         Pageable pageable = pageableCaptor.getValue();
         assertEquals(3, pageable.getPageSize());
         assertEquals("createdAt: DESC,id: DESC", pageable.getSort().toString());
+    }
+
+    @Test
+    void searchFilesWithFolderIdChecksFolderBeforeQueryAndInfersOwnerScope() {
+        UUID folderId = UUID.randomUUID();
+        FolderEntity folder = FolderEntity.builder()
+                .id(folderId)
+                .ownerUser(user)
+                .build();
+        FileSearchQuery query = new FileSearchQuery();
+        query.setFolderId(folderId);
+        query.setSize(2);
+
+        when(folderRepository.findByIdAndDeletedAtIsNull(folderId)).thenReturn(Optional.of(folder));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(fileRepository.findAll(org.mockito.ArgumentMatchers.<Specification<FileEntity>>any(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        fileService.searchFiles(query, userId);
+
+        verify(accessControlService).assertCanAccessFolder(userId, folderId, Permission.FOLDER_VIEW);
+        verify(fileRepository).findAll(org.mockito.ArgumentMatchers.<Specification<FileEntity>>any(), any(Pageable.class));
+        assertEquals(userId, query.getOwnerUserId());
     }
 
     @Test

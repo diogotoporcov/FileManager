@@ -14,6 +14,7 @@ FileManager is a file management system designed for organizing, storing, and pr
 ## Core Features
 
 - **Multi-tenant Architecture**: Comprehensive support for Organizations and Users with granular Role-Based Access Control (RBAC).
+- **First-class Folders**: Folders are database-backed containers and permission scopes for files and child folders.
 - **Intelligent Duplicate Detection**:
   - **Exact Match**: SHA-256 hashing for identical binary files.
   - **Visual Similarity**: pHash (Perceptual Hashing) for identifying visually similar images.
@@ -47,6 +48,36 @@ To start the infrastructure services (Database, Messaging, Storage, Auth), run:
 ```bash
 docker-compose up -d
 ```
+
+## Folder API
+
+The Java API models folders as first-class database resources. Folder membership is stored in PostgreSQL,
+not inferred from object-storage paths.
+
+Supported authenticated endpoints:
+
+- `POST /folders` creates a root folder or child folder.
+- `GET /folders?ownerUserId=...` and `GET /folders?ownerOrganizationId=...` list active root folders.
+- `GET /folders/{folderId}` returns folder metadata.
+- `PATCH /folders/{folderId}` renames a folder.
+- `DELETE /folders/{folderId}` soft deletes an empty folder.
+- `GET /folders/{folderId}/children` lists direct child folders only.
+- `POST /folders/{folderId}/folders` creates a direct child folder.
+- `GET /folders/{folderId}/files` lists files directly inside a folder with the existing file filters,
+  sorting, and cursor pagination.
+- `POST /folders/{folderId}/files` uploads a file into a folder.
+- `POST /files` also accepts `folderId` when the supplied owner scope matches the folder owner scope.
+- `GET /files` accepts `folderId`; without `folderId`, the existing behavior is preserved and files are
+  listed across the requested owner scope.
+
+Current permission behavior uses the existing owner and organization membership model. User-owned folders
+are accessible only by their owner. Organization-owned folders require membership permissions such as
+`FOLDER_VIEW`, `FOLDER_CREATE`, `FOLDER_RENAME`, `FOLDER_DELETE`, and `FOLDER_UPLOAD_FILE`. Granular
+per-folder permission grants, guest/public upload links, recursive folder search, folder moves, and
+delete-own-only rules are deferred.
+
+Folder deletion is conservative: non-empty folders return `409 Conflict` and are not cascaded. File listing
+by folder is direct only and does not include descendant folders.
 
 ## License
 

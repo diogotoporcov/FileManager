@@ -22,15 +22,18 @@ import java.time.OffsetDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "files", check = {
-    @CheckConstraint(name = "chk_owner_exclusive", constraint = "(owner_user_id IS NOT NULL AND owner_organization_id IS NULL) OR (owner_user_id IS NULL AND owner_organization_id IS NOT NULL)")
+@Table(name = "folders", check = {
+    @CheckConstraint(
+            name = "chk_folder_owner_exclusive",
+            constraint = "(owner_user_id IS NOT NULL AND owner_organization_id IS NULL) "
+                    + "OR (owner_user_id IS NULL AND owner_organization_id IS NOT NULL)")
 })
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class FileEntity {
+public class FolderEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
@@ -38,17 +41,9 @@ public class FileEntity {
     @Column(nullable = false)
     private String name;
 
-    @Column(name = "storage_path", nullable = false, unique = true, length = 1024)
-    private String storagePath;
-
-    @Column
-    private String etag;
-
-    @Column(name = "mime_type", nullable = false)
-    private String mimeType;
-
-    @Column(nullable = false)
-    private Long size;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parent_folder_id")
+    private FolderEntity parentFolder;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "owner_user_id")
@@ -58,12 +53,8 @@ public class FileEntity {
     @JoinColumn(name = "owner_organization_id")
     private Organization ownerOrganization;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "folder_id")
-    private FolderEntity folder;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "created_by_user_id")
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "created_by_user_id", nullable = false)
     private User createdByUser;
 
     @CreationTimestamp

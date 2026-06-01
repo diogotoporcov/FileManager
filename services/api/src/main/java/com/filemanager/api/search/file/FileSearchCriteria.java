@@ -8,6 +8,7 @@ import java.util.UUID;
 public record FileSearchCriteria(
         UUID ownerUserId,
         UUID ownerOrganizationId,
+        UUID folderId,
         DateTimeRange createdAt,
         DateTimeRange updatedAt,
         LongRange size,

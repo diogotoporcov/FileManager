@@ -1,6 +1,7 @@
 package com.filemanager.api.repository;
 
 import com.filemanager.api.entity.FileEntity;
+import com.filemanager.api.entity.FolderEntity;
 import com.filemanager.api.entity.Organization;
 import com.filemanager.api.entity.User;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
@@ -23,4 +24,6 @@ public interface FileRepository extends JpaRepository<FileEntity, UUID>, JpaSpec
 
     @Query("select coalesce(sum(f.size), 0) from FileEntity f where f.ownerOrganization = :ownerOrganization and f.deletedAt is null")
     long sumActiveSizeByOwnerOrganization(Organization ownerOrganization);
+
+    boolean existsByFolderAndDeletedAtIsNull(FolderEntity folder);
 }

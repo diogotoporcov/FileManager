@@ -63,6 +63,10 @@ public class OpenApiIntegrationTest {
                 .andExpect(content().contentType("application/json"))
                 .andExpect(jsonPath("$.info.title").value("FileManager API"))
                 .andExpect(jsonPath("$.paths['/files']").exists())
+                .andExpect(jsonPath("$.paths['/folders']").exists())
+                .andExpect(jsonPath("$.paths['/folders/{folderId}']").exists())
+                .andExpect(jsonPath("$.paths['/folders/{folderId}/children']").exists())
+                .andExpect(jsonPath("$.paths['/folders/{folderId}/files']").exists())
                 .andExpect(jsonPath("$.paths['/files/{fileId}']").exists())
                 .andExpect(jsonPath("$.paths['/files/{fileId}/download']").exists())
                 .andExpect(jsonPath("$.paths['/files/{fileId}/duplicates']").exists())
@@ -83,6 +87,7 @@ public class OpenApiIntegrationTest {
         mockMvc.perform(get("/v3/api-docs/public"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.paths['/files']").exists())
+                .andExpect(jsonPath("$.paths['/folders']").exists())
                 .andExpect(jsonPath("$.paths['/internal/processing/jobs/{jobId}/checksum-result']").doesNotExist())
                 .andExpect(jsonPath("$.paths['/internal/processing/jobs/{jobId}/embedding-result']").doesNotExist());
     }

@@ -30,6 +30,10 @@ public class FileSearchSpecificationBuilder {
                 throw new SearchValidationException("Exactly one owner scope is required");
             }
 
+            if (criteria.folderId() != null) {
+                predicates.add(cb.equal(root.get("folder").get("id"), criteria.folderId()));
+            }
+
             addDateTimeRange(predicates, cb, root.get("createdAt"), criteria.createdAt());
             addDateTimeRange(predicates, cb, root.get("updatedAt"), criteria.updatedAt());
             addLongRange(predicates, cb, root.get("size"), criteria.size());

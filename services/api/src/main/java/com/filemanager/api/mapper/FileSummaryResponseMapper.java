@@ -12,6 +12,8 @@ public class FileSummaryResponseMapper {
                 .name(file.getName())
                 .mimeType(file.getMimeType())
                 .size(file.getSize())
+                .folderId(file.getFolder() != null ? file.getFolder().getId() : null)
+                .createdByUserId(file.getCreatedByUser() != null ? file.getCreatedByUser().getId() : null)
                 .createdAt(file.getCreatedAt())
                 .updatedAt(file.getUpdatedAt())
                 .build();

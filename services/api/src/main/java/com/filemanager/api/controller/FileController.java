@@ -63,7 +63,8 @@ public class FileController {
     public FileResponse uploadFile(
             @Parameter(description = "The file to upload") @RequestParam("file") MultipartFile file,
             @Parameter(description = "Owner user ID. For user-owned uploads, this must match the authenticated user. Exactly one ownership context should be provided.") @RequestParam(value = "ownerUserId", required = false) UUID ownerUserId,
-            @Parameter(description = "Owner organization ID. For organization-owned uploads, authenticated user must have upload permission. Exactly one ownership context should be provided.") @RequestParam(value = "ownerOrganizationId", required = false) UUID ownerOrganizationId
+            @Parameter(description = "Owner organization ID. For organization-owned uploads, authenticated user must have upload permission. Exactly one ownership context should be provided.") @RequestParam(value = "ownerOrganizationId", required = false) UUID ownerOrganizationId,
+            @Parameter(description = "Folder ID to upload into. Folder owner context must match the file owner context.") @RequestParam(value = "folderId", required = false) UUID folderId
     ) throws IOException {
         validateUpload(file);
 
@@ -75,6 +76,7 @@ public class FileController {
                 file.getInputStream(),
                 ownerUserId,
                 ownerOrganizationId,
+                folderId,
                 actorUserId
         );
 
@@ -85,6 +87,7 @@ public class FileController {
             summary = "List files",
             description = """
                     Lists files for exactly one owner scope. Filters are applied in the database before sorting and limiting.
+                    When folderId is provided, the actor must be able to view the folder and only direct files in that folder are listed.
                     Dates use ISO-8601 offset date-time values. Repeat mimeType to match any listed exact MIME type.
                     Sort syntax is field,direction with allowed fields createdAt, updatedAt, name, and size. Default is createdAt,desc.
                     size and limit are bounded aliases with default 50 and maximum 200. Invalid search parameters return 400.

@@ -26,6 +26,7 @@ public class FileSearchCriteriaMapper {
         return new FileSearchCriteria(
                 query.getOwnerUserId(),
                 query.getOwnerOrganizationId(),
+                query.getFolderId(),
                 new DateTimeRange(parseDateTime("createdAtFrom", query.getCreatedAtFrom()), parseDateTime("createdAtTo", query.getCreatedAtTo())),
                 new DateTimeRange(parseDateTime("updatedAtFrom", query.getUpdatedAtFrom()), parseDateTime("updatedAtTo", query.getUpdatedAtTo())),
                 new LongRange(query.getSizeMin(), query.getSizeMax()),

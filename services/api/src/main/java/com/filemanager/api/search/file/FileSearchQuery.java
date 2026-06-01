@@ -17,6 +17,9 @@ public class FileSearchQuery {
     @Schema(description = "Owner organization ID. Authenticated user must have file view permission.")
     private UUID ownerOrganizationId;
 
+    @Schema(description = "Folder ID. When set, lists files directly inside that folder only.")
+    private UUID folderId;
+
     @Schema(description = "Inclusive created-at lower bound, ISO-8601 offset date-time.")
     private String createdAtFrom;
 

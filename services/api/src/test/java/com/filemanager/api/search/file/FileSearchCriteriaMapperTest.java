@@ -176,6 +176,17 @@ class FileSearchCriteriaMapperTest {
         assertTrue(criteria.mimeTypes().isEmpty());
     }
 
+    @Test
+    void folderIdIsMappedToCriteria() {
+        UUID folderId = UUID.randomUUID();
+        FileSearchQuery query = baseQuery();
+        query.setFolderId(folderId);
+
+        var criteria = mapper.toCriteria(query);
+
+        assertEquals(folderId, criteria.folderId());
+    }
+
     private FileSearchQuery baseQuery() {
         FileSearchQuery query = new FileSearchQuery();
         query.setOwnerUserId(UUID.randomUUID());
