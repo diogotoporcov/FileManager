@@ -13,56 +13,56 @@ from app.events.models import FileProcessingRequestedEvent
 from app.processors.embedding import ImageEmbeddingProcessor, preprocess_clip_image
 from app.processors.impl import ChecksumProcessor, PHashProcessor
 from app.sinks.base import ProcessingResultSink
-from app.storage.base import ObjectStorageReader
+from app.storage.base import StorageObjectReader, StorageObjectReference
 from app.worker.flow import ProcessingFlow
 from app.worker.errors import NonRetryableProcessingError
 
 
-class FakeStorageReader(ObjectStorageReader):
-    async def read_object(self, storage_path: str) -> AsyncIterator[bytes]:
+class FakeStorageReader(StorageObjectReader):
+    async def read_content(self, reference: StorageObjectReference) -> AsyncIterator[bytes]:
         yield b"test data"
 
 
-class ImageStorageReader(ObjectStorageReader):
-    async def read_object(self, storage_path: str) -> AsyncIterator[bytes]:
+class ImageStorageReader(StorageObjectReader):
+    async def read_content(self, reference: StorageObjectReference) -> AsyncIterator[bytes]:
         img = Image.new("RGB", (8, 8), color="red")
         buf = io.BytesIO()
         img.save(buf, format="PNG")
         yield buf.getvalue()
 
 
-class OversizedImageStorageReader(ObjectStorageReader):
-    async def read_object(self, storage_path: str) -> AsyncIterator[bytes]:
+class OversizedImageStorageReader(StorageObjectReader):
+    async def read_content(self, reference: StorageObjectReference) -> AsyncIterator[bytes]:
         yield b"a" * 6
         yield b"b" * 6
 
 
-class CorruptImageStorageReader(ObjectStorageReader):
-    async def read_object(self, storage_path: str) -> AsyncIterator[bytes]:
+class CorruptImageStorageReader(StorageObjectReader):
+    async def read_content(self, reference: StorageObjectReference) -> AsyncIterator[bytes]:
         yield b"not an image"
 
 
-class PillowImageStorageReader(ObjectStorageReader):
+class PillowImageStorageReader(StorageObjectReader):
     def __init__(self, image_format: str):
         self.image_format = image_format
 
-    async def read_object(self, storage_path: str) -> AsyncIterator[bytes]:
+    async def read_content(self, reference: StorageObjectReference) -> AsyncIterator[bytes]:
         img = Image.new("RGB", (64, 48), color="red")
         buf = io.BytesIO()
         img.save(buf, format=self.image_format)
         yield buf.getvalue()
 
 
-class LargeJpegStorageReader(ObjectStorageReader):
-    async def read_object(self, storage_path: str) -> AsyncIterator[bytes]:
+class LargeJpegStorageReader(StorageObjectReader):
+    async def read_content(self, reference: StorageObjectReference) -> AsyncIterator[bytes]:
         img = Image.new("RGB", (512, 512), color="red")
         buf = io.BytesIO()
         img.save(buf, format="JPEG")
         yield buf.getvalue()
 
 
-class LargeBmpStorageReader(ObjectStorageReader):
-    async def read_object(self, storage_path: str) -> AsyncIterator[bytes]:
+class LargeBmpStorageReader(StorageObjectReader):
+    async def read_content(self, reference: StorageObjectReference) -> AsyncIterator[bytes]:
         img = Image.new("RGB", (128, 128), color="red")
         buf = io.BytesIO()
         img.save(buf, format="BMP")
@@ -219,7 +219,7 @@ def test_embedding_preprocessing_shape_and_dtype():
 
     async def collect() -> bytes:
         nonlocal data
-        async for chunk in image.read_object("test"):
+        async for chunk in image.read_content(StorageObjectReference(path="test")):
             data += chunk
         return data
 

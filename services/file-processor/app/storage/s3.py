@@ -5,7 +5,7 @@ from typing import Protocol
 import boto3
 
 from app.config import settings
-from app.storage.base import ObjectStorageReader
+from app.storage.base import StorageObjectReader, StorageObjectReference
 
 
 class StreamingBody(Protocol):
@@ -16,7 +16,7 @@ class StreamingBody(Protocol):
         pass
 
 
-class S3ObjectStorageReader(ObjectStorageReader):
+class S3ObjectStorageReader(StorageObjectReader):
     def __init__(self):
         self.s3_client = boto3.client(
             "s3",
@@ -26,9 +26,9 @@ class S3ObjectStorageReader(ObjectStorageReader):
         )
         self.bucket_name = settings.s3_bucket_name
 
-    async def read_object(self, storage_path: str) -> AsyncIterator[bytes]:
+    async def read_content(self, reference: StorageObjectReference) -> AsyncIterator[bytes]:
         def get_body() -> StreamingBody:
-            response = self.s3_client.get_object(Bucket=self.bucket_name, Key=storage_path)
+            response = self.s3_client.get_object(Bucket=self.bucket_name, Key=reference.path)
             return response["Body"]
 
         body = await asyncio.to_thread(get_body)

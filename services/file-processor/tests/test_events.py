@@ -78,6 +78,7 @@ def test_event_serialization_aliases():
     assert "eventId" in dump
     assert "fileId" in dump
     assert dump["mimeType"] == "text/plain"
+    assert event.storage_reference.path == "path"
 
 def test_event_invalid_owners_both_present():
     json_data = {

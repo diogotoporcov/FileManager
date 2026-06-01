@@ -3,6 +3,7 @@ from typing import Self
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from app.storage.base import StorageObjectReference
 
 
 class FileProcessingRequestedEvent(BaseModel):
@@ -23,6 +24,10 @@ class FileProcessingRequestedEvent(BaseModel):
     )
 
     model_config = ConfigDict(populate_by_name=True)
+
+    @property
+    def storage_reference(self) -> StorageObjectReference:
+        return StorageObjectReference(path=self.storage_path)
 
     @model_validator(mode="after")
     def validate_one_owner(self) -> Self:

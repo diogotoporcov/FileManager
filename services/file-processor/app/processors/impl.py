@@ -9,7 +9,7 @@ from app.config import settings
 from app.events.models import FileProcessingRequestedEvent
 from app.processors.base import Processor, ProcessorResult
 from app.processors.image_mime_types import is_processable_image_mime_type, parse_processable_image_mime_types
-from app.storage.base import ObjectStorageReader
+from app.storage.base import StorageObjectReader
 
 from app.worker.errors import NonRetryableProcessingError, RetryableProcessingError
 
@@ -20,7 +20,7 @@ ImageFile.LOAD_TRUNCATED_IMAGES = False
 
 
 class ChecksumProcessor(Processor):
-    def __init__(self, storage_reader: ObjectStorageReader):
+    def __init__(self, storage_reader: StorageObjectReader):
         self.storage_reader = storage_reader
 
     @property
@@ -35,7 +35,7 @@ class ChecksumProcessor(Processor):
         sha256_hash = hashlib.sha256()
 
         try:
-            async for chunk in self.storage_reader.read_object(event.storage_path):
+            async for chunk in self.storage_reader.read_content(event.storage_reference):
                 sha256_hash.update(chunk)
 
         except Exception as exc:
@@ -48,7 +48,7 @@ class ChecksumProcessor(Processor):
 
 
 class PHashProcessor(Processor):
-    def __init__(self, storage_reader: ObjectStorageReader, max_image_bytes: int | None = None):
+    def __init__(self, storage_reader: StorageObjectReader, max_image_bytes: int | None = None):
         self.storage_reader = storage_reader
         self.max_image_bytes = max_image_bytes or settings.worker_phash_max_image_bytes
         self.processable_image_mime_types = parse_processable_image_mime_types(settings.processable_image_mime_types)
@@ -67,7 +67,7 @@ class PHashProcessor(Processor):
 
         try:
             with tempfile.SpooledTemporaryFile(max_size=min(self.max_image_bytes, 1024 * 1024)) as buffer:
-                async for chunk in self.storage_reader.read_object(event.storage_path):
+                async for chunk in self.storage_reader.read_content(event.storage_reference):
                     total_bytes += len(chunk)
 
                     if total_bytes > self.max_image_bytes:

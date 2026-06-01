@@ -17,7 +17,7 @@ from app.embeddings.base import (
 from app.events.models import FileProcessingRequestedEvent
 from app.processors.base import Processor, ProcessorResult
 from app.processors.image_mime_types import is_processable_image_mime_type, parse_processable_image_mime_types
-from app.storage.base import ObjectStorageReader
+from app.storage.base import StorageObjectReader
 from app.worker.errors import NonRetryableProcessingError, RetryableProcessingError
 
 logger = logging.getLogger(__name__)
@@ -31,7 +31,7 @@ CLIP_IMAGE_STD = np.array([0.26862954, 0.26130258, 0.27577711], dtype=np.float32
 class ImageEmbeddingProcessor(Processor):
     def __init__(
         self,
-        storage_reader: ObjectStorageReader,
+        storage_reader: StorageObjectReader,
         embedding_client: ImageEmbeddingInferenceClient,
         *,
         model_name: str | None = None,
@@ -93,7 +93,7 @@ class ImageEmbeddingProcessor(Processor):
 
         try:
             with tempfile.SpooledTemporaryFile(max_size=min(self.max_image_bytes, 1024 * 1024)) as buffer:
-                async for chunk in self.storage_reader.read_object(event.storage_path):
+                async for chunk in self.storage_reader.read_content(event.storage_reference):
                     total_bytes += len(chunk)
 
                     if total_bytes > self.max_image_bytes:
