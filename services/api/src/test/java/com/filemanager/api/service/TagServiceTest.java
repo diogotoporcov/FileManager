@@ -208,6 +208,32 @@ class TagServiceTest {
     }
 
     @Test
+    void listOwnerOrganizationTagsAuthorizesContextAndUsesOrganizationQuery() {
+        UUID organizationId = UUID.randomUUID();
+        Organization organization = Organization.builder().id(organizationId).name("Org").build();
+        TagEntity tag = TagEntity.builder()
+                .id(UUID.randomUUID())
+                .displayName("Receipt")
+                .normalizedName("receipt")
+                .scopeType(TagScopeType.OWNER)
+                .ownerOrganization(organization)
+                .createdByUser(actorUser)
+                .build();
+
+        when(organizationRepository.findById(organizationId)).thenReturn(Optional.of(organization));
+        when(tagRepository.listOwnerOrganizationTags(
+                org.mockito.ArgumentMatchers.eq(organizationId),
+                org.mockito.ArgumentMatchers.eq(null),
+                org.mockito.ArgumentMatchers.any(Pageable.class))).thenReturn(List.of(tag));
+
+        var tags = tagService.listTags(null, organizationId, null, null, null, actorUserId);
+
+        verify(accessControlService).assertCanViewContext(actorUserId, null, organizationId);
+        assertEquals(1, tags.size());
+        assertEquals(tag.getId(), tags.getFirst().getId());
+    }
+
+    @Test
     void unauthorizedOwnerScopeCreateIsDenied() {
         CreateTagRequest request = ownerUserRequest("cats", UUID.randomUUID());
         org.mockito.Mockito.doThrow(new AccessDeniedException("denied"))
@@ -234,6 +260,43 @@ class TagServiceTest {
         verify(accessControlService).assertCanAccessFile(actorUserId, fileId, Permission.FILE_MODIFY);
         verify(fileTagRepository, never()).save(any(FileTagEntity.class));
         assertEquals(1, tags.size());
+    }
+
+    @Test
+    void applyTagToFileCreatesMissingAssignment() {
+        UUID fileId = UUID.randomUUID();
+        TagEntity tag = ownerUserTag("cats", actorUser);
+        FileEntity file = FileEntity.builder().id(fileId).ownerUser(actorUser).build();
+        when(fileRepository.findByIdAndDeletedAtIsNull(fileId)).thenReturn(Optional.of(file));
+        when(tagRepository.findByIdAndDeletedAtIsNull(tag.getId())).thenReturn(Optional.of(tag));
+        when(userRepository.findById(actorUserId)).thenReturn(Optional.of(actorUser));
+        when(fileTagRepository.existsById(new FileTagId(fileId, tag.getId()))).thenReturn(false);
+        when(fileTagRepository.findActiveTagsByFileId(fileId)).thenReturn(List.of(tag));
+
+        tagService.applyTagToFile(fileId, tag.getId(), actorUserId);
+
+        ArgumentCaptor<FileTagEntity> assignmentCaptor = ArgumentCaptor.forClass(FileTagEntity.class);
+        verify(fileTagRepository).save(assignmentCaptor.capture());
+        assertEquals(file, assignmentCaptor.getValue().getFile());
+        assertEquals(tag, assignmentCaptor.getValue().getTag());
+        assertEquals(actorUser, assignmentCaptor.getValue().getTaggedByUser());
+    }
+
+    @Test
+    void applyFolderScopedTagToFileInsideScopeCreatesAssignment() {
+        FolderEntity scopeFolder = FolderEntity.builder().id(UUID.randomUUID()).ownerUser(actorUser).build();
+        TagEntity tag = folderTag("ceremony", scopeFolder, actorUser);
+        UUID fileId = UUID.randomUUID();
+        FileEntity file = FileEntity.builder().id(fileId).ownerUser(actorUser).folder(scopeFolder).build();
+        when(fileRepository.findByIdAndDeletedAtIsNull(fileId)).thenReturn(Optional.of(file));
+        when(tagRepository.findByIdAndDeletedAtIsNull(tag.getId())).thenReturn(Optional.of(tag));
+        when(userRepository.findById(actorUserId)).thenReturn(Optional.of(actorUser));
+        when(fileTagRepository.existsById(new FileTagId(fileId, tag.getId()))).thenReturn(false);
+        when(fileTagRepository.findActiveTagsByFileId(fileId)).thenReturn(List.of(tag));
+
+        tagService.applyTagToFile(fileId, tag.getId(), actorUserId);
+
+        verify(fileTagRepository).save(any(FileTagEntity.class));
     }
 
     @Test
@@ -323,6 +386,30 @@ class TagServiceTest {
     }
 
     @Test
+    void applyFolderScopedTagToChildFolderCreatesAssignment() {
+        FolderEntity scopeFolder = FolderEntity.builder().id(UUID.randomUUID()).ownerUser(actorUser).build();
+        FolderEntity childFolder = FolderEntity.builder()
+                .id(UUID.randomUUID())
+                .ownerUser(actorUser)
+                .parentFolder(scopeFolder)
+                .build();
+        TagEntity tag = folderTag("guests", scopeFolder, actorUser);
+        when(folderRepository.findByIdAndDeletedAtIsNull(childFolder.getId())).thenReturn(Optional.of(childFolder));
+        when(tagRepository.findByIdAndDeletedAtIsNull(tag.getId())).thenReturn(Optional.of(tag));
+        when(userRepository.findById(actorUserId)).thenReturn(Optional.of(actorUser));
+        when(folderTagRepository.existsById(new FolderTagId(childFolder.getId(), tag.getId()))).thenReturn(false);
+        when(folderTagRepository.findActiveTagsByFolderId(childFolder.getId())).thenReturn(List.of(tag));
+
+        tagService.applyTagToFolder(childFolder.getId(), tag.getId(), actorUserId);
+
+        ArgumentCaptor<FolderTagEntity> assignmentCaptor = ArgumentCaptor.forClass(FolderTagEntity.class);
+        verify(folderTagRepository).save(assignmentCaptor.capture());
+        assertEquals(childFolder, assignmentCaptor.getValue().getFolder());
+        assertEquals(tag, assignmentCaptor.getValue().getTag());
+        assertEquals(actorUser, assignmentCaptor.getValue().getTaggedByUser());
+    }
+
+    @Test
     void applyFolderScopedTagToUnrelatedFolderIsDenied() {
         FolderEntity scopedFolder = FolderEntity.builder().id(UUID.randomUUID()).ownerUser(actorUser).build();
         FolderEntity unrelatedFolder = FolderEntity.builder().id(UUID.randomUUID()).ownerUser(actorUser).build();
@@ -346,6 +433,21 @@ class TagServiceTest {
 
         assertThrows(AccessDeniedException.class, () -> tagService.applyTagToFolder(folderId, tagId, actorUserId));
         verify(tagRepository, never()).findByIdAndDeletedAtIsNull(tagId);
+    }
+
+    @Test
+    void removeTagFromFolderDeletesOnlyAssignment() {
+        UUID folderId = UUID.randomUUID();
+        UUID tagId = UUID.randomUUID();
+        FolderTagId assignmentId = new FolderTagId(folderId, tagId);
+        when(folderTagRepository.existsById(assignmentId)).thenReturn(true);
+        when(folderTagRepository.findActiveTagsByFolderId(folderId)).thenReturn(List.of());
+
+        tagService.removeTagFromFolder(folderId, tagId, actorUserId);
+
+        verify(accessControlService).assertCanAccessFolder(actorUserId, folderId, Permission.FOLDER_RENAME);
+        verify(folderTagRepository).deleteById(assignmentId);
+        verify(tagRepository, never()).deleteById(tagId);
     }
 
     @Test

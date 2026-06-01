@@ -211,4 +211,54 @@ class AccessControlServiceTest {
 
         assertThrows(AccessDeniedException.class, () -> accessControlService.assertCanManageDuplicate(actorUserId, candidateId));
     }
+
+    @Test
+    void assertCanViewContext_OwnerUser_Success() {
+        assertDoesNotThrow(() -> accessControlService.assertCanViewContext(actorUserId, actorUserId, null));
+    }
+
+    @Test
+    void assertCanViewContext_DifferentOwnerUser_Forbidden() {
+        assertThrows(AccessDeniedException.class,
+                () -> accessControlService.assertCanViewContext(actorUserId, UUID.randomUUID(), null));
+    }
+
+    @Test
+    void assertCanCreateFolderInContext_OrganizationMemberRequiresPermission() {
+        OrganizationMember member = new OrganizationMember();
+        member.setRole(OrganizationMember.MemberRole.CONTRIBUTOR);
+        when(organizationMemberRepository.findByOrganizationIdAndUserId(organizationId, actorUserId))
+                .thenReturn(Optional.of(member));
+        when(rolePermissionPolicyPort.hasPermission(
+                OrganizationMember.MemberRole.CONTRIBUTOR,
+                Permission.FOLDER_CREATE)).thenReturn(true);
+
+        assertDoesNotThrow(() -> accessControlService.assertCanCreateFolderInContext(
+                actorUserId,
+                null,
+                organizationId));
+    }
+
+    @Test
+    void assertCanUploadToContext_OrganizationNonMember_Forbidden() {
+        when(organizationMemberRepository.findByOrganizationIdAndUserId(organizationId, actorUserId))
+                .thenReturn(Optional.empty());
+
+        assertThrows(AccessDeniedException.class, () -> accessControlService.assertCanUploadToContext(
+                actorUserId,
+                null,
+                organizationId));
+    }
+
+    @Test
+    void assertOrganizationPermission_NullActor_Forbidden() {
+        assertThrows(AccessDeniedException.class,
+                () -> accessControlService.assertOrganizationPermission(null, organizationId, Permission.FILE_VIEW));
+    }
+
+    @Test
+    void assertCanViewDuplicates_MissingOwnerContext_Rejected() {
+        assertThrows(IllegalArgumentException.class,
+                () -> accessControlService.assertCanViewDuplicates(actorUserId, null, null));
+    }
 }
