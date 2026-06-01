@@ -5,6 +5,8 @@ import com.filemanager.api.entity.User;
 import com.filemanager.api.exception.AccessDeniedException;
 import com.filemanager.api.exception.ResourceNotFoundException;
 import com.filemanager.api.exception.StorageException;
+import com.filemanager.api.search.SearchValidationException;
+import com.filemanager.api.search.file.FileSearchQuery;
 import com.filemanager.api.service.DuplicateCandidateService;
 import com.filemanager.api.service.FileService;
 import com.filemanager.api.event.FileProcessingRequestedEvent;
@@ -111,6 +113,19 @@ class ErrorHandlingIntegrationTest {
                         .with(jwt()))
                 .andExpect(status().isInternalServerError())
                 .andExpect(jsonPath("$.error").value("A storage error occurred while processing your request."));
+    }
+
+    @Test
+    void invalidFileSearchParam_Returns400() throws Exception {
+        when(fileService.searchFiles(any(FileSearchQuery.class), any()))
+                .thenThrow(new SearchValidationException("Unsupported sort field: storagePath"));
+
+        mockMvc.perform(get("/files")
+                        .param("ownerUserId", UUID.randomUUID().toString())
+                        .param("sort", "storagePath,desc")
+                        .with(jwt()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Unsupported sort field: storagePath"));
     }
 
     @Test

@@ -1,7 +1,10 @@
 package com.filemanager.api.auth;
 
+import com.filemanager.api.dto.CursorPageResponse;
+import com.filemanager.api.dto.FileResponse;
 import com.filemanager.api.entity.User;
 import com.filemanager.api.exception.AccessDeniedException;
+import com.filemanager.api.search.file.FileSearchQuery;
 import com.filemanager.api.service.FileService;
 import com.filemanager.api.service.IdentityResolutionService;
 import com.filemanager.api.service.ProcessingJobService;
@@ -9,6 +12,7 @@ import com.filemanager.api.event.FileProcessingRequestedEvent;
 import io.minio.MinioClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
@@ -25,6 +29,7 @@ import org.springframework.web.context.WebApplicationContext;
 import java.util.List;
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
@@ -83,14 +88,15 @@ class SecurityIntegrationTest {
         User user = User.builder().id(userId).email("test@example.com").build();
 
         when(identityResolutionService.resolveUser(any())).thenReturn(user);
-        when(fileService.listFiles(any(), any(), eq(userId))).thenReturn(List.of());
+        when(fileService.searchFiles(any(FileSearchQuery.class), eq(userId)))
+                .thenReturn(CursorPageResponse.<FileResponse>builder().items(java.util.List.of()).build());
 
         mockMvc.perform(get("/files")
                         .with(jwt().jwt(builder -> builder.subject("sub-123"))))
                 .andExpect(status().isOk());
 
         verify(identityResolutionService).resolveUser(any());
-        verify(fileService).listFiles(any(), any(), eq(userId));
+        verify(fileService).searchFiles(any(FileSearchQuery.class), eq(userId));
     }
 
     @Test
@@ -100,15 +106,51 @@ class SecurityIntegrationTest {
         User user = User.builder().id(actualUserId).email("test@example.com").build();
 
         when(identityResolutionService.resolveUser(any())).thenReturn(user);
-        when(fileService.listFiles(any(), any(), eq(actualUserId))).thenReturn(List.of());
+        when(fileService.searchFiles(any(FileSearchQuery.class), eq(actualUserId)))
+                .thenReturn(CursorPageResponse.<FileResponse>builder().items(java.util.List.of()).build());
 
         mockMvc.perform(get("/files")
                         .param("actorUserId", ignoredUserId.toString())
                         .with(jwt().jwt(builder -> builder.subject("sub-123"))))
                 .andExpect(status().isOk());
 
-        verify(fileService).listFiles(any(), any(), eq(actualUserId));
-        verify(fileService, never()).listFiles(any(), any(), eq(ignoredUserId));
+        verify(fileService).searchFiles(any(FileSearchQuery.class), eq(actualUserId));
+        verify(fileService, never()).searchFiles(any(FileSearchQuery.class), eq(ignoredUserId));
+    }
+
+    @Test
+    void authenticatedRequest_BindsFileSearchQueryParams() throws Exception {
+        UUID userId = UUID.randomUUID();
+        User user = User.builder().id(userId).email("test@example.com").build();
+
+        when(identityResolutionService.resolveUser(any())).thenReturn(user);
+        when(fileService.searchFiles(any(FileSearchQuery.class), eq(userId)))
+                .thenReturn(CursorPageResponse.<FileResponse>builder().items(java.util.List.of()).build());
+
+        mockMvc.perform(get("/files")
+                        .param("ownerUserId", userId.toString())
+                        .param("createdAtFrom", "2026-01-01T00:00:00Z")
+                        .param("createdAtTo", "2026-02-01T00:00:00Z")
+                        .param("sizeMin", "1024")
+                        .param("sizeMax", "2048")
+                        .param("mimeType", "image/jpeg")
+                        .param("mimeType", "image/png")
+                        .param("sort", "size,asc")
+                        .param("limit", "100")
+                        .with(jwt().jwt(builder -> builder.subject("sub-123"))))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<FileSearchQuery> queryCaptor = ArgumentCaptor.forClass(FileSearchQuery.class);
+        verify(fileService).searchFiles(queryCaptor.capture(), eq(userId));
+        FileSearchQuery query = queryCaptor.getValue();
+        assertEquals(userId, query.getOwnerUserId());
+        assertEquals("2026-01-01T00:00:00Z", query.getCreatedAtFrom());
+        assertEquals("2026-02-01T00:00:00Z", query.getCreatedAtTo());
+        assertEquals(1024L, query.getSizeMin());
+        assertEquals(2048L, query.getSizeMax());
+        assertEquals(List.of("image/jpeg", "image/png"), query.getMimeType());
+        assertEquals("size,asc", query.getSort());
+        assertEquals(100, query.getLimit());
     }
 
     @Test
@@ -117,7 +159,7 @@ class SecurityIntegrationTest {
         User user = User.builder().id(userId).email("test@example.com").build();
 
         when(identityResolutionService.resolveUser(any())).thenReturn(user);
-        when(fileService.listFiles(any(), any(), eq(userId)))
+        when(fileService.searchFiles(any(FileSearchQuery.class), eq(userId)))
                 .thenThrow(new AccessDeniedException("Forbidden"));
 
         mockMvc.perform(get("/files")

@@ -1,6 +1,8 @@
 package com.filemanager.api.controller;
 
 import com.filemanager.api.auth.CurrentUserService;
+import com.filemanager.api.dto.BoundedPageRequest;
+import com.filemanager.api.dto.CursorPageResponse;
 import com.filemanager.api.dto.FileProcessingStatusResponse;
 import com.filemanager.api.dto.ProcessingJobResponse;
 import com.filemanager.api.service.FileProcessingStatusService;
@@ -16,7 +18,6 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -37,9 +38,12 @@ public class ProcessingStatusController {
     @Operation(summary = "Get processing jobs", description = "Lists all processing jobs (checksum, phash, etc.) for a specific file.")
     @ApiResponse(responseCode = "200", description = "List of processing jobs")
     @GetMapping("/{fileId}/processing-jobs")
-    public List<ProcessingJobResponse> getProcessingJobs(@Parameter(description = "ID of the file") @PathVariable UUID fileId) {
+    public CursorPageResponse<ProcessingJobResponse> getProcessingJobs(
+            @Parameter(description = "ID of the file") @PathVariable UUID fileId,
+            @Parameter(description = "Maximum jobs to return") @org.springframework.web.bind.annotation.RequestParam(required = false) Integer size,
+            @Parameter(description = "Cursor returned by the previous page") @org.springframework.web.bind.annotation.RequestParam(required = false) String cursor) {
         UUID actorUserId = currentUserService.getCurrentUserId();
-        return fileProcessingStatusService.getProcessingJobs(actorUserId, fileId);
+        return fileProcessingStatusService.getProcessingJobs(actorUserId, fileId, BoundedPageRequest.of(size, cursor));
     }
 
     @Operation(summary = "Get file processing status", description = "Retrieves an aggregated status of all processing tasks for a file.")

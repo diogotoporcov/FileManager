@@ -2,16 +2,19 @@ package com.filemanager.api.auth;
 
 import com.filemanager.api.entity.DuplicateCandidate;
 import com.filemanager.api.entity.FileEntity;
+import com.filemanager.api.entity.FolderEntity;
 import com.filemanager.api.entity.OrganizationMember;
 import com.filemanager.api.exception.AccessDeniedException;
 import com.filemanager.api.exception.ResourceNotFoundException;
 import com.filemanager.api.port.RolePermissionPolicyPort;
 import com.filemanager.api.repository.DuplicateCandidateRepository;
 import com.filemanager.api.repository.FileRepository;
+import com.filemanager.api.repository.FolderRepository;
 import com.filemanager.api.repository.OrganizationMemberRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.time.OffsetDateTime;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -20,6 +23,7 @@ import java.util.UUID;
 public class AccessControlService {
 
     private final FileRepository fileRepository;
+    private final FolderRepository folderRepository;
     private final DuplicateCandidateRepository duplicateCandidateRepository;
     private final OrganizationMemberRepository organizationMemberRepository;
     private final RolePermissionPolicyPort rolePermissionPolicyPort;
@@ -30,6 +34,15 @@ public class AccessControlService {
 
         if (!hasFilePermission(actorUserId, file, permission)) {
             throw new AccessDeniedException("You do not have permission to access this file.");
+        }
+    }
+
+    public void assertCanAccessFolder(UUID actorUserId, UUID folderId, Permission permission) {
+        FolderEntity folder = folderRepository.findByIdAndDeletedAtIsNull(folderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Folder not found with id: " + folderId));
+
+        if (!hasFolderPermission(actorUserId, folder, permission)) {
+            throw new AccessDeniedException("You do not have permission to access this folder.");
         }
     }
 
@@ -49,19 +62,39 @@ public class AccessControlService {
     }
 
     private boolean hasFilePermission(UUID actorUserId, FileEntity file, Permission permission) {
-        // Deny all access if the file is soft-deleted.
-        if (file.getDeletedAt() != null) {
+        return hasOwnedResourcePermission(
+                actorUserId,
+                file.getOwnerUser() != null ? file.getOwnerUser().getId() : null,
+                file.getOwnerOrganization() != null ? file.getOwnerOrganization().getId() : null,
+                file.getDeletedAt(),
+                permission);
+    }
+
+    private boolean hasFolderPermission(UUID actorUserId, FolderEntity folder, Permission permission) {
+        return hasOwnedResourcePermission(
+                actorUserId,
+                folder.getOwnerUser() != null ? folder.getOwnerUser().getId() : null,
+                folder.getOwnerOrganization() != null ? folder.getOwnerOrganization().getId() : null,
+                folder.getDeletedAt(),
+                permission);
+    }
+
+    private boolean hasOwnedResourcePermission(
+            UUID actorUserId,
+            UUID ownerUserId,
+            UUID ownerOrganizationId,
+            OffsetDateTime deletedAt,
+            Permission permission) {
+        if (deletedAt != null) {
             return false;
         }
 
-        // For user-owned files, only the owner has access.
-        if (file.getOwnerUser() != null) {
-            return Objects.equals(file.getOwnerUser().getId(), actorUserId);
+        if (ownerUserId != null) {
+            return Objects.equals(ownerUserId, actorUserId);
         }
 
-        // For organization-owned files, access depends on membership and assigned roles.
-        if (file.getOwnerOrganization() != null) {
-            return organizationMemberRepository.findByOrganizationIdAndUserId(file.getOwnerOrganization().getId(), actorUserId)
+        if (ownerOrganizationId != null) {
+            return organizationMemberRepository.findByOrganizationIdAndUserId(ownerOrganizationId, actorUserId)
                     .map(member -> rolePermissionPolicyPort.hasPermission(member.getRole(), permission))
                     .orElse(false);
         }
@@ -73,6 +106,7 @@ public class AccessControlService {
         if (actorUserId == null) {
              throw new AccessDeniedException("Actor user ID is required.");
         }
+        
         OrganizationMember member = organizationMemberRepository.findByOrganizationIdAndUserId(organizationId, actorUserId)
                 .orElseThrow(() -> new AccessDeniedException("User is not a member of the organization."));
 
@@ -83,6 +117,14 @@ public class AccessControlService {
 
     public void assertCanUploadToContext(UUID actorUserId, UUID ownerUserId, UUID ownerOrganizationId) {
         assertOwnershipContext(actorUserId, ownerUserId, ownerOrganizationId, Permission.FILE_UPLOAD, "You can only upload files to your own user account.");
+    }
+
+    public void assertCanViewContext(UUID actorUserId, UUID ownerUserId, UUID ownerOrganizationId) {
+        assertOwnershipContext(actorUserId, ownerUserId, ownerOrganizationId, Permission.FOLDER_VIEW, "You can only view your own user account.");
+    }
+
+    public void assertCanCreateFolderInContext(UUID actorUserId, UUID ownerUserId, UUID ownerOrganizationId) {
+        assertOwnershipContext(actorUserId, ownerUserId, ownerOrganizationId, Permission.FOLDER_CREATE, "You can only create folders in your own user account.");
     }
 
     public void assertCanViewDuplicates(UUID actorUserId, UUID ownerUserId, UUID ownerOrganizationId) {

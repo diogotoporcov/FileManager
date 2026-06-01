@@ -2,6 +2,8 @@ package com.filemanager.api.service;
 
 import com.filemanager.api.auth.AccessControlService;
 import com.filemanager.api.auth.Permission;
+import com.filemanager.api.dto.BoundedPageRequest;
+import com.filemanager.api.dto.CursorPageResponse;
 import com.filemanager.api.dto.FileProcessingStatusResponse;
 import com.filemanager.api.dto.FileProcessingStatusResponse.AggregateStatus;
 import com.filemanager.api.dto.ProcessingJobResponse;
@@ -12,6 +14,7 @@ import com.filemanager.api.repository.DuplicateCandidateRepository;
 import com.filemanager.api.repository.DuplicateCandidateStatusCount;
 import com.filemanager.api.repository.ProcessingJobRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,19 +34,44 @@ public class FileProcessingStatusService {
     private final AccessControlService accessControlService;
 
     @Transactional(readOnly = true)
-    public List<ProcessingJobResponse> getProcessingJobs(UUID actorUserId, UUID fileId) {
+    public CursorPageResponse<ProcessingJobResponse> getProcessingJobs(
+            UUID actorUserId,
+            UUID fileId,
+            BoundedPageRequest pageRequest) {
         accessControlService.assertCanAccessFile(actorUserId, fileId, Permission.FILE_VIEW);
 
-        return processingJobRepository.findAllByFile_IdOrderByCreatedAtAsc(fileId).stream()
+        List<ProcessingJob> jobs = processingJobRepository.findAllByFile_IdOrderByCreatedAtAsc(
+                fileId,
+                PageRequest.of(0, pageRequest.fetchSize()));
+        boolean hasMore = jobs.size() > pageRequest.size();
+        List<ProcessingJob> pageJobs = hasMore ? jobs.subList(0, pageRequest.size()) : jobs;
+        ProcessingJob last = pageJobs.isEmpty() ? null : pageJobs.getLast();
+
+        return CursorPageResponse.<ProcessingJobResponse>builder()
+                .items(pageJobs.stream()
                 .map(this::mapToResponse)
-                .collect(Collectors.toList());
+                .collect(Collectors.toList()))
+                .hasMore(hasMore)
+                .nextCursor(nextJobCursor(hasMore, last))
+                .pageSize(pageRequest.size())
+                .build();
+    }
+
+    private String nextJobCursor(boolean hasMore, ProcessingJob last) {
+        if (!hasMore || last == null) {
+            return null;
+        }
+
+        return BoundedPageRequest.encodeCursor(last.getCreatedAt(), last.getId());
     }
 
     @Transactional(readOnly = true)
     public FileProcessingStatusResponse getFileProcessingStatus(UUID actorUserId, UUID fileId) {
         accessControlService.assertCanAccessFile(actorUserId, fileId, Permission.FILE_VIEW);
 
-        List<ProcessingJob> jobs = processingJobRepository.findAllByFile_IdOrderByCreatedAtAsc(fileId);
+        List<ProcessingJob> jobs = processingJobRepository.findAllByFile_IdOrderByCreatedAtAsc(
+                fileId,
+                PageRequest.of(0, BoundedPageRequest.MAX_SIZE));
         AggregateStatus overallStatus = calculateAggregateStatus(jobs);
 
         Map<DuplicateCandidate.DetectionMethod, Long> methodCounts = countDuplicatesByMethod(fileId);

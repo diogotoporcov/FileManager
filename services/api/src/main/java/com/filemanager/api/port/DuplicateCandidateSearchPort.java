@@ -1,9 +1,9 @@
 package com.filemanager.api.port;
 
 import com.filemanager.api.entity.DuplicateCandidate;
-
-import java.util.List;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 public interface DuplicateCandidateSearchPort {
-    List<DuplicateCandidate> search(DuplicateCandidateSearchRequest request);
+    Page<DuplicateCandidate> search(DuplicateCandidateSearchRequest request, Pageable pageable);
 }

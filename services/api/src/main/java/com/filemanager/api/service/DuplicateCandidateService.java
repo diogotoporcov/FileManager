@@ -2,19 +2,24 @@ package com.filemanager.api.service;
 
 import com.filemanager.api.auth.AccessControlService;
 import com.filemanager.api.auth.Permission;
+import com.filemanager.api.dto.BoundedOffsetPageRequest;
 import com.filemanager.api.dto.DuplicateCandidateResponse;
 import com.filemanager.api.dto.FileDuplicateResponse;
-import com.filemanager.api.dto.FileSummaryResponse;
+import com.filemanager.api.dto.PageResponse;
 import com.filemanager.api.entity.DuplicateCandidate;
 import com.filemanager.api.entity.DuplicateCandidate.CandidateStatus;
 import com.filemanager.api.entity.DuplicateCandidate.DetectionMethod;
 import com.filemanager.api.entity.FileEntity;
 import com.filemanager.api.exception.ResourceNotFoundException;
+import com.filemanager.api.mapper.FileSummaryResponseMapper;
 import com.filemanager.api.port.DuplicateCandidateSearchPort;
 import com.filemanager.api.port.DuplicateCandidateSearchRequest;
 import com.filemanager.api.repository.DuplicateCandidateRepository;
 import com.filemanager.api.repository.FileRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,6 +35,7 @@ public class DuplicateCandidateService {
     private final FileRepository fileRepository;
     private final AccessControlService accessControlService;
     private final DuplicateCandidateSearchPort duplicateCandidateSearchPort;
+    private final FileSummaryResponseMapper fileSummaryResponseMapper;
 
     @Transactional(readOnly = true)
     public List<FileDuplicateResponse> getDuplicatesForFile(
@@ -52,7 +58,7 @@ public class DuplicateCandidateService {
                 ownerOrganizationId,
                 method,
                 status
-        ));
+        ), PageRequest.of(0, BoundedOffsetPageRequest.MAX_SIZE, duplicateCandidateSort())).getContent();
 
         return candidates.stream()
                 .map(dc -> mapToFileDuplicateResponse(dc, fileId))
@@ -60,24 +66,33 @@ public class DuplicateCandidateService {
     }
 
     @Transactional(readOnly = true)
-    public List<DuplicateCandidateResponse> getDuplicatesForOwner(
+    public PageResponse<DuplicateCandidateResponse> getDuplicatesForOwner(
             UUID ownerUserId, UUID ownerOrganizationId,
-            DetectionMethod method, CandidateStatus status, UUID actorUserId) {
-        
-        accessControlService.assertCanViewDuplicates(actorUserId, ownerUserId, ownerOrganizationId);
-        validateOwnerContext(ownerUserId, ownerOrganizationId);
-
-        List<DuplicateCandidate> candidates = duplicateCandidateSearchPort.search(new DuplicateCandidateSearchRequest(
-                null,
+            DetectionMethod method,
+            CandidateStatus status,
+            UUID actorUserId,
+            BoundedOffsetPageRequest pageRequest) {
+        return getDuplicatesForOwnerInternal(
                 ownerUserId,
                 ownerOrganizationId,
                 method,
-                status
-        ));
+                status,
+                actorUserId,
+                pageRequest);
+    }
 
-        return candidates.stream()
-                .map(this::mapToDuplicateCandidateResponse)
-                .collect(Collectors.toList());
+    @Transactional(readOnly = true)
+    public List<DuplicateCandidateResponse> getDuplicatesForOwner(
+            UUID ownerUserId, UUID ownerOrganizationId,
+            DetectionMethod method, CandidateStatus status, UUID actorUserId) {
+        return getDuplicatesForOwnerInternal(
+                ownerUserId,
+                ownerOrganizationId,
+                method,
+                status,
+                actorUserId,
+                BoundedOffsetPageRequest.of(null, null))
+                .getItems();
     }
 
     @Transactional
@@ -102,6 +117,36 @@ public class DuplicateCandidateService {
         if ((ownerUserId == null && ownerOrganizationId == null) || (ownerUserId != null && ownerOrganizationId != null)) {
             throw new IllegalArgumentException("Exactly one of ownerUserId or ownerOrganizationId must be provided");
         }
+    }
+
+    private PageResponse<DuplicateCandidateResponse> getDuplicatesForOwnerInternal(
+            UUID ownerUserId,
+            UUID ownerOrganizationId,
+            DetectionMethod method,
+            CandidateStatus status,
+            UUID actorUserId,
+            BoundedOffsetPageRequest pageRequest) {
+        accessControlService.assertCanViewDuplicates(actorUserId, ownerUserId, ownerOrganizationId);
+        validateOwnerContext(ownerUserId, ownerOrganizationId);
+
+        Page<DuplicateCandidate> candidates = duplicateCandidateSearchPort.search(new DuplicateCandidateSearchRequest(
+                null,
+                ownerUserId,
+                ownerOrganizationId,
+                method,
+                status
+        ), PageRequest.of(pageRequest.page(), pageRequest.size(), duplicateCandidateSort()));
+
+        return PageResponse.<DuplicateCandidateResponse>builder()
+                .items(candidates.getContent().stream()
+                        .map(this::mapToDuplicateCandidateResponse)
+                        .collect(Collectors.toList()))
+                .page(pageRequest.page())
+                .pageSize(pageRequest.size())
+                .hasMore(candidates.hasNext())
+                .totalItems(candidates.getTotalElements())
+                .totalPages(candidates.getTotalPages())
+                .build();
     }
 
     private void verifyFileOwnership(FileEntity file, UUID ownerUserId, UUID ownerOrganizationId) {
@@ -144,8 +189,8 @@ public class DuplicateCandidateService {
 
         return FileDuplicateResponse.builder()
                 .id(dc.getId())
-                .requestedFile(mapToFileSummary(requestedFile))
-                .duplicateFile(mapToFileSummary(duplicateFile))
+                .requestedFile(fileSummaryResponseMapper.toSummary(requestedFile))
+                .duplicateFile(fileSummaryResponseMapper.toSummary(duplicateFile))
                 .detectionMethod(dc.getDetectionMethod())
                 .distance(dc.getDistance())
                 .confidenceScore(dc.getConfidenceScore())
@@ -157,8 +202,8 @@ public class DuplicateCandidateService {
     private DuplicateCandidateResponse mapToDuplicateCandidateResponse(DuplicateCandidate dc) {
         return DuplicateCandidateResponse.builder()
                 .id(dc.getId())
-                .sourceFile(mapToFileSummary(dc.getSourceFile()))
-                .candidateFile(mapToFileSummary(dc.getCandidateFile()))
+                .sourceFile(fileSummaryResponseMapper.toSummary(dc.getSourceFile()))
+                .candidateFile(fileSummaryResponseMapper.toSummary(dc.getCandidateFile()))
                 .detectionMethod(dc.getDetectionMethod())
                 .distance(dc.getDistance())
                 .confidenceScore(dc.getConfidenceScore())
@@ -167,14 +212,7 @@ public class DuplicateCandidateService {
                 .build();
     }
 
-    private FileSummaryResponse mapToFileSummary(FileEntity file) {
-        return FileSummaryResponse.builder()
-                .id(file.getId())
-                .name(file.getName())
-                .mimeType(file.getMimeType())
-                .size(file.getSize())
-                .createdAt(file.getCreatedAt())
-                .updatedAt(file.getUpdatedAt())
-                .build();
+    private Sort duplicateCandidateSort() {
+        return Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id"));
     }
 }

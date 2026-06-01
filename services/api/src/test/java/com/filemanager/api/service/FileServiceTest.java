@@ -5,16 +5,23 @@ import com.filemanager.api.auth.Permission;
 import com.filemanager.api.config.AppProperties;
 import com.filemanager.api.event.FileProcessingRequestedEvent;
 import com.filemanager.api.entity.FileEntity;
+import com.filemanager.api.entity.FolderEntity;
 import com.filemanager.api.entity.Organization;
 import com.filemanager.api.entity.ProcessingJob;
 import com.filemanager.api.entity.User;
+import com.filemanager.api.mapper.FileResponseMapper;
 import com.filemanager.api.port.ApplicationMetricsPort;
 import com.filemanager.api.port.ObjectStoragePort;
 import com.filemanager.api.port.StoreObjectResponse;
 import com.filemanager.api.repository.FileRepository;
+import com.filemanager.api.repository.FolderRepository;
 import com.filemanager.api.repository.OrganizationRepository;
 import com.filemanager.api.repository.ProcessingJobRepository;
 import com.filemanager.api.repository.UserRepository;
+import com.filemanager.api.search.file.FileSearchCriteriaMapper;
+import com.filemanager.api.search.file.FileSearchQuery;
+import com.filemanager.api.search.file.FileSearchSpecificationBuilder;
+import com.filemanager.api.search.file.FileSortMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -22,25 +29,33 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class FileServiceTest {
     @Mock
     private FileRepository fileRepository;
+    @Mock
+    private FolderRepository folderRepository;
     @Mock
     private UserRepository userRepository;
     @Mock
@@ -57,6 +72,8 @@ class FileServiceTest {
     private AccessControlService accessControlService;
     @Mock
     private ApplicationMetricsPort applicationMetricsPort;
+    @Mock
+    private TagService tagService;
 
     private FileService fileService;
 
@@ -68,8 +85,10 @@ class FileServiceTest {
         userId = UUID.randomUUID();
         user = new User();
         user.setId(userId);
+        FileSortMapper fileSortMapper = new FileSortMapper();
         fileService = new FileService(
                 fileRepository,
+                folderRepository,
                 userRepository,
                 organizationRepository,
                 processingJobRepository,
@@ -78,7 +97,12 @@ class FileServiceTest {
                 applicationEventPublisher,
                 accessControlService,
                 applicationMetricsPort,
-                new AppProperties()
+                new AppProperties(),
+                new FileSearchCriteriaMapper(fileSortMapper),
+                new FileSearchSpecificationBuilder(),
+                fileSortMapper,
+                new FileResponseMapper(),
+                tagService
         );
     }
 
@@ -132,6 +156,10 @@ class FileServiceTest {
         assertEquals(ProcessingJob.JobType.CHECKSUM.name(), publishedEvent.jobType());
         assertEquals("file.processing.requested", publishedEvent.eventType());
         assertEquals(userId, publishedEvent.ownerUserId());
+
+        ArgumentCaptor<FileEntity> fileCaptor = ArgumentCaptor.forClass(FileEntity.class);
+        verify(fileRepository).save(fileCaptor.capture());
+        assertEquals(user, fileCaptor.getValue().getCreatedByUser());
     }
 
     @Test
@@ -197,6 +225,7 @@ class FileServiceTest {
         org.setId(orgId);
 
         when(organizationRepository.findById(orgId)).thenReturn(Optional.of(org));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
 
         FileEntity fileEntity = new FileEntity();
         fileEntity.setId(UUID.randomUUID());
@@ -226,6 +255,55 @@ class FileServiceTest {
     }
 
     @Test
+    void uploadFileIntoFolderSetsFolderAndCreatedByUser() throws java.io.IOException {
+        UUID folderId = UUID.randomUUID();
+        FolderEntity folder = FolderEntity.builder()
+                .id(folderId)
+                .ownerUser(user)
+                .build();
+        when(folderRepository.findByIdAndDeletedAtIsNull(folderId)).thenReturn(Optional.of(folder));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(fileRepository.save(any(FileEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(objectStoragePort.putObject(any())).thenReturn(StoreObjectResponse.builder()
+                .storagePath("storage-path")
+                .etag("test-etag")
+                .build());
+        when(processingJobPlanner.planJobs("text/plain")).thenReturn(List.of());
+
+        try (ByteArrayInputStream content = new ByteArrayInputStream("hello".getBytes())) {
+            fileService.uploadFile("folder.txt", "text/plain", 5L, content, userId, null, folderId, userId);
+        }
+
+        verify(accessControlService).assertCanAccessFolder(userId, folderId, Permission.FOLDER_UPLOAD_FILE);
+        ArgumentCaptor<FileEntity> fileCaptor = ArgumentCaptor.forClass(FileEntity.class);
+        verify(fileRepository).save(fileCaptor.capture());
+        assertEquals(folder, fileCaptor.getValue().getFolder());
+        assertEquals(user, fileCaptor.getValue().getCreatedByUser());
+    }
+
+    @Test
+    void uploadFileIntoFolderRejectsMismatchedOwnerContext() {
+        UUID folderId = UUID.randomUUID();
+        FolderEntity folder = FolderEntity.builder()
+                .id(folderId)
+                .ownerUser(user)
+                .build();
+        when(folderRepository.findByIdAndDeletedAtIsNull(folderId)).thenReturn(Optional.of(folder));
+
+        assertThrows(IllegalArgumentException.class, () -> fileService.uploadFile(
+                "folder.txt",
+                "text/plain",
+                5L,
+                new ByteArrayInputStream("hello".getBytes()),
+                UUID.randomUUID(),
+                null,
+                folderId,
+                userId));
+
+        verify(fileRepository, never()).save(any(FileEntity.class));
+    }
+
+    @Test
     void downloadFile_ShouldRecordDownloadMetrics() throws java.io.IOException {
         UUID fileId = UUID.randomUUID();
         FileEntity file = new FileEntity();
@@ -241,5 +319,111 @@ class FileServiceTest {
 
         verify(accessControlService).assertCanAccessFile(userId, fileId, Permission.FILE_VIEW);
         verify(applicationMetricsPort).recordFileDownload();
+    }
+
+    @Test
+    void searchFilesWithoutSearchParamsUsesSpecificationAndDefaultSort() {
+        FileSearchQuery query = new FileSearchQuery();
+        query.setOwnerUserId(userId);
+        query.setSize(2);
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+
+        FileEntity first = file("a.txt", 10L, OffsetDateTime.parse("2026-01-03T00:00:00Z"));
+        FileEntity second = file("b.txt", 20L, OffsetDateTime.parse("2026-01-02T00:00:00Z"));
+        FileEntity extra = file("c.txt", 30L, OffsetDateTime.parse("2026-01-01T00:00:00Z"));
+        when(fileRepository.findAll(org.mockito.ArgumentMatchers.<Specification<FileEntity>>any(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(first, second, extra)));
+
+        var result = fileService.searchFiles(query, userId);
+
+        assertEquals(2, result.getItems().size());
+        assertTrue(result.isHasMore());
+        assertNotNull(result.getNextCursor());
+        assertEquals(2, result.getPageSize());
+
+        ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
+        verify(fileRepository).findAll(org.mockito.ArgumentMatchers.<Specification<FileEntity>>any(), pageableCaptor.capture());
+        Pageable pageable = pageableCaptor.getValue();
+        assertEquals(3, pageable.getPageSize());
+        assertEquals("createdAt: DESC,id: DESC", pageable.getSort().toString());
+    }
+
+    @Test
+    void searchFilesWithFolderIdChecksFolderBeforeQueryAndInfersOwnerScope() {
+        UUID folderId = UUID.randomUUID();
+        FolderEntity folder = FolderEntity.builder()
+                .id(folderId)
+                .ownerUser(user)
+                .build();
+        FileSearchQuery query = new FileSearchQuery();
+        query.setFolderId(folderId);
+        query.setSize(2);
+
+        when(folderRepository.findByIdAndDeletedAtIsNull(folderId)).thenReturn(Optional.of(folder));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(fileRepository.findAll(org.mockito.ArgumentMatchers.<Specification<FileEntity>>any(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        fileService.searchFiles(query, userId);
+
+        verify(accessControlService).assertCanAccessFolder(userId, folderId, Permission.FOLDER_VIEW);
+        verify(fileRepository).findAll(org.mockito.ArgumentMatchers.<Specification<FileEntity>>any(), any(Pageable.class));
+        assertEquals(userId, query.getOwnerUserId());
+    }
+
+    @Test
+    void searchFilesWithTagIdValidatesTagBeforeQueryExecution() {
+        UUID tagId = UUID.randomUUID();
+        FileSearchQuery query = new FileSearchQuery();
+        query.setOwnerUserId(userId);
+        query.setTagId(tagId);
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(fileRepository.findAll(org.mockito.ArgumentMatchers.<Specification<FileEntity>>any(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        fileService.searchFiles(query, userId);
+
+        verify(tagService).assertCanUseTagForFileSearch(tagId, userId, userId, null, null);
+        verify(fileRepository).findAll(org.mockito.ArgumentMatchers.<Specification<FileEntity>>any(), any(Pageable.class));
+    }
+
+    @Test
+    void searchFilesRejectsDifferentOwnerUserBeforeQueryExecution() {
+        FileSearchQuery query = new FileSearchQuery();
+        query.setOwnerUserId(UUID.randomUUID());
+
+        assertThrows(com.filemanager.api.exception.AccessDeniedException.class, () -> fileService.searchFiles(query, userId));
+
+        verify(fileRepository, never()).findAll(org.mockito.ArgumentMatchers.<Specification<FileEntity>>any(), any(Pageable.class));
+    }
+
+    @Test
+    void searchFilesAppliesOrganizationAuthorizationBeforeQueryExecution() {
+        UUID organizationId = UUID.randomUUID();
+        Organization organization = new Organization();
+        organization.setId(organizationId);
+
+        FileSearchQuery query = new FileSearchQuery();
+        query.setOwnerOrganizationId(organizationId);
+        when(organizationRepository.findById(organizationId)).thenReturn(Optional.of(organization));
+        when(fileRepository.findAll(org.mockito.ArgumentMatchers.<Specification<FileEntity>>any(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        fileService.searchFiles(query, userId);
+
+        verify(accessControlService).assertOrganizationPermission(userId, organizationId, Permission.FILE_VIEW);
+        verify(fileRepository).findAll(org.mockito.ArgumentMatchers.<Specification<FileEntity>>any(), any(Pageable.class));
+    }
+
+    private FileEntity file(String name, Long size, OffsetDateTime createdAt) {
+        FileEntity file = new FileEntity();
+        file.setId(UUID.randomUUID());
+        file.setName(name);
+        file.setSize(size);
+        file.setMimeType("text/plain");
+        file.setOwnerUser(user);
+        file.setCreatedAt(createdAt);
+        file.setUpdatedAt(createdAt);
+        return file;
     }
 }

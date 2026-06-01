@@ -6,10 +6,10 @@ import com.filemanager.api.port.DuplicateCandidateSearchRequest;
 import com.filemanager.api.repository.DuplicateCandidateRepository;
 import com.filemanager.api.repository.DuplicateCandidateSpecifications;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Component;
-
-import java.util.List;
 
 @Component
 @RequiredArgsConstructor
@@ -18,7 +18,7 @@ public class JpaDuplicateCandidateSearchAdapter implements DuplicateCandidateSea
     private final DuplicateCandidateRepository duplicateCandidateRepository;
 
     @Override
-    public List<DuplicateCandidate> search(DuplicateCandidateSearchRequest request) {
+    public Page<DuplicateCandidate> search(DuplicateCandidateSearchRequest request, Pageable pageable) {
         Specification<DuplicateCandidate> spec = Specification.where(DuplicateCandidateSpecifications.isNotDeleted())
                 .and(DuplicateCandidateSpecifications.hasDetectionMethod(request.method()))
                 .and(DuplicateCandidateSpecifications.hasStatus(request.status()));
@@ -33,6 +33,6 @@ public class JpaDuplicateCandidateSearchAdapter implements DuplicateCandidateSea
             spec = spec.and(DuplicateCandidateSpecifications.hasOwnerOrganizationId(request.ownerOrganizationId()));
         }
 
-        return duplicateCandidateRepository.findAll(spec);
+        return duplicateCandidateRepository.findAll(spec, pageable);
     }
 }

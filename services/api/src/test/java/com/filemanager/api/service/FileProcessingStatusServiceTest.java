@@ -2,6 +2,8 @@ package com.filemanager.api.service;
 
 import com.filemanager.api.auth.AccessControlService;
 import com.filemanager.api.auth.Permission;
+import com.filemanager.api.dto.BoundedPageRequest;
+import com.filemanager.api.dto.CursorPageResponse;
 import com.filemanager.api.dto.FileProcessingStatusResponse;
 import com.filemanager.api.dto.FileProcessingStatusResponse.AggregateStatus;
 import com.filemanager.api.dto.ProcessingJobResponse;
@@ -67,18 +69,22 @@ class FileProcessingStatusServiceTest {
                 .jobType(ProcessingJob.JobType.CHECKSUM)
                 .status(ProcessingJob.JobStatus.COMPLETED)
                 .build();
-        when(processingJobRepository.findAllByFile_IdOrderByCreatedAtAsc(fileId)).thenReturn(List.of(job));
+        when(processingJobRepository.findAllByFile_IdOrderByCreatedAtAsc(org.mockito.ArgumentMatchers.eq(fileId), org.mockito.ArgumentMatchers.any()))
+                .thenReturn(List.of(job));
 
-        List<ProcessingJobResponse> result = fileProcessingStatusService.getProcessingJobs(actorUserId, fileId);
+        CursorPageResponse<ProcessingJobResponse> result = fileProcessingStatusService.getProcessingJobs(
+                actorUserId,
+                fileId,
+                BoundedPageRequest.of(null, null));
 
-        assertEquals(1, result.size());
-        assertEquals(job.getId(), result.getFirst().getId());
+        assertEquals(1, result.getItems().size());
+        assertEquals(job.getId(), result.getItems().getFirst().getId());
         verify(accessControlService).assertCanAccessFile(actorUserId, fileId, Permission.FILE_VIEW);
     }
 
     @Test
     void getFileProcessingStatus_ShouldReturnNotStarted_WhenNoJobs() {
-        when(processingJobRepository.findAllByFile_IdOrderByCreatedAtAsc(fileId)).thenReturn(Collections.emptyList());
+        when(processingJobRepository.findAllByFile_IdOrderByCreatedAtAsc(org.mockito.ArgumentMatchers.eq(fileId), org.mockito.ArgumentMatchers.any())).thenReturn(Collections.emptyList());
 
         FileProcessingStatusResponse result = fileProcessingStatusService.getFileProcessingStatus(actorUserId, fileId);
 
@@ -90,7 +96,7 @@ class FileProcessingStatusServiceTest {
     void getFileProcessingStatus_ShouldReturnProcessing_WhenAnyJobPending() {
         ProcessingJob job1 = ProcessingJob.builder().status(ProcessingJob.JobStatus.COMPLETED).file(fileEntity).build();
         ProcessingJob job2 = ProcessingJob.builder().status(ProcessingJob.JobStatus.PENDING).file(fileEntity).build();
-        when(processingJobRepository.findAllByFile_IdOrderByCreatedAtAsc(fileId)).thenReturn(List.of(job1, job2));
+        when(processingJobRepository.findAllByFile_IdOrderByCreatedAtAsc(org.mockito.ArgumentMatchers.eq(fileId), org.mockito.ArgumentMatchers.any())).thenReturn(List.of(job1, job2));
 
         FileProcessingStatusResponse result = fileProcessingStatusService.getFileProcessingStatus(actorUserId, fileId);
 
@@ -100,7 +106,7 @@ class FileProcessingStatusServiceTest {
     @Test
     void getFileProcessingStatus_ShouldReturnCompleted_WhenAllJobsCompleted() {
         ProcessingJob job1 = ProcessingJob.builder().status(ProcessingJob.JobStatus.COMPLETED).file(fileEntity).build();
-        when(processingJobRepository.findAllByFile_IdOrderByCreatedAtAsc(fileId)).thenReturn(List.of(job1));
+        when(processingJobRepository.findAllByFile_IdOrderByCreatedAtAsc(org.mockito.ArgumentMatchers.eq(fileId), org.mockito.ArgumentMatchers.any())).thenReturn(List.of(job1));
 
         FileProcessingStatusResponse result = fileProcessingStatusService.getFileProcessingStatus(actorUserId, fileId);
 
@@ -110,7 +116,7 @@ class FileProcessingStatusServiceTest {
     @Test
     void getFileProcessingStatus_ShouldReturnFailed_WhenAllJobsFailed() {
         ProcessingJob job1 = ProcessingJob.builder().status(ProcessingJob.JobStatus.FAILED).file(fileEntity).build();
-        when(processingJobRepository.findAllByFile_IdOrderByCreatedAtAsc(fileId)).thenReturn(List.of(job1));
+        when(processingJobRepository.findAllByFile_IdOrderByCreatedAtAsc(org.mockito.ArgumentMatchers.eq(fileId), org.mockito.ArgumentMatchers.any())).thenReturn(List.of(job1));
 
         FileProcessingStatusResponse result = fileProcessingStatusService.getFileProcessingStatus(actorUserId, fileId);
 
@@ -121,7 +127,7 @@ class FileProcessingStatusServiceTest {
     void getFileProcessingStatus_ShouldReturnPartialFailure_WhenMixed() {
         ProcessingJob job1 = ProcessingJob.builder().status(ProcessingJob.JobStatus.COMPLETED).file(fileEntity).build();
         ProcessingJob job2 = ProcessingJob.builder().status(ProcessingJob.JobStatus.FAILED).file(fileEntity).build();
-        when(processingJobRepository.findAllByFile_IdOrderByCreatedAtAsc(fileId)).thenReturn(List.of(job1, job2));
+        when(processingJobRepository.findAllByFile_IdOrderByCreatedAtAsc(org.mockito.ArgumentMatchers.eq(fileId), org.mockito.ArgumentMatchers.any())).thenReturn(List.of(job1, job2));
 
         FileProcessingStatusResponse result = fileProcessingStatusService.getFileProcessingStatus(actorUserId, fileId);
 
@@ -130,7 +136,7 @@ class FileProcessingStatusServiceTest {
 
     @Test
     void getFileProcessingStatus_ShouldIncludeCounts() {
-        when(processingJobRepository.findAllByFile_IdOrderByCreatedAtAsc(fileId)).thenReturn(Collections.emptyList());
+        when(processingJobRepository.findAllByFile_IdOrderByCreatedAtAsc(org.mockito.ArgumentMatchers.eq(fileId), org.mockito.ArgumentMatchers.any())).thenReturn(Collections.emptyList());
         when(duplicateCandidateRepository.countActiveByFileIdGroupedByDetectionMethod(fileId))
                 .thenReturn(List.of(
                         methodCount(DuplicateCandidate.DetectionMethod.EXACT, 2L),
@@ -191,7 +197,10 @@ class FileProcessingStatusServiceTest {
 
         // Act & Assert
         assertThrows(com.filemanager.api.exception.AccessDeniedException.class,
-                () -> fileProcessingStatusService.getProcessingJobs(actorUserId, fileId));
+                () -> fileProcessingStatusService.getProcessingJobs(
+                        actorUserId,
+                        fileId,
+                        BoundedPageRequest.of(null, null)));
     }
 
     @Test

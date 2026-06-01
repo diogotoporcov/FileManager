@@ -1,8 +1,11 @@
 package com.filemanager.api.controller;
 
 import com.filemanager.api.auth.CurrentUserService;
+import com.filemanager.api.dto.CursorPageResponse;
 import com.filemanager.api.dto.FileResponse;
 import com.filemanager.api.entity.FileEntity;
+import com.filemanager.api.mapper.FileResponseMapper;
+import com.filemanager.api.search.file.FileSearchQuery;
 import com.filemanager.api.service.FileService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -27,12 +30,13 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+import org.springdoc.core.annotations.ParameterObject;
+
+import jakarta.validation.Valid;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/files")
@@ -47,6 +51,7 @@ public class FileController {
 
     private final FileService fileService;
     private final CurrentUserService currentUserService;
+    private final FileResponseMapper fileResponseMapper;
 
     @Operation(summary = "Upload a file", description = "Uploads a new file to the storage. Actor is derived from JWT.")
     @ApiResponses({
@@ -58,7 +63,8 @@ public class FileController {
     public FileResponse uploadFile(
             @Parameter(description = "The file to upload") @RequestParam("file") MultipartFile file,
             @Parameter(description = "Owner user ID. For user-owned uploads, this must match the authenticated user. Exactly one ownership context should be provided.") @RequestParam(value = "ownerUserId", required = false) UUID ownerUserId,
-            @Parameter(description = "Owner organization ID. For organization-owned uploads, authenticated user must have upload permission. Exactly one ownership context should be provided.") @RequestParam(value = "ownerOrganizationId", required = false) UUID ownerOrganizationId
+            @Parameter(description = "Owner organization ID. For organization-owned uploads, authenticated user must have upload permission. Exactly one ownership context should be provided.") @RequestParam(value = "ownerOrganizationId", required = false) UUID ownerOrganizationId,
+            @Parameter(description = "Folder ID to upload into. Folder owner context must match the file owner context.") @RequestParam(value = "folderId", required = false) UUID folderId
     ) throws IOException {
         validateUpload(file);
 
@@ -70,24 +76,31 @@ public class FileController {
                 file.getInputStream(),
                 ownerUserId,
                 ownerOrganizationId,
+                folderId,
                 actorUserId
         );
 
-        return mapToResponse(entity);
+        return fileResponseMapper.toResponse(entity);
     }
 
-    @Operation(summary = "List files", description = "Lists files based on ownership/organization filters. Actor is derived from JWT.")
-    @ApiResponse(responseCode = "200", description = "List of files")
+    @Operation(
+            summary = "List files",
+            description = """
+                    Lists files for exactly one owner scope. Filters are applied in the database before sorting and limiting.
+                    When folderId is provided, the actor must be able to view the folder and only direct files in that folder are listed.
+                    tagId filters files by reusable tag assignment through the database.
+                    Dates use ISO-8601 offset date-time values. Repeat mimeType to match any listed exact MIME type.
+                    Sort syntax is field,direction with allowed fields createdAt, updatedAt, name, and size. Default is createdAt,desc.
+                    size and limit are bounded aliases with default 50 and maximum 200. Invalid search parameters return 400.
+                    """)
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "List of files"),
+            @ApiResponse(responseCode = "400", description = "Invalid search parameter", content = @Content)
+    })
     @GetMapping
-    public List<FileResponse> listFiles(
-            @Parameter(description = "Filter by owner User ID") @RequestParam(value = "ownerUserId", required = false) UUID ownerUserId,
-            @Parameter(description = "Filter by owner Organization ID") @RequestParam(value = "ownerOrganizationId", required = false) UUID ownerOrganizationId
-    ) {
+    public CursorPageResponse<FileResponse> listFiles(@Valid @ParameterObject FileSearchQuery query) {
         UUID actorUserId = currentUserService.getCurrentUserId();
-        return fileService.listFiles(ownerUserId, ownerOrganizationId, actorUserId)
-                .stream()
-                .map(this::mapToResponse)
-                .collect(Collectors.toList());
+        return fileService.searchFiles(query, actorUserId);
     }
 
     @Operation(summary = "Get file metadata", description = "Retrieves metadata for a specific file.")
@@ -99,7 +112,7 @@ public class FileController {
     public FileResponse getFileMetadata(@Parameter(description = "ID of the file") @PathVariable UUID fileId) {
         UUID actorUserId = currentUserService.getCurrentUserId();
         FileEntity entity = fileService.getFileMetadata(fileId, actorUserId);
-        return mapToResponse(entity);
+        return fileResponseMapper.toResponse(entity);
     }
 
     @Operation(summary = "Download file", description = "Downloads the content of a specific file.")
@@ -156,16 +169,4 @@ public class FileController {
         fileService.deleteFile(fileId, actorUserId);
     }
 
-    private FileResponse mapToResponse(FileEntity entity) {
-        return FileResponse.builder()
-                .id(entity.getId())
-                .name(entity.getName())
-                .mimeType(entity.getMimeType())
-                .size(entity.getSize())
-                .ownerUserId(entity.getOwnerUser() != null ? entity.getOwnerUser().getId() : null)
-                .ownerOrganizationId(entity.getOwnerOrganization() != null ? entity.getOwnerOrganization().getId() : null)
-                .createdAt(entity.getCreatedAt())
-                .updatedAt(entity.getUpdatedAt())
-                .build();
-    }
 }

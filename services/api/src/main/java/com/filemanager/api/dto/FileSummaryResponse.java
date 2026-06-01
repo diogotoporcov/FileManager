@@ -19,6 +19,10 @@ public class FileSummaryResponse {
     String mimeType;
     @Schema(description = "Size of the file in bytes")
     Long size;
+    @Schema(description = "Folder ID containing this file, or null for a root-level file")
+    UUID folderId;
+    @Schema(description = "User ID that uploaded the file")
+    UUID createdByUserId;
     @Schema(description = "Timestamp when the file was created")
     OffsetDateTime createdAt;
     @Schema(description = "Timestamp when the file was last updated")
