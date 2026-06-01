@@ -1,9 +1,6 @@
 package com.filemanager.api.search.file;
 
-import com.filemanager.api.search.AllowedSort;
 import com.filemanager.api.search.SearchValidationException;
-import com.filemanager.api.search.SortDirection;
-import com.filemanager.api.search.SortSpec;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Component;
 
@@ -11,13 +8,13 @@ import java.util.Map;
 
 @Component
 public class FileSortMapper {
-    private static final SortSpec DEFAULT_SORT = new SortSpec("createdAt", SortDirection.DESC);
+    private static final SortSpec DEFAULT_SORT = new SortSpec("createdAt", Sort.Direction.DESC);
 
-    private static final Map<String, AllowedSort> ALLOWED_SORTS = Map.of(
-            "createdAt", new AllowedSort("createdAt", "createdAt"),
-            "updatedAt", new AllowedSort("updatedAt", "updatedAt"),
-            "name", new AllowedSort("name", "name"),
-            "size", new AllowedSort("size", "size")
+    private static final Map<String, String> ALLOWED_SORTS = Map.of(
+            "createdAt", "createdAt",
+            "updatedAt", "updatedAt",
+            "name", "name",
+            "size", "size"
     );
 
     public SortSpec parse(String rawSort) {
@@ -35,20 +32,21 @@ public class FileSortMapper {
             throw new SearchValidationException("Unsupported sort field: " + field);
         }
 
-        return new SortSpec(field, SortDirection.parse(parts[1]));
+        return new SortSpec(field, FileSortDirections.parse(parts[1]));
     }
 
     public Sort toSort(SortSpec sortSpec) {
-        Sort.Direction direction = sortSpec.direction() == SortDirection.ASC ? Sort.Direction.ASC : Sort.Direction.DESC;
+        Sort.Direction direction = sortSpec.direction();
         return Sort.by(direction, entityProperty(sortSpec.field()))
                 .and(Sort.by(direction, "id"));
     }
 
     public String entityProperty(String publicField) {
-        AllowedSort allowedSort = ALLOWED_SORTS.get(publicField);
-        if (allowedSort == null) {
+        String entityProperty = ALLOWED_SORTS.get(publicField);
+        if (entityProperty == null) {
             throw new SearchValidationException("Unsupported sort field: " + publicField);
         }
-        return allowedSort.entityProperty();
+
+        return entityProperty;
     }
 }

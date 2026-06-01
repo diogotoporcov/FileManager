@@ -1,4 +1,6 @@
-package com.filemanager.api.search;
+package com.filemanager.api.search.file;
+
+import com.filemanager.api.search.SearchValidationException;
 
 import java.time.OffsetDateTime;
 

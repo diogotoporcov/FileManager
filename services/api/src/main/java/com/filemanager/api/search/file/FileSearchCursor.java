@@ -2,15 +2,14 @@ package com.filemanager.api.search.file;
 
 import com.filemanager.api.entity.FileEntity;
 import com.filemanager.api.search.SearchValidationException;
-import com.filemanager.api.search.SortDirection;
-import com.filemanager.api.search.SortSpec;
+import org.springframework.data.domain.Sort;
 
 import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
 import java.util.Base64;
 import java.util.UUID;
 
-public record FileSearchCursor(String sortField, SortDirection direction, String value, UUID id) {
+public record FileSearchCursor(String sortField, Sort.Direction direction, String value, UUID id) {
     private static final String VERSION = "v2";
 
     public FileSearchCursor {
@@ -38,7 +37,7 @@ public record FileSearchCursor(String sortField, SortDirection direction, String
             return decodeCurrent(decoded, sort);
         }
 
-        if (!"createdAt".equals(sort.field()) || sort.direction() != SortDirection.DESC) {
+        if (!"createdAt".equals(sort.field()) || sort.direction() != Sort.Direction.DESC) {
             throw new SearchValidationException("Cursor does not match requested sort");
         }
 
@@ -49,7 +48,7 @@ public record FileSearchCursor(String sortField, SortDirection direction, String
 
         try {
             OffsetDateTime.parse(parts[0]);
-            return new FileSearchCursor("createdAt", SortDirection.DESC, parts[0], UUID.fromString(parts[1]));
+            return new FileSearchCursor("createdAt", Sort.Direction.DESC, parts[0], UUID.fromString(parts[1]));
         } catch (RuntimeException ex) {
             throw new SearchValidationException("Invalid cursor", ex);
         }
@@ -83,7 +82,7 @@ public record FileSearchCursor(String sortField, SortDirection direction, String
             throw new SearchValidationException("Invalid cursor");
         }
 
-        SortDirection cursorDirection = SortDirection.parse(parts[2]);
+        Sort.Direction cursorDirection = FileSortDirections.parse(parts[2]);
         if (!parts[1].equals(sort.field()) || cursorDirection != sort.direction()) {
             throw new SearchValidationException("Cursor does not match requested sort");
         }

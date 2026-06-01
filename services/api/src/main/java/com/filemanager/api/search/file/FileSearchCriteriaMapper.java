@@ -1,10 +1,7 @@
 package com.filemanager.api.search.file;
 
 import com.filemanager.api.dto.BoundedPageRequest;
-import com.filemanager.api.search.DateTimeRange;
-import com.filemanager.api.search.LongRange;
 import com.filemanager.api.search.SearchValidationException;
-import com.filemanager.api.search.SortSpec;
 import org.springframework.stereotype.Component;
 
 import java.time.OffsetDateTime;

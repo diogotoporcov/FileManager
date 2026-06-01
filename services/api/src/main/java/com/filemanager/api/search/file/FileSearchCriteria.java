@@ -1,9 +1,6 @@
 package com.filemanager.api.search.file;
 
 import com.filemanager.api.dto.BoundedPageRequest;
-import com.filemanager.api.search.DateTimeRange;
-import com.filemanager.api.search.LongRange;
-import com.filemanager.api.search.SortSpec;
 
 import java.util.List;
 import java.util.UUID;

@@ -2,8 +2,8 @@ package com.filemanager.api.search.file;
 
 import com.filemanager.api.dto.BoundedPageRequest;
 import com.filemanager.api.search.SearchValidationException;
-import com.filemanager.api.search.SortDirection;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.domain.Sort;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -82,7 +82,7 @@ class FileSearchCriteriaMapperTest {
         var criteria = mapper.toCriteria(query);
 
         assertEquals("size", criteria.sort().field());
-        assertEquals(SortDirection.ASC, criteria.sort().direction());
+        assertEquals(Sort.Direction.ASC, criteria.sort().direction());
     }
 
     @Test
@@ -172,7 +172,7 @@ class FileSearchCriteriaMapperTest {
         var criteria = mapper.toCriteria(query);
 
         assertEquals("createdAt", criteria.sort().field());
-        assertEquals(SortDirection.DESC, criteria.sort().direction());
+        assertEquals(Sort.Direction.DESC, criteria.sort().direction());
         assertTrue(criteria.mimeTypes().isEmpty());
     }
 

@@ -1,13 +1,17 @@
-package com.filemanager.api.search;
+package com.filemanager.api.search.file;
+
+import com.filemanager.api.search.SearchValidationException;
 
 public record LongRange(Long min, Long max) {
     public LongRange {
         if (min != null && min < 0) {
             throw new SearchValidationException("Minimum size must not be negative");
         }
+
         if (max != null && max < 0) {
             throw new SearchValidationException("Maximum size must not be negative");
         }
+
         if (min != null && max != null && min > max) {
             throw new SearchValidationException("Minimum size must not be greater than maximum size");
         }

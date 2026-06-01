@@ -1,14 +1,12 @@
 package com.filemanager.api.search.file;
 
 import com.filemanager.api.entity.FileEntity;
-import com.filemanager.api.search.DateTimeRange;
-import com.filemanager.api.search.LongRange;
 import com.filemanager.api.search.SearchValidationException;
-import com.filemanager.api.search.SortDirection;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.Path;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Component;
 
@@ -74,7 +72,7 @@ public class FileSearchSpecificationBuilder {
 
     private Predicate cursorPredicate(Root<FileEntity> root, CriteriaBuilder cb, FileSearchCriteria criteria) {
         FileSearchCursor cursor = criteria.cursor();
-        boolean descending = cursor.direction() == SortDirection.DESC;
+        boolean descending = cursor.direction() == Sort.Direction.DESC;
 
         return switch (cursor.sortField()) {
             case "createdAt" -> compareWithIdTieBreaker(cb, root.get("createdAt"), OffsetDateTime.parse(cursor.value()), root.get("id"), cursor.id(), descending);
