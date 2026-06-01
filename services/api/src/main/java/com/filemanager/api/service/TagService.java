@@ -36,6 +36,7 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Supplier;
 
 @Service
 @RequiredArgsConstructor
@@ -60,29 +61,35 @@ public class TagService {
         Objects.requireNonNull(request, "request must not be null");
         NormalizedTagName tagName = normalizeTagName(request.getName());
         assertCanCreateTagInRequestedScope(request, actorUserId);
-        TagResponse existing = transactionTemplate.execute(status -> findExistingTag(request, tagName.normalizedName())
-                .map(tagResponseMapper::toResponse)
-                .orElse(null));
-        if (existing != null) {
-            return existing;
+        Optional<TagResponse> existing = executeInTransaction(() -> findExistingTag(request, tagName.normalizedName())
+                .map(tagResponseMapper::toResponse));
+        if (existing.isPresent()) {
+            return existing.get();
         }
 
         try {
-            return transactionTemplate.execute(status -> {
+            return executeInTransaction(() -> {
                 TagEntity unsaved = buildTag(request, actorUserId, tagName);
                 return tagResponseMapper.toResponse(tagRepository.saveAndFlush(unsaved));
             });
         } catch (DataIntegrityViolationException ex) {
-            TagResponse concurrentlyCreated = transactionTemplate.execute(status -> findExistingTag(
+            Optional<TagResponse> concurrentlyCreated = executeInTransaction(() -> findExistingTag(
                             request,
                             tagName.normalizedName())
-                    .map(tagResponseMapper::toResponse)
-                    .orElse(null));
-            if (concurrentlyCreated != null) {
-                return concurrentlyCreated;
-            }
-            throw ex;
+                    .map(tagResponseMapper::toResponse));
+
+            return concurrentlyCreated.orElseThrow(() -> ex);
         }
+    }
+
+    private <T> T executeInTransaction(Supplier<T> action) {
+        return transactionTemplate.execute(status -> {
+            if (status.isRollbackOnly()) {
+                throw new IllegalStateException("Transaction is marked rollback-only");
+            }
+
+            return action.get();
+        });
     }
 
     @Transactional(readOnly = true)
@@ -100,6 +107,7 @@ public class TagService {
             if (ownerUserId != null || ownerOrganizationId != null) {
                 throw new IllegalArgumentException("Specify either scopeFolderId or owner context, not both");
             }
+
             accessControlService.assertCanAccessFolder(actorUserId, scopeFolderId, Permission.FOLDER_VIEW);
             folderRepository.findByIdAndDeletedAtIsNull(scopeFolderId)
                     .orElseThrow(() -> new ResourceNotFoundException("Folder not found: " + scopeFolderId));
@@ -114,6 +122,7 @@ public class TagService {
         if (ownerUserId != null) {
             userRepository.findById(ownerUserId)
                     .orElseThrow(() -> new ResourceNotFoundException("User not found: " + ownerUserId));
+
             return tagRepository.listOwnerUserTags(ownerUserId, normalizedQuery, PageRequest.of(0, limit))
                     .stream()
                     .map(tagResponseMapper::toResponse)
@@ -122,6 +131,7 @@ public class TagService {
 
         organizationRepository.findById(ownerOrganizationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Organization not found: " + ownerOrganizationId));
+
         return tagRepository.listOwnerOrganizationTags(ownerOrganizationId, normalizedQuery, PageRequest.of(0, limit))
                 .stream()
                 .map(tagResponseMapper::toResponse)
@@ -155,6 +165,7 @@ public class TagService {
                     .taggedByUser(taggedBy)
                     .build());
         }
+
         return listFileTags(fileId, actorUserId);
     }
 
@@ -165,6 +176,7 @@ public class TagService {
         if (fileTagRepository.existsById(assignmentId)) {
             fileTagRepository.deleteById(assignmentId);
         }
+
         return listFileTags(fileId, actorUserId);
     }
 
@@ -195,6 +207,7 @@ public class TagService {
                     .taggedByUser(taggedBy)
                     .build());
         }
+
         return listFolderTags(folderId, actorUserId);
     }
 
@@ -218,6 +231,7 @@ public class TagService {
         if (tagId == null) {
             return;
         }
+
         TagEntity tag = findActiveTag(tagId);
         assertCanViewTag(actorUserId, tag);
         assertOwnerContextMatches(tag, ownerUserId, ownerOrganizationId, "Tag owner context must match file search context");
@@ -225,6 +239,7 @@ public class TagService {
             if (folderId == null) {
                 throw new AccessDeniedException("Folder-scoped tag requires an explicit matching folder search context.");
             }
+
             if (!folderId.equals(tag.getScopeFolder().getId())) {
                 throw new AccessDeniedException("Folder-scoped tag cannot be used outside its folder scope.");
             }
@@ -248,6 +263,7 @@ public class TagService {
             if (parentFolderId == null) {
                 throw new AccessDeniedException("Folder-scoped tag cannot be used for root folder listing.");
             }
+
             if (!parentFolderId.equals(tag.getScopeFolder().getId())) {
                 throw new AccessDeniedException("Folder-scoped tag cannot be used outside its folder scope.");
             }
@@ -261,6 +277,7 @@ public class TagService {
             if (request.getScopeFolderId() != null) {
                 throw new IllegalArgumentException("OWNER-scoped tags must not include scopeFolderId");
             }
+
             return TagEntity.builder()
                     .displayName(tagName.displayName())
                     .normalizedName(tagName.normalizedName())
@@ -274,6 +291,7 @@ public class TagService {
         if (request.getScopeType() != TagScopeType.FOLDER) {
             throw new IllegalArgumentException("Unsupported tag scope type");
         }
+
         if (request.getScopeFolderId() == null) {
             throw new IllegalArgumentException("FOLDER-scoped tags require scopeFolderId");
         }
@@ -297,6 +315,7 @@ public class TagService {
             if (request.getScopeFolderId() != null) {
                 throw new IllegalArgumentException("OWNER-scoped tags must not include scopeFolderId");
             }
+
             accessControlService.assertCanUploadToContext(
                     actorUserId,
                     request.getOwnerUserId(),
@@ -308,6 +327,7 @@ public class TagService {
             if (request.getScopeFolderId() == null) {
                 throw new IllegalArgumentException("FOLDER-scoped tags require scopeFolderId");
             }
+
             if (request.getOwnerUserId() != null || request.getOwnerOrganizationId() != null) {
                 throw new IllegalArgumentException("FOLDER-scoped tags derive owner context from scopeFolderId");
             }
@@ -323,22 +343,26 @@ public class TagService {
             if (request.getScopeFolderId() == null) {
                 return Optional.empty();
             }
+
             return tagRepository.findByScopeFolderIdAndNormalizedNameAndDeletedAtIsNull(
                     request.getScopeFolderId(),
                     normalizedName);
         }
+
         if (request.getScopeType() == TagScopeType.OWNER && request.getOwnerUserId() != null) {
             return tagRepository.findByOwnerUserIdAndScopeTypeAndNormalizedNameAndDeletedAtIsNull(
                     request.getOwnerUserId(),
                     TagScopeType.OWNER,
                     normalizedName);
         }
+
         if (request.getScopeType() == TagScopeType.OWNER && request.getOwnerOrganizationId() != null) {
             return tagRepository.findByOwnerOrganizationIdAndScopeTypeAndNormalizedNameAndDeletedAtIsNull(
                     request.getOwnerOrganizationId(),
                     TagScopeType.OWNER,
                     normalizedName);
         }
+
         return Optional.empty();
     }
 
@@ -359,6 +383,7 @@ public class TagService {
         if (tag.getScopeType() == TagScopeType.FOLDER) {
             UUID scopeFolderId = tag.getScopeFolder().getId();
             UUID parentFolderId = folder.getParentFolder() != null ? folder.getParentFolder().getId() : null;
+
             if (!scopeFolderId.equals(folder.getId()) && !scopeFolderId.equals(parentFolderId)) {
                 throw new AccessDeniedException("Folder-scoped tag cannot be applied to an unrelated folder.");
             }
@@ -370,6 +395,7 @@ public class TagService {
             accessControlService.assertCanAccessFolder(actorUserId, tag.getScopeFolder().getId(), Permission.FOLDER_VIEW);
             return;
         }
+
         accessControlService.assertCanViewContext(
                 actorUserId,
                 tag.getOwnerUser() != null ? tag.getOwnerUser().getId() : null,
@@ -392,9 +418,11 @@ public class TagService {
         if (rawName == null) {
             throw new IllegalArgumentException("Tag name is required");
         }
+
         if (rawName.length() > MAX_RAW_TAG_NAME_LENGTH) {
             throw new IllegalArgumentException("Tag name is too long");
         }
+
         if (rawName.chars().anyMatch(Character::isISOControl)) {
             throw new IllegalArgumentException("Tag name must not contain control characters");
         }
@@ -404,6 +432,7 @@ public class TagService {
         if (normalizedName.isBlank()) {
             throw new IllegalArgumentException("Tag name must not be blank");
         }
+
         if (displayName.length() > MAX_TAG_NAME_LENGTH) {
             throw new IllegalArgumentException("Tag name must not exceed " + MAX_TAG_NAME_LENGTH + " characters");
         }
@@ -414,6 +443,7 @@ public class TagService {
         if (rawQuery == null || rawQuery.isBlank()) {
             return null;
         }
+
         return normalizeTagName(rawQuery).normalizedName();
     }
 
@@ -421,12 +451,15 @@ public class TagService {
         if (requestedLimit == null) {
             return DEFAULT_TAG_LIMIT;
         }
+
         if (requestedLimit < 1) {
             throw new IllegalArgumentException("Tag list limit must be positive");
         }
+
         if (requestedLimit > MAX_TAG_LIMIT) {
             throw new IllegalArgumentException("Tag list limit must not exceed " + MAX_TAG_LIMIT);
         }
+
         return requestedLimit;
     }
 
@@ -444,6 +477,7 @@ public class TagService {
         if (ownerUserId == null) {
             return null;
         }
+
         return userRepository.findById(ownerUserId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + ownerUserId));
     }
@@ -452,6 +486,7 @@ public class TagService {
         if (ownerOrganizationId == null) {
             return null;
         }
+
         return organizationRepository.findById(ownerOrganizationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Organization not found: " + ownerOrganizationId));
     }
