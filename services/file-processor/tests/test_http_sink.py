@@ -109,6 +109,38 @@ async def test_report_video_analysis_success_includes_token_and_payload():
         assert kwargs["json"] == {"fileId": str(file_id), **result}
 
 @pytest.mark.asyncio
+async def test_report_audio_analysis_success_includes_token_and_payload():
+    sink = HttpProcessingResultSink(internal_api_token="test-token")
+    job_id = uuid.uuid4()
+    file_id = uuid.uuid4()
+    result = {
+        "durationMs": 1000,
+        "codec": "mp3",
+        "sampleRate": 44100,
+        "channels": 2,
+        "bitRate": 128000,
+        "audioStreamIndex": 0,
+        "containerFormat": "mp3",
+        "fingerprint": "12345ABC",
+        "fingerprintAlgorithm": "chromaprint",
+        "fingerprintVersion": "fpcalc",
+        "fingerprintDurationSeconds": 60,
+    }
+
+    with patch("httpx.AsyncClient.post") as mock_post:
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_post.return_value = mock_response
+
+        await sink.report_audio_analysis_success(job_id, file_id, result)
+
+        assert mock_post.called
+        args, kwargs = mock_post.call_args
+        assert str(args[0]).endswith(f"/internal/processing/jobs/{job_id}/audio-analysis-result")
+        assert kwargs["headers"]["Authorization"] == "Bearer test-token"
+        assert kwargs["json"] == {"fileId": str(file_id), **result}
+
+@pytest.mark.asyncio
 async def test_report_failure_includes_token():
     sink = HttpProcessingResultSink(internal_api_token="test-token")
     job_id = uuid.uuid4()

@@ -68,7 +68,8 @@ public class ProcessingJob {
         CHECKSUM,
         PHASH,
         EMBEDDING,
-        VIDEO_ANALYSIS
+        VIDEO_ANALYSIS,
+        AUDIO_ANALYSIS
     }
 
     public enum JobStatus {

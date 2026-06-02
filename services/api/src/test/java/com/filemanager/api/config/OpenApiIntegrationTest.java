@@ -80,7 +80,8 @@ public class OpenApiIntegrationTest {
                 .andExpect(jsonPath("$.paths['/internal/processing/jobs']").doesNotExist())
                 .andExpect(jsonPath("$.paths['/internal/processing/jobs/{jobId}/checksum-result']").doesNotExist())
                 .andExpect(jsonPath("$.paths['/internal/processing/jobs/{jobId}/embedding-result']").doesNotExist())
-                .andExpect(jsonPath("$.paths['/internal/processing/jobs/{jobId}/video-analysis-result']").doesNotExist());
+                .andExpect(jsonPath("$.paths['/internal/processing/jobs/{jobId}/video-analysis-result']").doesNotExist())
+                .andExpect(jsonPath("$.paths['/internal/processing/jobs/{jobId}/audio-analysis-result']").doesNotExist());
     }
 
     @Test
@@ -91,7 +92,8 @@ public class OpenApiIntegrationTest {
                 .andExpect(jsonPath("$.paths['/folders']").exists())
                 .andExpect(jsonPath("$.paths['/internal/processing/jobs/{jobId}/checksum-result']").doesNotExist())
                 .andExpect(jsonPath("$.paths['/internal/processing/jobs/{jobId}/embedding-result']").doesNotExist())
-                .andExpect(jsonPath("$.paths['/internal/processing/jobs/{jobId}/video-analysis-result']").doesNotExist());
+                .andExpect(jsonPath("$.paths['/internal/processing/jobs/{jobId}/video-analysis-result']").doesNotExist())
+                .andExpect(jsonPath("$.paths['/internal/processing/jobs/{jobId}/audio-analysis-result']").doesNotExist());
     }
 
     @Test

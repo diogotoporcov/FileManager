@@ -187,3 +187,30 @@ def test_video_settings_validation():
         Settings(internal_api_token="test-token-1234567890123456789012", worker_video_frame_timeout_seconds=0)
     with pytest.raises(ValidationError):
         Settings(internal_api_token="test-token-1234567890123456789012", worker_video_supported_mime_types="")
+
+def test_audio_settings_validation():
+    settings = Settings(
+        internal_api_token="test-token-1234567890123456789012",
+        worker_audio_enabled=True,
+        worker_audio_supported_mime_types="audio/mpeg,audio/flac",
+        worker_audio_max_file_bytes=1024,
+        worker_audio_max_duration_seconds=60,
+        worker_audio_fingerprint_length_seconds=30,
+        worker_audio_subprocess_timeout_seconds=5,
+        worker_audio_max_fingerprint_chars=1024,
+    )
+
+    assert settings.worker_audio_supported_mime_types == "audio/mpeg,audio/flac"
+
+    with pytest.raises(ValidationError):
+        Settings(internal_api_token="test-token-1234567890123456789012", worker_audio_supported_mime_types="")
+    with pytest.raises(ValidationError):
+        Settings(internal_api_token="test-token-1234567890123456789012", worker_audio_max_file_bytes=0)
+    with pytest.raises(ValidationError):
+        Settings(internal_api_token="test-token-1234567890123456789012", worker_audio_max_duration_seconds=0)
+    with pytest.raises(ValidationError):
+        Settings(internal_api_token="test-token-1234567890123456789012", worker_audio_fingerprint_length_seconds=0)
+    with pytest.raises(ValidationError):
+        Settings(internal_api_token="test-token-1234567890123456789012", worker_audio_subprocess_timeout_seconds=0)
+    with pytest.raises(ValidationError):
+        Settings(internal_api_token="test-token-1234567890123456789012", worker_audio_max_fingerprint_chars=0)

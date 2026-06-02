@@ -22,7 +22,8 @@ class ProcessingJobPlannerTest {
                 new ChecksumJobStrategy(),
                 new PhashJobStrategy(appProperties),
                 new EmbeddingJobStrategy(appProperties),
-                new VideoAnalysisJobStrategy(appProperties)
+                new VideoAnalysisJobStrategy(appProperties),
+                new AudioAnalysisJobStrategy(appProperties)
         ));
     }
 
@@ -99,7 +100,8 @@ class ProcessingJobPlannerTest {
                 new ChecksumJobStrategy(),
                 new PhashJobStrategy(appProperties),
                 new EmbeddingJobStrategy(appProperties),
-                new VideoAnalysisJobStrategy(appProperties)
+                new VideoAnalysisJobStrategy(appProperties),
+                new AudioAnalysisJobStrategy(appProperties)
         ));
 
         List<ProcessingJob.JobType> supportedJobs = customPlanner.planJobs("image/example");
@@ -119,7 +121,8 @@ class ProcessingJobPlannerTest {
                 new ChecksumJobStrategy(),
                 new PhashJobStrategy(appProperties),
                 new EmbeddingJobStrategy(appProperties),
-                new VideoAnalysisJobStrategy(appProperties)
+                new VideoAnalysisJobStrategy(appProperties),
+                new AudioAnalysisJobStrategy(appProperties)
         ));
 
         List<ProcessingJob.JobType> supportedJobs = customPlanner.planJobs("video/example");
@@ -127,5 +130,58 @@ class ProcessingJobPlannerTest {
 
         assertTrue(supportedJobs.contains(ProcessingJob.JobType.VIDEO_ANALYSIS));
         assertFalse(defaultVideoJobs.contains(ProcessingJob.JobType.VIDEO_ANALYSIS));
+    }
+
+    @Test
+    void planJobs_ShouldIncludeAudioAnalysisForSupportedAudio() {
+        List<ProcessingJob.JobType> jobs = planner.planJobs("audio/mpeg");
+
+        assertTrue(jobs.contains(ProcessingJob.JobType.CHECKSUM));
+        assertTrue(jobs.contains(ProcessingJob.JobType.AUDIO_ANALYSIS));
+        assertFalse(jobs.contains(ProcessingJob.JobType.PHASH));
+        assertFalse(jobs.contains(ProcessingJob.JobType.EMBEDDING));
+        assertFalse(jobs.contains(ProcessingJob.JobType.VIDEO_ANALYSIS));
+    }
+
+    @Test
+    void planJobs_ShouldIncludeVideoAndAudioAnalysisForSupportedVideo() {
+        List<ProcessingJob.JobType> jobs = planner.planJobs("video/mp4");
+
+        assertTrue(jobs.contains(ProcessingJob.JobType.VIDEO_ANALYSIS));
+        assertTrue(jobs.contains(ProcessingJob.JobType.AUDIO_ANALYSIS));
+    }
+
+    @Test
+    void planJobs_ShouldHandleAudioMimeTypeWithParameters() {
+        List<ProcessingJob.JobType> jobs = planner.planJobs("audio/x-m4a; charset=binary");
+
+        assertTrue(jobs.contains(ProcessingJob.JobType.AUDIO_ANALYSIS));
+    }
+
+    @Test
+    void planJobs_ShouldNotIncludeAudioAnalysisForUnsupportedMimeType() {
+        List<ProcessingJob.JobType> jobs = planner.planJobs("application/pdf");
+
+        assertTrue(jobs.contains(ProcessingJob.JobType.CHECKSUM));
+        assertFalse(jobs.contains(ProcessingJob.JobType.AUDIO_ANALYSIS));
+    }
+
+    @Test
+    void planJobs_ShouldUseConfiguredProcessableAudioMimeTypes() {
+        AppProperties appProperties = new AppProperties();
+        appProperties.setProcessableAudioMimeTypes(Set.of("audio/example"));
+        ProcessingJobPlanner customPlanner = new ProcessingJobPlanner(List.of(
+                new ChecksumJobStrategy(),
+                new PhashJobStrategy(appProperties),
+                new EmbeddingJobStrategy(appProperties),
+                new VideoAnalysisJobStrategy(appProperties),
+                new AudioAnalysisJobStrategy(appProperties)
+        ));
+
+        List<ProcessingJob.JobType> supportedJobs = customPlanner.planJobs("audio/example");
+        List<ProcessingJob.JobType> defaultAudioJobs = customPlanner.planJobs("audio/mpeg");
+
+        assertTrue(supportedJobs.contains(ProcessingJob.JobType.AUDIO_ANALYSIS));
+        assertFalse(defaultAudioJobs.contains(ProcessingJob.JobType.AUDIO_ANALYSIS));
     }
 }

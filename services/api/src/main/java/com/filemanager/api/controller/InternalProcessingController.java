@@ -1,5 +1,6 @@
 package com.filemanager.api.controller;
 
+import com.filemanager.api.dto.internal.AudioAnalysisResultRequest;
 import com.filemanager.api.dto.internal.ChecksumResultRequest;
 import com.filemanager.api.dto.internal.EmbeddingResultRequest;
 import com.filemanager.api.dto.internal.PhashResultRequest;
@@ -61,6 +62,14 @@ public class InternalProcessingController {
             @PathVariable UUID jobId,
             @RequestBody @Valid VideoAnalysisResultRequest request) {
         processingJobService.handleVideoAnalysisResult(jobId, request);
+        return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/{jobId}/audio-analysis-result")
+    public ResponseEntity<Void> reportAudioAnalysisResult(
+            @PathVariable UUID jobId,
+            @RequestBody @Valid AudioAnalysisResultRequest request) {
+        processingJobService.handleAudioAnalysisResult(jobId, request);
         return ResponseEntity.ok().build();
     }
 

@@ -29,6 +29,15 @@ class Settings(BaseSettings):
     worker_video_frame_timeout_seconds: float = Field(default=15.0, gt=0)
     worker_video_max_frame_bytes: int = Field(default=25 * 1024 * 1024, gt=0)
     worker_video_supported_mime_types: NonBlankString = "video/mp4,video/webm,video/quicktime"
+    worker_audio_enabled: bool = True
+    worker_audio_supported_mime_types: NonBlankString = (
+        "audio/mpeg,audio/mp3,audio/wav,audio/x-wav,audio/flac,audio/ogg,audio/aac,audio/mp4,audio/x-m4a"
+    )
+    worker_audio_max_file_bytes: int = Field(default=256 * 1024 * 1024, gt=0)
+    worker_audio_max_duration_seconds: float = Field(default=30 * 60, gt=0)
+    worker_audio_fingerprint_length_seconds: int = Field(default=120, gt=0)
+    worker_audio_subprocess_timeout_seconds: float = Field(default=30.0, gt=0)
+    worker_audio_max_fingerprint_chars: int = Field(default=32_768, gt=0)
     processable_image_mime_types: NonBlankString = (
         "image/apng,image/avif,image/bmp,image/gif,image/icns,image/jp2,image/jpeg,image/mpo,"
         "image/palm,image/png,image/sgi,image/tiff,image/vnd.adobe.photoshop,image/webp,"

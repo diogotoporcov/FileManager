@@ -36,5 +36,14 @@ class ProcessingResultSink(ABC):
         pass
 
     @abstractmethod
+    async def report_audio_analysis_success(
+        self,
+        job_id: UUID,
+        file_id: UUID,
+        result: Mapping[str, JsonValue],
+    ) -> None:
+        pass
+
+    @abstractmethod
     async def report_failure(self, job_id: UUID, file_id: UUID, error_message: str) -> None:
         pass

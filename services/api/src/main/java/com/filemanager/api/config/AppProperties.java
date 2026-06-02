@@ -63,6 +63,18 @@ public class AppProperties {
             "video/webm",
             "video/quicktime"
     );
+    @NotEmpty
+    private Set<@NotBlank String> processableAudioMimeTypes = Set.of(
+            "audio/mpeg",
+            "audio/mp3",
+            "audio/wav",
+            "audio/x-wav",
+            "audio/flac",
+            "audio/ogg",
+            "audio/aac",
+            "audio/mp4",
+            "audio/x-m4a"
+    );
 
     @Getter
     @Setter

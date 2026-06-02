@@ -10,6 +10,7 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from app.config import settings
 from app.embeddings.triton import TritonImageEmbeddingClient
 from app.processors.base import Processor
+from app.processors.audio import AudioFingerprintProcessor
 from app.processors.embedding import ImageEmbeddingProcessor
 from app.processors.impl import ChecksumProcessor, PHashProcessor
 from app.processors.video import VideoAnalysisProcessor
@@ -44,6 +45,9 @@ if settings.embedding_processor_enabled:
     processors.append(ImageEmbeddingProcessor(storage_reader, embedding_client))
     if settings.worker_video_enabled:
         processors.append(VideoAnalysisProcessor(storage_reader, embedding_client))
+
+if settings.worker_audio_enabled:
+    processors.append(AudioFingerprintProcessor(storage_reader))
 
 flow = ProcessingFlow(processors, result_sink)
 handler = WorkerMessageHandler(flow, dlq_publisher)

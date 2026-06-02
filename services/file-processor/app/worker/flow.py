@@ -119,6 +119,14 @@ class ProcessingFlow:
                     video_result,
                 )
 
+            elif job_type == "AUDIO_ANALYSIS":
+                audio_result = self._extract_audio_analysis_result(result, processor.name)
+                await self.result_sink.report_audio_analysis_success(
+                    event.processing_job_id,
+                    event.file_id,
+                    audio_result,
+                )
+
         except (RetryableProcessingError, NonRetryableProcessingError):
             raise
 
@@ -271,6 +279,69 @@ class ProcessingFlow:
             "frames": normalized_frames,
         }
         return payload
+
+    @staticmethod
+    def _extract_audio_analysis_result(result: ProcessorResult, processor_name: str) -> dict[str, JsonValue]:
+        required_keys = {
+            "durationMs",
+            "codec",
+            "sampleRate",
+            "channels",
+            "fingerprint",
+            "fingerprintAlgorithm",
+            "fingerprintVersion",
+            "fingerprintDurationSeconds",
+        }
+        missing = required_keys - result.keys()
+        if missing:
+            missing_keys = ", ".join(sorted(missing))
+            raise NonRetryableProcessingError(
+                f"Processor {processor_name} did not produce required audio analysis output: {missing_keys}"
+            )
+
+        duration_ms = result["durationMs"]
+        codec = result["codec"]
+        sample_rate = result["sampleRate"]
+        channels = result["channels"]
+        fingerprint = result["fingerprint"]
+        fingerprint_algorithm = result["fingerprintAlgorithm"]
+        fingerprint_version = result["fingerprintVersion"]
+        fingerprint_duration_seconds = result["fingerprintDurationSeconds"]
+
+        if not isinstance(duration_ms, int) or duration_ms <= 0:
+            raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid audio duration")
+        if not isinstance(codec, str) or not codec.strip():
+            raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid audio codec")
+        if not isinstance(sample_rate, int) or sample_rate <= 0:
+            raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid audio sample rate")
+        if not isinstance(channels, int) or channels <= 0:
+            raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid audio channel count")
+        if not isinstance(fingerprint, str) or not fingerprint.strip():
+            raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid audio fingerprint")
+        if not isinstance(fingerprint_algorithm, str) or not fingerprint_algorithm.strip():
+            raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid fingerprint algorithm")
+        if not isinstance(fingerprint_version, str) or not fingerprint_version.strip():
+            raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid fingerprint version")
+        if not isinstance(fingerprint_duration_seconds, int) or fingerprint_duration_seconds <= 0:
+            raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid fingerprint duration")
+
+        return {
+            "durationMs": duration_ms,
+            "codec": codec.strip(),
+            "sampleRate": sample_rate,
+            "channels": channels,
+            "bitRate": ProcessingFlow._optional_positive_int(result.get("bitRate"), processor_name, "audio bit rate"),
+            "audioStreamIndex": ProcessingFlow._optional_non_negative_int(
+                result.get("audioStreamIndex"),
+                processor_name,
+                "audio stream index",
+            ),
+            "containerFormat": ProcessingFlow._optional_string(result.get("containerFormat")),
+            "fingerprint": fingerprint.strip(),
+            "fingerprintAlgorithm": fingerprint_algorithm.strip(),
+            "fingerprintVersion": fingerprint_version.strip(),
+            "fingerprintDurationSeconds": fingerprint_duration_seconds,
+        }
 
     @staticmethod
     def _optional_positive_int(value: object, processor_name: str, field_name: str) -> int | None:

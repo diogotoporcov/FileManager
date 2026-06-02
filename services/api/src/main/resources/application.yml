@@ -32,6 +32,7 @@ spring:
 app:
   processable-image-mime-types: ${PROCESSABLE_IMAGE_MIME_TYPES:image/apng,image/avif,image/bmp,image/gif,image/icns,image/jp2,image/jpeg,image/mpo,image/palm,image/png,image/sgi,image/tiff,image/vnd.adobe.photoshop,image/webp,image/x-icon,image/x-pcx,image/x-portable-anymap,image/x-tga,image/xbm,image/xpm}
   processable-video-mime-types: ${PROCESSABLE_VIDEO_MIME_TYPES:video/mp4,video/webm,video/quicktime}
+  processable-audio-mime-types: ${PROCESSABLE_AUDIO_MIME_TYPES:audio/mpeg,audio/mp3,audio/wav,audio/x-wav,audio/flac,audio/ogg,audio/aac,audio/mp4,audio/x-m4a}
   auth:
     provider-name: ${AUTH_PROVIDER_NAME:keycloak}
     auto-link-existing-users: ${AUTH_AUTO_LINK_EXISTING_USERS:false}

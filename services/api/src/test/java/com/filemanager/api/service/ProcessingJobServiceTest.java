@@ -2,7 +2,9 @@ package com.filemanager.api.service;
 
 import com.filemanager.api.config.AppProperties;
 import com.filemanager.api.config.EmbeddingDimensions;
+import com.filemanager.api.dto.internal.AudioAnalysisResultRequest;
 import com.filemanager.api.dto.internal.VideoAnalysisResultRequest;
+import com.filemanager.api.entity.AudioFingerprint;
 import com.filemanager.api.entity.FileEmbedding;
 import com.filemanager.api.entity.FileEntity;
 import com.filemanager.api.entity.FileFingerprint;
@@ -13,6 +15,7 @@ import com.filemanager.api.entity.VideoFingerprint;
 import com.filemanager.api.entity.VideoFrameEmbedding;
 import com.filemanager.api.entity.VideoFrameFingerprint;
 import com.filemanager.api.port.ApplicationMetricsPort;
+import com.filemanager.api.repository.AudioFingerprintRepository;
 import com.filemanager.api.repository.FileEmbeddingRepository;
 import com.filemanager.api.repository.FileFingerprintRepository;
 import com.filemanager.api.repository.FileRepository;
@@ -54,6 +57,8 @@ class ProcessingJobServiceTest {
     private ImageFingerprintRepository imageFingerprintRepository;
     @Mock
     private FileEmbeddingRepository fileEmbeddingRepository;
+    @Mock
+    private AudioFingerprintRepository audioFingerprintRepository;
     @Mock
     private VideoFingerprintRepository videoFingerprintRepository;
     @Mock
@@ -233,6 +238,112 @@ class ProcessingJobServiceTest {
                 .hasSize(EmbeddingDimensions.IMAGE_EMBEDDING_DIMENSION);
         assertThat(job.getStatus()).isEqualTo(ProcessingJob.JobStatus.COMPLETED);
         verify(applicationMetricsPort).recordJobCompleted("VIDEO_ANALYSIS");
+    }
+
+    @Test
+    void handleAudioAnalysisResult_PersistsFingerprintAndCompletesJob() {
+        UUID jobId = UUID.randomUUID();
+        UUID fileId = UUID.randomUUID();
+        FileEntity file = file(fileId);
+        ProcessingJob job = job(jobId, file, ProcessingJob.JobType.AUDIO_ANALYSIS);
+        AudioAnalysisResultRequest request = audioAnalysisRequest(fileId);
+
+        when(processingJobRepository.findById(jobId)).thenReturn(Optional.of(job));
+        when(fileRepository.findByIdAndDeletedAtIsNull(fileId)).thenReturn(Optional.of(file));
+        when(audioFingerprintRepository.findByFileId(fileId)).thenReturn(Optional.empty());
+
+        processingJobService.handleAudioAnalysisResult(jobId, request);
+
+        ArgumentCaptor<AudioFingerprint> fingerprintCaptor = ArgumentCaptor.forClass(AudioFingerprint.class);
+        verify(audioFingerprintRepository).save(fingerprintCaptor.capture());
+        assertThat(fingerprintCaptor.getValue().getFile()).isEqualTo(file);
+        assertThat(fingerprintCaptor.getValue().getDurationMs()).isEqualTo(12_000L);
+        assertThat(fingerprintCaptor.getValue().getCodec()).isEqualTo("mp3");
+        assertThat(fingerprintCaptor.getValue().getSampleRate()).isEqualTo(44_100);
+        assertThat(fingerprintCaptor.getValue().getChannels()).isEqualTo(2);
+        assertThat(fingerprintCaptor.getValue().getFingerprint()).isEqualTo("12345ABC");
+        assertThat(fingerprintCaptor.getValue().getFingerprintAlgorithm()).isEqualTo("chromaprint");
+        assertThat(job.getStatus()).isEqualTo(ProcessingJob.JobStatus.COMPLETED);
+        verify(applicationMetricsPort).recordJobCompleted("AUDIO_ANALYSIS");
+    }
+
+    @Test
+    void handleAudioAnalysisResult_UpdatesExistingFingerprint() {
+        UUID jobId = UUID.randomUUID();
+        UUID fileId = UUID.randomUUID();
+        FileEntity file = file(fileId);
+        ProcessingJob job = job(jobId, file, ProcessingJob.JobType.AUDIO_ANALYSIS);
+        AudioFingerprint existing = AudioFingerprint.builder()
+                .file(file)
+                .durationMs(1_000L)
+                .codec("aac")
+                .sampleRate(22_050)
+                .channels(1)
+                .fingerprint("old")
+                .fingerprintAlgorithm("chromaprint")
+                .fingerprintVersion("old")
+                .fingerprintDurationSeconds(10)
+                .build();
+
+        when(processingJobRepository.findById(jobId)).thenReturn(Optional.of(job));
+        when(fileRepository.findByIdAndDeletedAtIsNull(fileId)).thenReturn(Optional.of(file));
+        when(audioFingerprintRepository.findByFileId(fileId)).thenReturn(Optional.of(existing));
+
+        processingJobService.handleAudioAnalysisResult(jobId, audioAnalysisRequest(fileId));
+
+        verify(audioFingerprintRepository).save(existing);
+        assertThat(existing.getDurationMs()).isEqualTo(12_000L);
+        assertThat(existing.getFingerprint()).isEqualTo("12345ABC");
+        assertThat(existing.getFingerprintVersion()).isEqualTo("fpcalc-test");
+        assertThat(job.getStatus()).isEqualTo(ProcessingJob.JobStatus.COMPLETED);
+    }
+
+    @Test
+    void handleAudioAnalysisResult_RejectsWrongJobType() {
+        UUID jobId = UUID.randomUUID();
+        UUID fileId = UUID.randomUUID();
+        ProcessingJob job = job(jobId, file(fileId), ProcessingJob.JobType.VIDEO_ANALYSIS);
+        AudioAnalysisResultRequest request = audioAnalysisRequest(fileId);
+
+        when(processingJobRepository.findById(jobId)).thenReturn(Optional.of(job));
+
+        assertThrows(IllegalArgumentException.class, () -> processingJobService.handleAudioAnalysisResult(jobId, request));
+    }
+
+    @Test
+    void handleAudioAnalysisResult_RejectsJobFileMismatch() {
+        UUID jobId = UUID.randomUUID();
+        UUID fileId = UUID.randomUUID();
+        UUID otherFileId = UUID.randomUUID();
+        ProcessingJob job = job(jobId, file(otherFileId), ProcessingJob.JobType.AUDIO_ANALYSIS);
+        AudioAnalysisResultRequest request = audioAnalysisRequest(fileId);
+
+        when(processingJobRepository.findById(jobId)).thenReturn(Optional.of(job));
+
+        assertThrows(IllegalArgumentException.class, () -> processingJobService.handleAudioAnalysisResult(jobId, request));
+    }
+
+    @Test
+    void handleAudioAnalysisResult_RejectsDeletedFile() {
+        UUID jobId = UUID.randomUUID();
+        UUID fileId = UUID.randomUUID();
+        ProcessingJob job = job(jobId, file(fileId), ProcessingJob.JobType.AUDIO_ANALYSIS);
+        AudioAnalysisResultRequest request = audioAnalysisRequest(fileId);
+
+        when(processingJobRepository.findById(jobId)).thenReturn(Optional.of(job));
+        when(fileRepository.findByIdAndDeletedAtIsNull(fileId)).thenReturn(Optional.empty());
+
+        assertThrows(RuntimeException.class, () -> processingJobService.handleAudioAnalysisResult(jobId, request));
+    }
+
+    @Test
+    void handleAudioAnalysisResult_RejectsInvalidFingerprintPayload() {
+        UUID jobId = UUID.randomUUID();
+        UUID fileId = UUID.randomUUID();
+        AudioAnalysisResultRequest request = audioAnalysisRequest(fileId);
+        request.setFingerprint(" ");
+
+        assertThrows(IllegalArgumentException.class, () -> processingJobService.handleAudioAnalysisResult(jobId, request));
     }
 
     @Test
@@ -417,6 +528,23 @@ class ProcessingJobServiceTest {
                                 .phash("0123456789abcdef")
                                 .embedding(embeddingVector(EmbeddingDimensions.IMAGE_EMBEDDING_DIMENSION))
                                 .build()))
+                .build();
+    }
+
+    private AudioAnalysisResultRequest audioAnalysisRequest(UUID fileId) {
+        return AudioAnalysisResultRequest.builder()
+                .fileId(fileId)
+                .durationMs(12_000L)
+                .codec("mp3")
+                .sampleRate(44_100)
+                .channels(2)
+                .bitRate(128_000L)
+                .audioStreamIndex(0)
+                .containerFormat("mp3")
+                .fingerprint("12345ABC")
+                .fingerprintAlgorithm("chromaprint")
+                .fingerprintVersion("fpcalc-test")
+                .fingerprintDurationSeconds(60)
                 .build();
     }
 }

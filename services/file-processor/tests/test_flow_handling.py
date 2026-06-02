@@ -144,6 +144,41 @@ async def test_flow_video_analysis_success(sample_event):
     sink.report_video_analysis_success.assert_called_once()
 
 @pytest.mark.asyncio
+async def test_flow_audio_analysis_success(sample_event):
+    sample_event.job_type = "AUDIO_ANALYSIS"
+    sink = MagicMock(spec=ProcessingResultSink)
+    sink.report_audio_analysis_success = AsyncMock()
+
+    result = {
+        "durationMs": 1000,
+        "codec": "mp3",
+        "sampleRate": 44100,
+        "channels": 2,
+        "bitRate": 128000,
+        "audioStreamIndex": 0,
+        "containerFormat": "mp3",
+        "fingerprint": "12345ABC",
+        "fingerprintAlgorithm": "chromaprint",
+        "fingerprintVersion": "fpcalc",
+        "fingerprintDurationSeconds": 60,
+    }
+    processor = MagicMock(spec=Processor)
+    processor.name = "audio_analysis"
+    processor.should_process.return_value = True
+    processor.process = AsyncMock(return_value=result)
+
+    flow = ProcessingFlow(processors=[processor], result_sink=sink)
+
+    derived_data = await flow.run(sample_event)
+
+    assert derived_data["fingerprintAlgorithm"] == "chromaprint"
+    sink.report_audio_analysis_success.assert_called_once_with(
+        sample_event.processing_job_id,
+        sample_event.file_id,
+        result,
+    )
+
+@pytest.mark.asyncio
 async def test_flow_processor_failure_handled(sample_event):
     # Arrange
     sink = MagicMock(spec=ProcessingResultSink)

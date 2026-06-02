@@ -75,6 +75,7 @@ class FakeResultSink(ProcessingResultSink):
         self.reported_sha256: str | None = None
         self.phash_reported = False
         self.reported_phash: str | None = None
+        self.audio_reported = False
         self.failure_reported = False
 
     async def report_checksum_success(self, job_id: uuid.UUID, file_id: uuid.UUID, sha256: str):
@@ -98,6 +99,9 @@ class FakeResultSink(ProcessingResultSink):
 
     async def report_video_analysis_success(self, job_id: uuid.UUID, file_id: uuid.UUID, result):
         pass
+
+    async def report_audio_analysis_success(self, job_id: uuid.UUID, file_id: uuid.UUID, result):
+        self.audio_reported = True
 
     async def report_failure(self, job_id: uuid.UUID, file_id: uuid.UUID, error_message: str):
         self.failure_reported = True

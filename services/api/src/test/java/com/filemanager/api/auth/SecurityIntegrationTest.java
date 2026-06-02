@@ -2,6 +2,7 @@ package com.filemanager.api.auth;
 
 import com.filemanager.api.dto.CursorPageResponse;
 import com.filemanager.api.dto.FileResponse;
+import com.filemanager.api.dto.internal.AudioAnalysisResultRequest;
 import com.filemanager.api.dto.internal.VideoAnalysisResultRequest;
 import com.filemanager.api.entity.User;
 import com.filemanager.api.exception.AccessDeniedException;
@@ -363,6 +364,44 @@ class SecurityIntegrationTest {
                 .andExpect(status().isOk());
 
         verify(processingJobService).handleVideoAnalysisResult(eq(jobId), any(VideoAnalysisResultRequest.class));
+    }
+
+    @Test
+    void internalAudioAnalysisResult_WithoutToken_Returns401() throws Exception {
+        mockMvc.perform(post("/internal/processing/jobs/" + UUID.randomUUID() + "/audio-analysis-result")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void internalAudioAnalysisResult_WithValidToken_PermitsAccess() throws Exception {
+        UUID jobId = UUID.randomUUID();
+        UUID fileId = UUID.randomUUID();
+        String content = String.format("""
+                {
+                  "fileId":"%s",
+                  "durationMs":1000,
+                  "codec":"mp3",
+                  "sampleRate":44100,
+                  "channels":2,
+                  "bitRate":128000,
+                  "audioStreamIndex":0,
+                  "containerFormat":"mp3",
+                  "fingerprint":"12345ABC",
+                  "fingerprintAlgorithm":"chromaprint",
+                  "fingerprintVersion":"fpcalc",
+                  "fingerprintDurationSeconds":60
+                }
+                """, fileId);
+
+        mockMvc.perform(post("/internal/processing/jobs/" + jobId + "/audio-analysis-result")
+                        .header("Authorization", "Bearer " + VALID_INTERNAL_TOKEN)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(content))
+                .andExpect(status().isOk());
+
+        verify(processingJobService).handleAudioAnalysisResult(eq(jobId), any(AudioAnalysisResultRequest.class));
     }
 
     @Test
