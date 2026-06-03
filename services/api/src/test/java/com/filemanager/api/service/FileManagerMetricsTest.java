@@ -64,12 +64,4 @@ class FileManagerMetricsTest {
         assertThat(counter).isNotNull();
         assertThat(counter.count()).isEqualTo(1.0);
     }
-
-    @Test
-    void recordDuplicateCandidateCreated() {
-        metrics.recordDuplicateCandidateCreated("EXACT");
-        Counter counter = registry.find("filemanager.duplicates.candidates.created").tag("detection_method", "EXACT").counter();
-        assertThat(counter).isNotNull();
-        assertThat(counter.count()).isEqualTo(1.0);
-    }
 }

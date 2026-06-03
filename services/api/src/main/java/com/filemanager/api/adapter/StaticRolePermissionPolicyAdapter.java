@@ -9,8 +9,6 @@ import java.util.EnumSet;
 import java.util.Map;
 import java.util.Set;
 
-import static com.filemanager.api.auth.Permission.DUPLICATE_MANAGE;
-import static com.filemanager.api.auth.Permission.DUPLICATE_VIEW;
 import static com.filemanager.api.auth.Permission.FILE_DELETE;
 import static com.filemanager.api.auth.Permission.FILE_MODIFY;
 import static com.filemanager.api.auth.Permission.FILE_SHARE;
@@ -29,31 +27,26 @@ import static com.filemanager.api.auth.Permission.ORGANIZATION_MANAGE_ROLES;
 public class StaticRolePermissionPolicyAdapter implements RolePermissionPolicyPort {
 
     private static final Map<MemberRole, Set<Permission>> ROLE_PERMISSIONS = Map.of(
-            MemberRole.VIEWER, EnumSet.of(FILE_VIEW, FOLDER_VIEW, DUPLICATE_VIEW),
+            MemberRole.VIEWER, EnumSet.of(FILE_VIEW, FOLDER_VIEW),
             MemberRole.CONTRIBUTOR, EnumSet.of(
                     FILE_VIEW, FILE_UPLOAD,
-                    FOLDER_VIEW, FOLDER_CREATE, FOLDER_UPLOAD_FILE,
-                    DUPLICATE_VIEW),
+                    FOLDER_VIEW, FOLDER_CREATE, FOLDER_UPLOAD_FILE),
             MemberRole.EDITOR, EnumSet.of(
                     FILE_VIEW, FILE_UPLOAD, FILE_MODIFY,
-                    FOLDER_VIEW, FOLDER_CREATE, FOLDER_RENAME, FOLDER_UPLOAD_FILE,
-                    DUPLICATE_VIEW),
+                    FOLDER_VIEW, FOLDER_CREATE, FOLDER_RENAME, FOLDER_UPLOAD_FILE),
             MemberRole.MANAGER, EnumSet.of(
                     FILE_VIEW, FILE_UPLOAD, FILE_MODIFY, FILE_DELETE, FILE_SHARE,
                     FOLDER_VIEW, FOLDER_CREATE, FOLDER_RENAME, FOLDER_DELETE, FOLDER_UPLOAD_FILE,
-                    FOLDER_MANAGE_PERMISSIONS,
-                    DUPLICATE_VIEW, DUPLICATE_MANAGE),
+                    FOLDER_MANAGE_PERMISSIONS),
             MemberRole.ADMIN, EnumSet.of(
                     FILE_VIEW, FILE_UPLOAD, FILE_MODIFY, FILE_DELETE, FILE_SHARE,
                     FOLDER_VIEW, FOLDER_CREATE, FOLDER_RENAME, FOLDER_DELETE, FOLDER_UPLOAD_FILE,
                     FOLDER_MANAGE_PERMISSIONS,
-                    DUPLICATE_VIEW, DUPLICATE_MANAGE,
                     ORGANIZATION_MANAGE_MEMBERS, ORGANIZATION_MANAGE_ROLES),
             MemberRole.OWNER, EnumSet.of(
                     FILE_VIEW, FILE_UPLOAD, FILE_MODIFY, FILE_DELETE, FILE_SHARE,
                     FOLDER_VIEW, FOLDER_CREATE, FOLDER_RENAME, FOLDER_DELETE, FOLDER_UPLOAD_FILE,
                     FOLDER_MANAGE_PERMISSIONS,
-                    DUPLICATE_VIEW, DUPLICATE_MANAGE,
                     ORGANIZATION_MANAGE_MEMBERS, ORGANIZATION_MANAGE_ROLES)
     );
 

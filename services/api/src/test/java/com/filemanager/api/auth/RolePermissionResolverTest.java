@@ -18,11 +18,9 @@ class RolePermissionResolverTest {
         Set<Permission> permissions = resolver.resolvePermissions(MemberRole.VIEWER);
         assertTrue(permissions.contains(FILE_VIEW));
         assertTrue(permissions.contains(FOLDER_VIEW));
-        assertTrue(permissions.contains(DUPLICATE_VIEW));
         assertFalse(permissions.contains(FILE_UPLOAD));
         assertFalse(permissions.contains(FOLDER_UPLOAD_FILE));
         assertFalse(permissions.contains(FILE_DELETE));
-        assertFalse(permissions.contains(DUPLICATE_MANAGE));
     }
 
     @Test
@@ -42,7 +40,6 @@ class RolePermissionResolverTest {
         assertTrue(permissions.contains(FOLDER_RENAME));
         assertFalse(permissions.contains(FILE_DELETE));
         assertFalse(permissions.contains(FOLDER_DELETE));
-        assertFalse(permissions.contains(DUPLICATE_MANAGE));
     }
 
     @Test
@@ -52,7 +49,6 @@ class RolePermissionResolverTest {
         assertTrue(permissions.contains(FILE_SHARE));
         assertTrue(permissions.contains(FOLDER_DELETE));
         assertTrue(permissions.contains(FOLDER_MANAGE_PERMISSIONS));
-        assertTrue(permissions.contains(DUPLICATE_MANAGE));
         assertFalse(permissions.contains(ORGANIZATION_MANAGE_MEMBERS));
         assertFalse(permissions.contains(ORGANIZATION_MANAGE_ROLES));
     }
@@ -64,7 +60,6 @@ class RolePermissionResolverTest {
                 FILE_VIEW, FILE_UPLOAD, FILE_MODIFY, FILE_DELETE, FILE_SHARE,
                 FOLDER_VIEW, FOLDER_CREATE, FOLDER_RENAME, FOLDER_DELETE,
                 FOLDER_UPLOAD_FILE, FOLDER_MANAGE_PERMISSIONS,
-                DUPLICATE_VIEW, DUPLICATE_MANAGE,
                 ORGANIZATION_MANAGE_MEMBERS, ORGANIZATION_MANAGE_ROLES
         );
         assertEquals(expected, permissions);
@@ -77,7 +72,6 @@ class RolePermissionResolverTest {
                 FILE_VIEW, FILE_UPLOAD, FILE_MODIFY, FILE_DELETE, FILE_SHARE,
                 FOLDER_VIEW, FOLDER_CREATE, FOLDER_RENAME, FOLDER_DELETE,
                 FOLDER_UPLOAD_FILE, FOLDER_MANAGE_PERMISSIONS,
-                DUPLICATE_VIEW, DUPLICATE_MANAGE,
                 ORGANIZATION_MANAGE_MEMBERS, ORGANIZATION_MANAGE_ROLES
         );
         assertEquals(expected, permissions);

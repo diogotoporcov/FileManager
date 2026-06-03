@@ -1,13 +1,11 @@
 package com.filemanager.api.auth;
 
-import com.filemanager.api.entity.DuplicateCandidate;
 import com.filemanager.api.entity.FileEntity;
 import com.filemanager.api.entity.FolderEntity;
 import com.filemanager.api.entity.OrganizationMember;
 import com.filemanager.api.exception.AccessDeniedException;
 import com.filemanager.api.exception.ResourceNotFoundException;
 import com.filemanager.api.port.RolePermissionPolicyPort;
-import com.filemanager.api.repository.DuplicateCandidateRepository;
 import com.filemanager.api.repository.FileRepository;
 import com.filemanager.api.repository.FolderRepository;
 import com.filemanager.api.repository.OrganizationMemberRepository;
@@ -24,7 +22,6 @@ public class AccessControlService {
 
     private final FileRepository fileRepository;
     private final FolderRepository folderRepository;
-    private final DuplicateCandidateRepository duplicateCandidateRepository;
     private final OrganizationMemberRepository organizationMemberRepository;
     private final RolePermissionPolicyPort rolePermissionPolicyPort;
 
@@ -44,21 +41,6 @@ public class AccessControlService {
         if (!hasFolderPermission(actorUserId, folder, permission)) {
             throw new AccessDeniedException("You do not have permission to access this folder.");
         }
-    }
-
-    public void assertCanManageDuplicate(UUID actorUserId, UUID duplicateCandidateId) {
-        DuplicateCandidate candidate = duplicateCandidateRepository.findById(duplicateCandidateId)
-                .orElseThrow(() -> new ResourceNotFoundException("Duplicate candidate not found with id: " + duplicateCandidateId));
-
-        if (hasFilePermission(actorUserId, candidate.getSourceFile(), Permission.DUPLICATE_MANAGE)) {
-            return;
-        }
-
-        if (hasFilePermission(actorUserId, candidate.getCandidateFile(), Permission.DUPLICATE_MANAGE)) {
-            return;
-        }
-
-        throw new AccessDeniedException("You do not have permission to manage this duplicate candidate.");
     }
 
     private boolean hasFilePermission(UUID actorUserId, FileEntity file, Permission permission) {
@@ -125,10 +107,6 @@ public class AccessControlService {
 
     public void assertCanCreateFolderInContext(UUID actorUserId, UUID ownerUserId, UUID ownerOrganizationId) {
         assertOwnershipContext(actorUserId, ownerUserId, ownerOrganizationId, Permission.FOLDER_CREATE, "You can only create folders in your own user account.");
-    }
-
-    public void assertCanViewDuplicates(UUID actorUserId, UUID ownerUserId, UUID ownerOrganizationId) {
-        assertOwnershipContext(actorUserId, ownerUserId, ownerOrganizationId, Permission.DUPLICATE_VIEW, "You can only view your own duplicates.");
     }
 
     private void assertOwnershipContext(UUID actorUserId, UUID ownerUserId, UUID ownerOrganizationId, Permission orgPermission, String userDeniedMessage) {

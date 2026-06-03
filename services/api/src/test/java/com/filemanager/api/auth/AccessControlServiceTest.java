@@ -4,7 +4,6 @@ import com.filemanager.api.entity.*;
 import com.filemanager.api.exception.AccessDeniedException;
 import com.filemanager.api.exception.ResourceNotFoundException;
 import com.filemanager.api.port.RolePermissionPolicyPort;
-import com.filemanager.api.repository.DuplicateCandidateRepository;
 import com.filemanager.api.repository.FileRepository;
 import com.filemanager.api.repository.FolderRepository;
 import com.filemanager.api.repository.OrganizationMemberRepository;
@@ -15,7 +14,6 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.time.OffsetDateTime;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -30,8 +28,6 @@ class AccessControlServiceTest {
     private FileRepository fileRepository;
     @Mock
     private FolderRepository folderRepository;
-    @Mock
-    private DuplicateCandidateRepository duplicateCandidateRepository;
     @Mock
     private OrganizationMemberRepository organizationMemberRepository;
     @Mock
@@ -60,8 +56,6 @@ class AccessControlServiceTest {
 
         assertDoesNotThrow(() -> accessControlService.assertCanAccessFile(actorUserId, fileId, Permission.FILE_VIEW));
         assertDoesNotThrow(() -> accessControlService.assertCanAccessFile(actorUserId, fileId, Permission.FILE_DELETE));
-        assertDoesNotThrow(() -> accessControlService.assertCanAccessFile(actorUserId, fileId, Permission.DUPLICATE_VIEW));
-        assertDoesNotThrow(() -> accessControlService.assertCanAccessFile(actorUserId, fileId, Permission.DUPLICATE_MANAGE));
     }
 
     @Test
@@ -147,72 +141,6 @@ class AccessControlServiceTest {
     }
 
     @Test
-    void assertCanManageDuplicate_Bidirectional_SourceAllowed_Success() {
-        UUID candidateId = UUID.randomUUID();
-        User owner = new User();
-        owner.setId(actorUserId);
-        FileEntity sourceFile = FileEntity.builder().ownerUser(owner).build();
-        FileEntity candidateFile = FileEntity.builder().ownerUser(new User()).build();
-        DuplicateCandidate dc = DuplicateCandidate.builder()
-                .sourceFile(sourceFile)
-                .candidateFile(candidateFile)
-                .build();
-
-        when(duplicateCandidateRepository.findById(candidateId)).thenReturn(Optional.of(dc));
-
-        assertDoesNotThrow(() -> accessControlService.assertCanManageDuplicate(actorUserId, candidateId));
-    }
-
-    @Test
-    void assertCanManageDuplicate_Bidirectional_CandidateAllowed_Success() {
-        UUID candidateId = UUID.randomUUID();
-        User owner = new User();
-        owner.setId(actorUserId);
-        FileEntity sourceFile = FileEntity.builder().ownerUser(new User()).build();
-        FileEntity candidateFile = FileEntity.builder().ownerUser(owner).build();
-        DuplicateCandidate dc = DuplicateCandidate.builder()
-                .sourceFile(sourceFile)
-                .candidateFile(candidateFile)
-                .build();
-
-        when(duplicateCandidateRepository.findById(candidateId)).thenReturn(Optional.of(dc));
-
-        assertDoesNotThrow(() -> accessControlService.assertCanManageDuplicate(actorUserId, candidateId));
-    }
-
-    @Test
-    void assertCanManageDuplicate_Bidirectional_NeitherAllowed_Forbidden() {
-        UUID candidateId = UUID.randomUUID();
-        FileEntity sourceFile = FileEntity.builder().ownerUser(new User()).build();
-        FileEntity candidateFile = FileEntity.builder().ownerUser(new User()).build();
-        DuplicateCandidate dc = DuplicateCandidate.builder()
-                .sourceFile(sourceFile)
-                .candidateFile(candidateFile)
-                .build();
-
-        when(duplicateCandidateRepository.findById(candidateId)).thenReturn(Optional.of(dc));
-
-        assertThrows(AccessDeniedException.class, () -> accessControlService.assertCanManageDuplicate(actorUserId, candidateId));
-    }
-
-    @Test
-    void assertCanManageDuplicate_SkipDeletedSide_Forbidden() {
-        UUID candidateId = UUID.randomUUID();
-        User owner = new User();
-        owner.setId(actorUserId);
-        FileEntity sourceFile = FileEntity.builder().ownerUser(owner).deletedAt(OffsetDateTime.now()).build();
-        FileEntity candidateFile = FileEntity.builder().ownerUser(new User()).build();
-        DuplicateCandidate dc = DuplicateCandidate.builder()
-                .sourceFile(sourceFile)
-                .candidateFile(candidateFile)
-                .build();
-
-        when(duplicateCandidateRepository.findById(candidateId)).thenReturn(Optional.of(dc));
-
-        assertThrows(AccessDeniedException.class, () -> accessControlService.assertCanManageDuplicate(actorUserId, candidateId));
-    }
-
-    @Test
     void assertCanViewContext_OwnerUser_Success() {
         assertDoesNotThrow(() -> accessControlService.assertCanViewContext(actorUserId, actorUserId, null));
     }
@@ -256,9 +184,4 @@ class AccessControlServiceTest {
                 () -> accessControlService.assertOrganizationPermission(null, organizationId, Permission.FILE_VIEW));
     }
 
-    @Test
-    void assertCanViewDuplicates_MissingOwnerContext_Rejected() {
-        assertThrows(IllegalArgumentException.class,
-                () -> accessControlService.assertCanViewDuplicates(actorUserId, null, null));
-    }
 }

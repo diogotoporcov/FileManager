@@ -7,12 +7,8 @@ import com.filemanager.api.dto.CursorPageResponse;
 import com.filemanager.api.dto.FileProcessingStatusResponse;
 import com.filemanager.api.dto.FileProcessingStatusResponse.AggregateStatus;
 import com.filemanager.api.dto.ProcessingJobResponse;
-import com.filemanager.api.entity.DuplicateCandidate;
 import com.filemanager.api.entity.FileEntity;
 import com.filemanager.api.entity.ProcessingJob;
-import com.filemanager.api.repository.DuplicateCandidateMethodCount;
-import com.filemanager.api.repository.DuplicateCandidateRepository;
-import com.filemanager.api.repository.DuplicateCandidateStatusCount;
 import com.filemanager.api.repository.ProcessingJobRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -29,7 +25,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -38,8 +33,6 @@ class FileProcessingStatusServiceTest {
 
     @Mock
     private ProcessingJobRepository processingJobRepository;
-    @Mock
-    private DuplicateCandidateRepository duplicateCandidateRepository;
     @Mock
     private AccessControlService accessControlService;
 
@@ -55,10 +48,6 @@ class FileProcessingStatusServiceTest {
         actorUserId = UUID.randomUUID();
         fileId = UUID.randomUUID();
         fileEntity = FileEntity.builder().id(fileId).build();
-        lenient().when(duplicateCandidateRepository.countActiveByFileIdGroupedByDetectionMethod(fileId))
-                .thenReturn(List.of());
-        lenient().when(duplicateCandidateRepository.countActiveByFileIdGroupedByStatus(fileId))
-                .thenReturn(List.of());
     }
 
     @Test
@@ -132,62 +121,6 @@ class FileProcessingStatusServiceTest {
         FileProcessingStatusResponse result = fileProcessingStatusService.getFileProcessingStatus(actorUserId, fileId);
 
         assertEquals(AggregateStatus.PARTIAL_FAILURE, result.getOverallStatus());
-    }
-
-    @Test
-    void getFileProcessingStatus_ShouldIncludeCounts() {
-        when(processingJobRepository.findAllByFile_IdOrderByCreatedAtAsc(org.mockito.ArgumentMatchers.eq(fileId), org.mockito.ArgumentMatchers.any())).thenReturn(Collections.emptyList());
-        when(duplicateCandidateRepository.countActiveByFileIdGroupedByDetectionMethod(fileId))
-                .thenReturn(List.of(
-                        methodCount(DuplicateCandidate.DetectionMethod.EXACT, 2L),
-                        methodCount(DuplicateCandidate.DetectionMethod.PHASH, 3L)
-                ));
-        when(duplicateCandidateRepository.countActiveByFileIdGroupedByStatus(fileId))
-                .thenReturn(List.of(
-                        statusCount(DuplicateCandidate.CandidateStatus.PENDING, 4L),
-                        statusCount(DuplicateCandidate.CandidateStatus.CONFIRMED, 1L)
-                ));
-
-        FileProcessingStatusResponse result = fileProcessingStatusService.getFileProcessingStatus(actorUserId, fileId);
-
-        assertEquals(5L, result.getTotalDuplicateCandidates());
-        assertEquals(3, result.getDuplicateCandidatesByDetectionMethod().size());
-        assertEquals(2L, result.getDuplicateCandidatesByDetectionMethod().get("EXACT"));
-        assertEquals(3L, result.getDuplicateCandidatesByDetectionMethod().get("PHASH"));
-        assertEquals(0L, result.getDuplicateCandidatesByDetectionMethod().get("EMBEDDING"));
-        assertEquals(3, result.getDuplicateCandidatesByStatus().size());
-        assertEquals(4L, result.getDuplicateCandidatesByStatus().get("PENDING"));
-        assertEquals(1L, result.getDuplicateCandidatesByStatus().get("CONFIRMED"));
-        assertEquals(0L, result.getDuplicateCandidatesByStatus().get("REJECTED"));
-        verify(accessControlService).assertCanAccessFile(actorUserId, fileId, Permission.FILE_VIEW);
-    }
-
-    private DuplicateCandidateMethodCount methodCount(DuplicateCandidate.DetectionMethod method, long total) {
-        return new DuplicateCandidateMethodCount() {
-            @Override
-            public DuplicateCandidate.DetectionMethod getMethod() {
-                return method;
-            }
-
-            @Override
-            public long getTotal() {
-                return total;
-            }
-        };
-    }
-
-    private DuplicateCandidateStatusCount statusCount(DuplicateCandidate.CandidateStatus status, long total) {
-        return new DuplicateCandidateStatusCount() {
-            @Override
-            public DuplicateCandidate.CandidateStatus getStatus() {
-                return status;
-            }
-
-            @Override
-            public long getTotal() {
-                return total;
-            }
-        };
     }
 
     @Test

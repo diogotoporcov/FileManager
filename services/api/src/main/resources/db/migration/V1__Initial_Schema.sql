@@ -81,20 +81,6 @@ CREATE TABLE image_fingerprints (
 
 CREATE INDEX idx_image_fingerprints_phash ON image_fingerprints(phash);
 
-CREATE OR REPLACE FUNCTION hamming_distance_hex64(left_hash TEXT, right_hash TEXT)
-RETURNS INTEGER
-LANGUAGE SQL
-IMMUTABLE
-STRICT
-AS $$
-    WITH decoded AS (
-        SELECT decode(left_hash, 'hex') AS left_bytes,
-               decode(right_hash, 'hex') AS right_bytes
-    )
-    SELECT COALESCE(SUM(bit_count((get_byte(left_bytes, byte_index) # get_byte(right_bytes, byte_index))::bit(8))), 0)::INTEGER
-    FROM decoded, generate_series(0, 7) AS byte_offsets(byte_index);
-$$;
-
 CREATE TABLE file_embeddings (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     file_id UUID NOT NULL REFERENCES files(id),
@@ -121,19 +107,3 @@ CREATE TABLE processing_jobs (
 
 CREATE INDEX idx_processing_jobs_file ON processing_jobs(file_id);
 CREATE INDEX idx_processing_jobs_status ON processing_jobs(status);
-
-CREATE TABLE duplicate_candidates (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    source_file_id UUID NOT NULL REFERENCES files(id),
-    candidate_file_id UUID NOT NULL REFERENCES files(id),
-    detection_method VARCHAR(255) NOT NULL CHECK (detection_method IN ('EXACT', 'PHASH', 'EMBEDDING')),
-    distance DOUBLE PRECISION,
-    confidence_score DOUBLE PRECISION,
-    status VARCHAR(50) NOT NULL CHECK (status IN ('PENDING', 'CONFIRMED', 'REJECTED')),
-    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(source_file_id, candidate_file_id, detection_method),
-    CONSTRAINT no_self_duplicate CHECK (source_file_id != candidate_file_id)
-);
-
-CREATE INDEX idx_duplicate_source ON duplicate_candidates(source_file_id);
-CREATE INDEX idx_duplicate_candidate ON duplicate_candidates(candidate_file_id);

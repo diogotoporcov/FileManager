@@ -10,6 +10,4 @@ public interface ApplicationMetricsPort {
     void recordJobCompleted(String jobType);
 
     void recordJobFailed(String jobType);
-
-    void recordDuplicateCandidateCreated(String detectionMethod);
 }

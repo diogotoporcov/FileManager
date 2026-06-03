@@ -7,7 +7,6 @@ import com.filemanager.api.exception.ResourceNotFoundException;
 import com.filemanager.api.exception.StorageException;
 import com.filemanager.api.search.SearchValidationException;
 import com.filemanager.api.search.file.FileSearchQuery;
-import com.filemanager.api.service.DuplicateCandidateService;
 import com.filemanager.api.service.FileService;
 import com.filemanager.api.event.FileProcessingRequestedEvent;
 import io.minio.MinioClient;
@@ -30,7 +29,6 @@ import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -48,9 +46,6 @@ class ErrorHandlingIntegrationTest {
 
     @MockitoBean
     private FileService fileService;
-
-    @MockitoBean
-    private DuplicateCandidateService duplicateCandidateService;
 
     @MockitoBean
     private IdentityResolutionService identityResolutionService;
@@ -91,17 +86,6 @@ class ErrorHandlingIntegrationTest {
                         .with(jwt()))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error").value("Forbidden access"));
-    }
-
-    @Test
-    void validationError_Returns400() throws Exception {
-        mockMvc.perform(patch("/duplicate-candidates/" + UUID.randomUUID() + "/status")
-                        .with(jwt())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{}"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error").value("Validation failed"))
-                .andExpect(jsonPath("$.details").exists());
     }
 
     @Test

@@ -35,9 +35,4 @@ public class FileManagerMetrics implements ApplicationMetricsPort {
     public void recordJobFailed(String jobType) {
         registry.counter("filemanager.processing.jobs.failed", "job_type", jobType).increment();
     }
-
-    @Override
-    public void recordDuplicateCandidateCreated(String detectionMethod) {
-        registry.counter("filemanager.duplicates.candidates.created", "detection_method", detectionMethod).increment();
-    }
 }

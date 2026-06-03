@@ -1,6 +1,5 @@
 package com.filemanager.api.architecture;
 
-import com.filemanager.api.dto.BoundedOffsetPageRequest;
 import com.filemanager.api.dto.BoundedPageRequest;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.Pageable;
@@ -25,7 +24,6 @@ class ResourceBoundaryTest {
     void getCollectionEndpoints_ShouldNotReturnRawLists() throws ClassNotFoundException {
         List<Class<?>> controllers = List.of(
                 Class.forName("com.filemanager.api.controller.FileController"),
-                Class.forName("com.filemanager.api.controller.DuplicateCandidateController"),
                 Class.forName("com.filemanager.api.controller.ProcessingStatusController")
         );
 
@@ -49,19 +47,8 @@ class ResourceBoundaryTest {
     }
 
     @Test
-    void duplicateCandidateAdapter_ShouldUsePageableSpecificationQueries() throws Exception {
-        String source = Files.readString(API_SOURCE.resolve("adapter/JpaDuplicateCandidateSearchAdapter.java"));
-
-        assertThat(source).contains("findAll(spec, pageable)");
-        assertThat(source).doesNotContain("findAll(spec);");
-    }
-
-    @Test
     void boundedPageRequests_ShouldRejectOversizedClientRequests() {
         assertThatThrownBy(() -> BoundedPageRequest.of(BoundedPageRequest.MAX_SIZE + 1, null))
-                .isInstanceOf(IllegalArgumentException.class);
-
-        assertThatThrownBy(() -> BoundedOffsetPageRequest.of(0, BoundedOffsetPageRequest.MAX_SIZE + 1))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 

@@ -7,21 +7,14 @@ import com.filemanager.api.dto.CursorPageResponse;
 import com.filemanager.api.dto.FileProcessingStatusResponse;
 import com.filemanager.api.dto.FileProcessingStatusResponse.AggregateStatus;
 import com.filemanager.api.dto.ProcessingJobResponse;
-import com.filemanager.api.entity.DuplicateCandidate;
 import com.filemanager.api.entity.ProcessingJob;
-import com.filemanager.api.repository.DuplicateCandidateMethodCount;
-import com.filemanager.api.repository.DuplicateCandidateRepository;
-import com.filemanager.api.repository.DuplicateCandidateStatusCount;
 import com.filemanager.api.repository.ProcessingJobRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Arrays;
-import java.util.EnumMap;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -30,7 +23,6 @@ import java.util.stream.Collectors;
 public class FileProcessingStatusService {
 
     private final ProcessingJobRepository processingJobRepository;
-    private final DuplicateCandidateRepository duplicateCandidateRepository;
     private final AccessControlService accessControlService;
 
     @Transactional(readOnly = true)
@@ -74,17 +66,10 @@ public class FileProcessingStatusService {
                 PageRequest.of(0, BoundedPageRequest.MAX_SIZE));
         AggregateStatus overallStatus = calculateAggregateStatus(jobs);
 
-        Map<DuplicateCandidate.DetectionMethod, Long> methodCounts = countDuplicatesByMethod(fileId);
-        Map<DuplicateCandidate.CandidateStatus, Long> statusCounts = countDuplicatesByStatus(fileId);
-        long totalDuplicates = methodCounts.values().stream().mapToLong(Long::longValue).sum();
-
         return FileProcessingStatusResponse.builder()
                 .fileId(fileId)
                 .overallStatus(overallStatus)
                 .jobs(jobs.stream().map(this::mapToResponse).collect(Collectors.toList()))
-                .totalDuplicateCandidates(totalDuplicates)
-                .duplicateCandidatesByDetectionMethod(toNamedMethodCounts(methodCounts))
-                .duplicateCandidatesByStatus(toNamedStatusCounts(statusCounts))
                 .build();
     }
 
@@ -111,38 +96,6 @@ public class FileProcessingStatusService {
         }
 
         return AggregateStatus.PARTIAL_FAILURE;
-    }
-
-    private Map<DuplicateCandidate.DetectionMethod, Long> countDuplicatesByMethod(UUID fileId) {
-        Map<DuplicateCandidate.DetectionMethod, Long> counts = new EnumMap<>(DuplicateCandidate.DetectionMethod.class);
-        Arrays.stream(DuplicateCandidate.DetectionMethod.values()).forEach(method -> counts.put(method, 0L));
-
-        for (DuplicateCandidateMethodCount count : duplicateCandidateRepository.countActiveByFileIdGroupedByDetectionMethod(fileId)) {
-            counts.put(count.getMethod(), count.getTotal());
-        }
-
-        return counts;
-    }
-
-    private Map<DuplicateCandidate.CandidateStatus, Long> countDuplicatesByStatus(UUID fileId) {
-        Map<DuplicateCandidate.CandidateStatus, Long> counts = new EnumMap<>(DuplicateCandidate.CandidateStatus.class);
-        Arrays.stream(DuplicateCandidate.CandidateStatus.values()).forEach(status -> counts.put(status, 0L));
-
-        for (DuplicateCandidateStatusCount count : duplicateCandidateRepository.countActiveByFileIdGroupedByStatus(fileId)) {
-            counts.put(count.getStatus(), count.getTotal());
-        }
-
-        return counts;
-    }
-
-    private Map<String, Long> toNamedMethodCounts(Map<DuplicateCandidate.DetectionMethod, Long> counts) {
-        return counts.entrySet().stream()
-                .collect(Collectors.toMap(entry -> entry.getKey().name(), Map.Entry::getValue));
-    }
-
-    private Map<String, Long> toNamedStatusCounts(Map<DuplicateCandidate.CandidateStatus, Long> counts) {
-        return counts.entrySet().stream()
-                .collect(Collectors.toMap(entry -> entry.getKey().name(), Map.Entry::getValue));
     }
 
     private ProcessingJobResponse mapToResponse(ProcessingJob job) {

@@ -7,7 +7,6 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 @Data
@@ -22,12 +21,6 @@ public class FileProcessingStatusResponse {
     private AggregateStatus overallStatus;
     @Schema(description = "List of all processing jobs for this file")
     private List<ProcessingJobResponse> jobs;
-    @Schema(description = "Total number of duplicate candidates found")
-    private long totalDuplicateCandidates;
-    @Schema(description = "Count of duplicate candidates grouped by detection method")
-    private Map<String, Long> duplicateCandidatesByDetectionMethod;
-    @Schema(description = "Count of duplicate candidates grouped by status")
-    private Map<String, Long> duplicateCandidatesByStatus;
 
     public enum AggregateStatus {
         NOT_STARTED,
