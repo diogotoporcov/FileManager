@@ -61,7 +61,16 @@ public class AppProperties {
     private Set<@NotBlank String> processableVideoMimeTypes = Set.of(
             "video/mp4",
             "video/webm",
-            "video/quicktime"
+            "video/quicktime",
+            "video/x-msvideo",
+            "video/avi",
+            "video/matroska",
+            "video/x-matroska",
+            "video/x-m4v",
+            "video/mpeg",
+            "video/MP2T",
+            "video/3gpp",
+            "video/3gpp2"
     );
     @NotEmpty
     private Set<@NotBlank String> processableAudioMimeTypes = Set.of(
@@ -69,11 +78,23 @@ public class AppProperties {
             "audio/mp3",
             "audio/wav",
             "audio/x-wav",
+            "audio/wave",
+            "audio/vnd.wave",
             "audio/flac",
+            "audio/x-flac",
             "audio/ogg",
             "audio/aac",
             "audio/mp4",
-            "audio/x-m4a"
+            "audio/x-m4a",
+            "audio/webm",
+            "audio/opus",
+            "audio/matroska",
+            "audio/x-matroska",
+            "audio/ac3",
+            "audio/3gpp",
+            "audio/3gpp2",
+            "audio/x-aiff",
+            "audio/aiff"
     );
 
     @Getter

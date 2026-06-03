@@ -13,6 +13,7 @@ from PIL import Image
 
 from app.embeddings.base import ImageEmbeddingInferenceClient
 from app.events.models import FileProcessingRequestedEvent
+from app.processors import video as video_module
 from app.processors.video import VideoAnalysisProcessor, sample_timestamps
 from app.storage.base import StorageObjectReader, StorageObjectReference
 from app.worker.errors import NonRetryableProcessingError
@@ -82,7 +83,8 @@ def test_video_sampling_policy_samples_short_video():
     assert all(0 < timestamp <= 0.25 for timestamp in timestamps)
 
 
-def test_video_processor_selection_keeps_image_processors_separate(video_event):
+def test_video_processor_selection_keeps_image_processors_separate(monkeypatch, video_event):
+    monkeypatch.setattr(video_module.settings, "worker_video_supported_mime_types", "video/mp4,video/x-msvideo")
     processor = VideoAnalysisProcessor(
         VideoStorageReader(),
         FakeEmbeddingClient(),
@@ -96,7 +98,39 @@ def test_video_processor_selection_keeps_image_processors_separate(video_event):
     video_event.mime_type = "image/jpeg"
     assert processor.should_process(video_event) is False
     video_event.mime_type = "video/x-msvideo"
+    assert processor.should_process(video_event) is True
+    video_event.mime_type = "video/x-flv"
     assert processor.should_process(video_event) is False
+
+
+def test_video_processor_selection_supports_configured_video_mime_types(monkeypatch, video_event):
+    monkeypatch.setattr(
+        video_module.settings,
+        "worker_video_supported_mime_types",
+        "video/x-msvideo,video/matroska,video/x-matroska,video/x-m4v,video/mpeg,video/MP2T,video/3gpp",
+    )
+    processor = VideoAnalysisProcessor(
+        VideoStorageReader(),
+        FakeEmbeddingClient(),
+        embedding_dimension=2,
+        input_size=32,
+        min_sampled_frames=1,
+        max_sampled_frames=2,
+    )
+
+    for mime_type in (
+        "video/x-msvideo",
+        "video/matroska",
+        "video/x-matroska",
+        "video/x-m4v",
+        "video/mpeg",
+        "video/MP2T",
+        "video/3gpp",
+        "VIDEO/X-MATROSKA",
+        "video/x-matroska; charset=binary",
+    ):
+        video_event.mime_type = mime_type
+        assert processor.should_process(video_event) is True
 
 
 @pytest.mark.asyncio

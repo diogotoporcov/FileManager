@@ -28,10 +28,15 @@ class Settings(BaseSettings):
     worker_video_target_interval_seconds: float = Field(default=10.0, gt=0)
     worker_video_frame_timeout_seconds: float = Field(default=15.0, gt=0)
     worker_video_max_frame_bytes: int = Field(default=25 * 1024 * 1024, gt=0)
-    worker_video_supported_mime_types: NonBlankString = "video/mp4,video/webm,video/quicktime"
+    worker_video_supported_mime_types: NonBlankString = (
+        "video/mp4,video/webm,video/quicktime,video/x-msvideo,video/avi,video/matroska,"
+        "video/x-matroska,video/x-m4v,video/mpeg,video/MP2T,video/3gpp,video/3gpp2"
+    )
     worker_audio_enabled: bool = True
     worker_audio_supported_mime_types: NonBlankString = (
-        "audio/mpeg,audio/mp3,audio/wav,audio/x-wav,audio/flac,audio/ogg,audio/aac,audio/mp4,audio/x-m4a"
+        "audio/mpeg,audio/mp3,audio/wav,audio/x-wav,audio/wave,audio/vnd.wave,audio/flac,audio/x-flac,"
+        "audio/ogg,audio/aac,audio/mp4,audio/x-m4a,audio/webm,audio/opus,audio/matroska,"
+        "audio/x-matroska,audio/ac3,audio/3gpp,audio/3gpp2,audio/x-aiff,audio/aiff"
     )
     worker_audio_max_file_bytes: int = Field(default=256 * 1024 * 1024, gt=0)
     worker_audio_max_duration_seconds: float = Field(default=30 * 60, gt=0)

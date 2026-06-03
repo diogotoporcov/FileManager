@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 
 from app.events.models import FileProcessingRequestedEvent
+from app.processors import audio as audio_module
 from app.processors.audio import AudioFingerprintProcessor
 from app.storage.base import StorageObjectReader, StorageObjectReference
 from app.worker.errors import NonRetryableProcessingError
@@ -42,17 +43,47 @@ def audio_event() -> FileProcessingRequestedEvent:
     )
 
 
-def test_audio_processor_selection_supports_audio_and_video(audio_event):
+def test_audio_processor_selection_supports_audio_and_video(monkeypatch, audio_event):
+    monkeypatch.setattr(audio_module.settings, "worker_audio_supported_mime_types", "audio/mpeg,audio/webm")
+    monkeypatch.setattr(audio_module.settings, "worker_video_supported_mime_types", "video/mp4,video/x-matroska")
     processor = AudioFingerprintProcessor(AudioStorageReader())
 
     assert processor.should_process(audio_event) is True
     audio_event.mime_type = "video/mp4"
+    assert processor.should_process(audio_event) is True
+    audio_event.mime_type = "audio/webm"
+    assert processor.should_process(audio_event) is True
+    audio_event.mime_type = "video/x-matroska; charset=binary"
     assert processor.should_process(audio_event) is True
     audio_event.mime_type = "image/jpeg"
     assert processor.should_process(audio_event) is False
     audio_event.job_type = "CHECKSUM"
     audio_event.mime_type = "audio/mpeg"
     assert processor.should_process(audio_event) is False
+
+
+def test_audio_processor_selection_supports_configured_audio_mime_types(monkeypatch, audio_event):
+    monkeypatch.setattr(
+        audio_module.settings,
+        "worker_audio_supported_mime_types",
+        "audio/webm,audio/opus,audio/matroska,audio/vnd.wave,audio/wave,audio/x-flac,audio/ac3,audio/x-aiff",
+    )
+    processor = AudioFingerprintProcessor(AudioStorageReader())
+
+    for mime_type in (
+        "audio/webm",
+        "audio/opus",
+        "audio/matroska",
+        "audio/vnd.wave",
+        "audio/wave",
+        "audio/x-flac",
+        "audio/ac3",
+        "audio/x-aiff",
+        " audio/webm ",
+        "audio/vnd.wave; codecs=1",
+    ):
+        audio_event.mime_type = mime_type
+        assert processor.should_process(audio_event) is True
 
 
 @pytest.mark.asyncio
