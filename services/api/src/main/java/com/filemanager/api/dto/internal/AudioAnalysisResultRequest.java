@@ -51,11 +51,11 @@ public class AudioAnalysisResultRequest {
     private String fingerprint;
 
     @NotBlank
-    @Size(max = 64)
+    @Size(max = AudioFingerprint.MAX_FINGERPRINT_ALGORITHM_LENGTH)
     private String fingerprintAlgorithm;
 
     @NotBlank
-    @Size(max = 128)
+    @Size(max = AudioFingerprint.MAX_FINGERPRINT_VERSION_LENGTH)
     private String fingerprintVersion;
 
     @NotNull

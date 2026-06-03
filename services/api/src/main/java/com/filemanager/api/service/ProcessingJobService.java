@@ -232,9 +232,18 @@ public class ProcessingJobService {
         }
         validateRequiredText(request.getCodec(), "Audio codec", 255);
         validateRequiredText(request.getFingerprint(), "Audio fingerprint", AudioFingerprint.MAX_FINGERPRINT_LENGTH);
-        validateRequiredText(request.getFingerprintAlgorithm(), "Audio fingerprint algorithm", 64);
-        validateRequiredText(request.getFingerprintVersion(), "Audio fingerprint version", 128);
-        validateNullableText(request.getContainerFormat(), "Audio container format", 255);
+        validateRequiredText(
+                request.getFingerprintAlgorithm(),
+                "Audio fingerprint algorithm",
+                AudioFingerprint.MAX_FINGERPRINT_ALGORITHM_LENGTH);
+        validateRequiredText(
+                request.getFingerprintVersion(),
+                "Audio fingerprint version",
+                AudioFingerprint.MAX_FINGERPRINT_VERSION_LENGTH);
+        validateNullableText(
+                request.getContainerFormat(),
+                "Audio container format",
+                255);
     }
 
     private void validateRequiredText(String value, String fieldName, int maxLength) {

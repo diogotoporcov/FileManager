@@ -35,6 +35,8 @@ import java.util.UUID;
 @Builder
 public class AudioFingerprint {
     public static final int MAX_FINGERPRINT_LENGTH = 32768;
+    public static final int MAX_FINGERPRINT_ALGORITHM_LENGTH = 64;
+    public static final int MAX_FINGERPRINT_VERSION_LENGTH = 128;
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -68,10 +70,10 @@ public class AudioFingerprint {
     @Column(nullable = false, length = MAX_FINGERPRINT_LENGTH)
     private String fingerprint;
 
-    @Column(name = "fingerprint_algorithm", nullable = false)
+    @Column(name = "fingerprint_algorithm", nullable = false, length = MAX_FINGERPRINT_ALGORITHM_LENGTH)
     private String fingerprintAlgorithm;
 
-    @Column(name = "fingerprint_version", nullable = false)
+    @Column(name = "fingerprint_version", nullable = false, length = MAX_FINGERPRINT_VERSION_LENGTH)
     private String fingerprintVersion;
 
     @Column(name = "fingerprint_duration_seconds", nullable = false)
