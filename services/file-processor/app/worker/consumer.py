@@ -17,7 +17,7 @@ class EventConsumer:
     async def start(self) -> None:
         # Initialize Kafka consumer with manual offset management for reliable delivery.
         consumer = AIOKafkaConsumer(
-            settings.kafka_topic_file_processing,
+            *settings.worker_topics,
             bootstrap_servers=settings.kafka_bootstrap_servers,
             group_id=settings.kafka_consumer_group_id,
             # Deserialization is handled in WorkerMessageHandler to manage poison messages
@@ -25,7 +25,9 @@ class EventConsumer:
         )
         self.consumer = consumer
         await consumer.start()
-        logger.info(f"Kafka consumer started on {settings.kafka_bootstrap_servers} for topic {settings.kafka_topic_file_processing}")
+        logger.info(
+            f"Kafka consumer started on {settings.kafka_bootstrap_servers} for topics {', '.join(settings.worker_topics)}"
+        )
 
         try:
             async for msg in consumer:

@@ -1,16 +1,24 @@
 from typing import Annotated, Any, Literal
 
 from pydantic import AliasChoices, AnyHttpUrl, Field, StringConstraints, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 NonBlankString = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 InternalApiToken = Annotated[str, StringConstraints(strip_whitespace=True, min_length=32)]
+WorkerTopics = Annotated[tuple[NonBlankString, ...], NoDecode]
 
 
 class Settings(BaseSettings):
     # Kafka/Redpanda
     kafka_bootstrap_servers: NonBlankString = Field(default=...)
-    kafka_topic_file_processing: NonBlankString = Field(default="file.processing.requested")
+    worker_topics: WorkerTopics = Field(
+        default=(
+            "file.processing.checksum",
+            "file.processing.image",
+            "file.processing.audio",
+            "file.processing.video",
+        ),
+    )
     kafka_topic_dlq: NonBlankString = Field(default="file.processing.requested.dlq")
     kafka_consumer_group_id: NonBlankString = Field(default="filemanager-worker-group")
     worker_consumer_enabled: bool = False
@@ -100,6 +108,25 @@ class Settings(BaseSettings):
     def validate_url(cls, v: Any) -> Any:
         if isinstance(v, str) and not v.strip():
             raise ValueError("URL cannot be blank")
+
+        return v
+
+    @field_validator("worker_topics", mode="before")
+    @classmethod
+    def parse_worker_topics(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            topics = [topic.strip() for topic in v.split(",")]
+            if not topics or any(not topic for topic in topics):
+                raise ValueError("worker_topics must contain one or more non-blank topics")
+            return tuple(topics)
+
+        return v
+
+    @field_validator("worker_topics")
+    @classmethod
+    def validate_worker_topics(cls, v: tuple[str, ...]) -> tuple[str, ...]:
+        if not v:
+            raise ValueError("worker_topics must contain one or more topics")
 
         return v
 

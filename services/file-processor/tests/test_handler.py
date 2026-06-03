@@ -1,19 +1,44 @@
-import pytest
 import uuid
 import json
-from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
-from typing import Final
 
-from pydantic import JsonValue, TypeAdapter
+import pytest
+from pydantic import JsonValue
 
 from app.worker.handler import WorkerMessageHandler
 from app.worker.flow import ProcessingFlow
-from app.worker.dlq import DeadLetterPublisher
+from app.worker.dlq import DeadLetterPublisher, KafkaMessageValue
 from app.worker.errors import RetryableProcessingError, NonRetryableProcessingError, FailureCategory
 
-JSON_OBJECT_ADAPTER: Final[TypeAdapter[Mapping[str, JsonValue]]] = TypeAdapter(Mapping[str, JsonValue])
+
+@dataclass
+class KafkaMessageStub:
+    value: KafkaMessageValue
+    key: bytes | None
+    topic: str
+    partition: int
+    offset: int
+
+
+def valid_event_payload() -> dict[str, JsonValue]:
+    return {
+        "eventId": str(uuid.uuid4()),
+        "eventType": "file.processing.requested",
+        "occurredAt": datetime.now(timezone.utc).isoformat(),
+        "fileId": str(uuid.uuid4()),
+        "processingJobId": str(uuid.uuid4()),
+        "jobType": "CHECKSUM",
+        "storagePath": "test.jpg",
+        "mimeType": "image/jpeg",
+        "size": 100,
+        "ownerUserId": str(uuid.uuid4()),
+    }
+
+
+def encode_event_payload(payload: dict[str, JsonValue]) -> bytes:
+    return json.dumps(payload).encode("utf-8")
 
 
 @pytest.fixture
@@ -29,25 +54,14 @@ def handler(flow, dlq_publisher):
     return WorkerMessageHandler(flow, dlq_publisher)
 
 @pytest.fixture
-def mock_msg():
-    msg = MagicMock()
-    msg.topic = "test-topic"
-    msg.partition = 0
-    msg.offset = 100
-    msg.key = b"key"
-    msg.value = json.dumps({
-        "eventId": str(uuid.uuid4()),
-        "eventType": "file.processing.requested",
-        "occurredAt": datetime.now(timezone.utc).isoformat(),
-        "fileId": str(uuid.uuid4()),
-        "processingJobId": str(uuid.uuid4()),
-        "jobType": "CHECKSUM",
-        "storagePath": "test.jpg",
-        "mimeType": "image/jpeg",
-        "size": 100,
-        "ownerUserId": str(uuid.uuid4())
-    }).encode('utf-8')
-    return msg
+def mock_msg() -> KafkaMessageStub:
+    return KafkaMessageStub(
+        topic="test-topic",
+        partition=0,
+        offset=100,
+        key=b"key",
+        value=encode_event_payload(valid_event_payload()),
+    )
 
 @pytest.mark.asyncio
 async def test_handle_success(handler, flow, mock_msg):
@@ -57,6 +71,17 @@ async def test_handle_success(handler, flow, mock_msg):
     
     assert result is True
     flow.run.assert_called_once()
+
+@pytest.mark.asyncio
+async def test_handle_uses_event_job_type_not_kafka_topic(handler, flow, mock_msg):
+    mock_msg.topic = "file.processing.video"
+    flow.run = AsyncMock()
+
+    result = await handler.handle_message(mock_msg)
+
+    assert result is True
+    event = flow.run.call_args.args[0]
+    assert event.job_type == "CHECKSUM"
 
 @pytest.mark.asyncio
 async def test_handle_retry_success(handler, flow, mock_msg):
@@ -129,9 +154,9 @@ async def test_handle_missing_fields_poison_message(handler, dlq_publisher, mock
 
 @pytest.mark.asyncio
 async def test_handle_invalid_schema_poison_message(handler, dlq_publisher, mock_msg):
-    data = dict(JSON_OBJECT_ADAPTER.validate_python(json.loads(mock_msg.value.decode("utf-8"))))
+    data = valid_event_payload()
     data["eventId"] = "not-a-uuid"
-    mock_msg.value = json.dumps(data).encode("utf-8")
+    mock_msg.value = encode_event_payload(data)
     dlq_publisher.publish_failure = AsyncMock()
     
     result = await handler.handle_message(mock_msg)

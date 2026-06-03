@@ -1,15 +1,14 @@
 package com.filemanager.api.adapter;
 
-import com.filemanager.api.config.AppProperties;
 import com.filemanager.api.event.FileProcessingRequestedEvent;
 import com.filemanager.api.port.EventPublisherPort;
+import com.filemanager.api.port.PublishEventResponse;
+import com.filemanager.api.service.ProcessingTopicResolver;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.SendResult;
 import org.springframework.stereotype.Component;
-
-import com.filemanager.api.port.PublishEventResponse;
 
 @Component
 @RequiredArgsConstructor
@@ -17,20 +16,20 @@ import com.filemanager.api.port.PublishEventResponse;
 public class KafkaEventPublisherAdapter implements EventPublisherPort {
 
     private final KafkaTemplate<String, FileProcessingRequestedEvent> kafkaTemplate;
-    private final AppProperties appProperties;
+    private final ProcessingTopicResolver processingTopicResolver;
 
     @Override
     public PublishEventResponse publishFileProcessingRequested(FileProcessingRequestedEvent event) {
-        String topic = appProperties.getKafka().getTopics().getFileProcessingRequested();
+        String topic = processingTopicResolver.resolve(event);
         log.info("Publishing file processing requested event for file {}: job {}", event.fileId(), event.processingJobId());
         try {
             // Blocking call to ensure event delivery success before continuing.
-            SendResult<String, FileProcessingRequestedEvent> result = 
+            SendResult<String, FileProcessingRequestedEvent> result =
                     kafkaTemplate.send(topic, event.fileId().toString(), event).get();
-            
-            log.info("Successfully published event to topic {} partition {} offset {}", 
-                    result.getRecordMetadata().topic(), 
-                    result.getRecordMetadata().partition(), 
+
+            log.info("Successfully published event to topic {} partition {} offset {}",
+                    result.getRecordMetadata().topic(),
+                    result.getRecordMetadata().partition(),
                     result.getRecordMetadata().offset());
 
             return PublishEventResponse.builder()

@@ -44,7 +44,10 @@ app:
       email-verified: ${AUTH_EMAIL_VERIFIED_CLAIM:email_verified}
   kafka:
     topics:
-      file-processing-requested: ${FILE_PROCESSING_REQUESTED_TOPIC:file.processing.requested}
+      file-processing-checksum: ${FILE_PROCESSING_CHECKSUM_TOPIC:file.processing.checksum}
+      file-processing-image: ${FILE_PROCESSING_IMAGE_TOPIC:file.processing.image}
+      file-processing-audio: ${FILE_PROCESSING_AUDIO_TOPIC:file.processing.audio}
+      file-processing-video: ${FILE_PROCESSING_VIDEO_TOPIC:file.processing.video}
   phash:
     threshold: ${PHASH_THRESHOLD:10}
     max-candidates: ${PHASH_MAX_CANDIDATES:5000}

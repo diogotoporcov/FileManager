@@ -85,15 +85,24 @@ def test_s3_validation():
     with pytest.raises(ValidationError):
         Settings(internal_api_token="test-token-1234567890123456789012", s3_secret_key="   ")
 
-def test_kafka_validation():
+def test_kafka_validation(monkeypatch):
     # Blank Kafka bootstrap servers
     with pytest.raises(ValidationError):
         Settings(internal_api_token="test-token-1234567890123456789012", kafka_bootstrap_servers="")
 
     # Blank/Whitespace Kafka topics and groups
+    monkeypatch.setenv("WORKER_TOPICS", "")
     with pytest.raises(ValidationError):
-        Settings(internal_api_token="test-token-1234567890123456789012", kafka_topic_file_processing="")
-    
+        Settings(internal_api_token="test-token-1234567890123456789012")
+
+    monkeypatch.setenv("WORKER_TOPICS", "file.processing.image,")
+    with pytest.raises(ValidationError):
+        Settings(internal_api_token="test-token-1234567890123456789012")
+
+    monkeypatch.delenv("WORKER_TOPICS", raising=False)
+    with pytest.raises(ValidationError):
+        Settings(internal_api_token="test-token-1234567890123456789012", worker_topics=())
+
     with pytest.raises(ValidationError):
         Settings(internal_api_token="test-token-1234567890123456789012", kafka_topic_dlq="")
     with pytest.raises(ValidationError):
@@ -103,6 +112,30 @@ def test_kafka_validation():
         Settings(internal_api_token="test-token-1234567890123456789012", kafka_consumer_group_id="")
     with pytest.raises(ValidationError):
         Settings(internal_api_token="test-token-1234567890123456789012", kafka_consumer_group_id="   ")
+
+def test_worker_topics_default_subscribes_to_all_workload_topics():
+    settings = Settings(internal_api_token="test-token-1234567890123456789012")
+
+    assert settings.worker_topics == (
+        "file.processing.checksum",
+        "file.processing.image",
+        "file.processing.audio",
+        "file.processing.video",
+    )
+
+def test_worker_topics_accepts_one_topic(monkeypatch):
+    monkeypatch.setenv("WORKER_TOPICS", "file.processing.video")
+
+    settings = Settings(internal_api_token="test-token-1234567890123456789012")
+
+    assert settings.worker_topics == ("file.processing.video",)
+
+def test_worker_topics_accepts_multiple_topics(monkeypatch):
+    monkeypatch.setenv("WORKER_TOPICS", "file.processing.checksum, file.processing.image")
+
+    settings = Settings(internal_api_token="test-token-1234567890123456789012")
+
+    assert settings.worker_topics == ("file.processing.checksum", "file.processing.image")
 
 def test_log_level_validation():
     # Invalid log level

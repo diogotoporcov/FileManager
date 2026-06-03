@@ -135,7 +135,13 @@ public class AppProperties {
         @Setter
         public static class Topics {
             @NotBlank
-            private String fileProcessingRequested = "file.processing.requested";
+            private String fileProcessingChecksum = "file.processing.checksum";
+            @NotBlank
+            private String fileProcessingImage = "file.processing.image";
+            @NotBlank
+            private String fileProcessingAudio = "file.processing.audio";
+            @NotBlank
+            private String fileProcessingVideo = "file.processing.video";
         }
     }
 
