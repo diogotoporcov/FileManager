@@ -72,7 +72,6 @@ app:
     max-candidates: ${EMBEDDING_MAX_CANDIDATES:5000}
   quota:
     user-bytes: ${USER_STORAGE_QUOTA_BYTES:16106127360}
-    organization-bytes: ${ORGANIZATION_STORAGE_QUOTA_BYTES:107374182400}
 
 filemanager:
   internal:

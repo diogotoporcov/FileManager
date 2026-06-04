@@ -19,8 +19,6 @@ public class FolderSummaryResponse {
     UUID parentFolderId;
     @Schema(description = "User ID of the owner")
     UUID ownerUserId;
-    @Schema(description = "Organization ID of the owner")
-    UUID ownerOrganizationId;
     @Schema(description = "User ID that created the folder")
     UUID createdByUserId;
     @Schema(description = "Timestamp when the folder was created")

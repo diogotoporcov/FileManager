@@ -141,7 +141,6 @@ def sample_event() -> FileProcessingRequestedEvent:
         mime_type="image/jpeg",
         size=500,
         owner_user_id=uuid.uuid4(),
-        owner_organization_id=None,
     )
 
 

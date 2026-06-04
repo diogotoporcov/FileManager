@@ -20,14 +20,8 @@ public class CreateTagRequest {
     private String name;
 
     @NotNull
-    @Schema(description = "Tag scope. OWNER tags are available across an owner context; FOLDER tags are available in one folder context.")
+    @Schema(description = "Tag scope. OWNER tags are owned by the authenticated user; FOLDER tags are scoped to one folder.")
     private TagScopeType scopeType;
-
-    @Schema(description = "Owner user ID for OWNER-scoped tags. Exactly one owner is required for OWNER scope.")
-    private UUID ownerUserId;
-
-    @Schema(description = "Owner organization ID for OWNER-scoped tags. Exactly one owner is required for OWNER scope.")
-    private UUID ownerOrganizationId;
 
     @Schema(description = "Folder scope ID for FOLDER-scoped tags.")
     private UUID scopeFolderId;

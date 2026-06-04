@@ -53,7 +53,7 @@ public class FileController {
     private final CurrentUserService currentUserService;
     private final FileResponseMapper fileResponseMapper;
 
-    @Operation(summary = "Upload a file", description = "Uploads a new file to the storage. Actor is derived from JWT.")
+    @Operation(summary = "Upload a file", description = "Uploads a new file owned by the authenticated user.")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "File uploaded successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid input or empty file", content = @Content)
@@ -62,9 +62,7 @@ public class FileController {
     @ResponseStatus(HttpStatus.CREATED)
     public FileResponse uploadFile(
             @Parameter(description = "The file to upload") @RequestParam("file") MultipartFile file,
-            @Parameter(description = "Owner user ID. For user-owned uploads, this must match the authenticated user. Exactly one ownership context should be provided.") @RequestParam(value = "ownerUserId", required = false) UUID ownerUserId,
-            @Parameter(description = "Owner organization ID. For organization-owned uploads, authenticated user must have upload permission. Exactly one ownership context should be provided.") @RequestParam(value = "ownerOrganizationId", required = false) UUID ownerOrganizationId,
-            @Parameter(description = "Folder ID to upload into. Folder owner context must match the file owner context.") @RequestParam(value = "folderId", required = false) UUID folderId
+            @Parameter(description = "Folder ID to upload into.") @RequestParam(value = "folderId", required = false) UUID folderId
     ) throws IOException {
         validateUpload(file);
 
@@ -74,8 +72,6 @@ public class FileController {
                 file.getContentType(),
                 file.getSize(),
                 file.getInputStream(),
-                ownerUserId,
-                ownerOrganizationId,
                 folderId,
                 actorUserId
         );
@@ -86,7 +82,7 @@ public class FileController {
     @Operation(
             summary = "List files",
             description = """
-                    Lists files for exactly one owner scope. Filters are applied in the database before sorting and limiting.
+                    Lists files visible to the authenticated user. Filters are applied in the database before sorting and limiting.
                     When folderId is provided, the actor must be able to view the folder and only direct files in that folder are listed.
                     tagId filters files by reusable tag assignment through the database.
                     Dates use ISO-8601 offset date-time values. Repeat mimeType to match any listed exact MIME type.

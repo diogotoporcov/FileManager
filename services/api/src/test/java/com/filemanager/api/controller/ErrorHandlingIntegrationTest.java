@@ -105,7 +105,6 @@ class ErrorHandlingIntegrationTest {
                 .thenThrow(new SearchValidationException("Unsupported sort field: storagePath"));
 
         mockMvc.perform(get("/files")
-                        .param("ownerUserId", UUID.randomUUID().toString())
                         .param("sort", "storagePath,desc")
                         .with(jwt()))
                 .andExpect(status().isBadRequest())

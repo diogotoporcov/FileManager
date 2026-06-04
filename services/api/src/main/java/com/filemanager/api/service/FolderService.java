@@ -8,14 +8,12 @@ import com.filemanager.api.dto.FolderResponse;
 import com.filemanager.api.dto.FolderSummaryResponse;
 import com.filemanager.api.dto.UpdateFolderRequest;
 import com.filemanager.api.entity.FolderEntity;
-import com.filemanager.api.entity.Organization;
 import com.filemanager.api.entity.User;
 import com.filemanager.api.exception.ConflictException;
 import com.filemanager.api.exception.ResourceNotFoundException;
 import com.filemanager.api.mapper.FolderResponseMapper;
 import com.filemanager.api.repository.FileRepository;
 import com.filemanager.api.repository.FolderRepository;
-import com.filemanager.api.repository.OrganizationRepository;
 import com.filemanager.api.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -34,7 +32,6 @@ public class FolderService {
     private final FolderRepository folderRepository;
     private final FileRepository fileRepository;
     private final UserRepository userRepository;
-    private final OrganizationRepository organizationRepository;
     private final AccessControlService accessControlService;
     private final FolderResponseMapper folderResponseMapper;
     private final TagService tagService;
@@ -43,36 +40,25 @@ public class FolderService {
     public FolderResponse createFolder(CreateFolderRequest request, UUID actorUserId) {
         Objects.requireNonNull(request, "request must not be null");
         String name = normalizeFolderName(request.getName());
-        User createdByUser = userRepository.findById(actorUserId)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + actorUserId));
+        User createdByUser = findUser(actorUserId);
 
         FolderEntity parentFolder = null;
-        User ownerUser;
-        Organization ownerOrganization;
+        User ownerUser = createdByUser;
         if (request.getParentFolderId() != null) {
             parentFolder = folderRepository.findByIdAndDeletedAtIsNull(request.getParentFolderId())
                     .orElseThrow(() -> new ResourceNotFoundException("Folder not found: " + request.getParentFolderId()));
             accessControlService.assertCanAccessFolder(actorUserId, parentFolder.getId(), Permission.FOLDER_CREATE);
             ownerUser = parentFolder.getOwnerUser();
-            ownerOrganization = parentFolder.getOwnerOrganization();
-            validateParentOwnerRequest(parentFolder, request.getOwnerUserId(), request.getOwnerOrganizationId());
         } else {
-            validateExactlyOneOwner(request.getOwnerUserId(), request.getOwnerOrganizationId());
-            accessControlService.assertCanCreateFolderInContext(
-                    actorUserId,
-                    request.getOwnerUserId(),
-                    request.getOwnerOrganizationId());
-            ownerUser = resolveOwnerUser(request.getOwnerUserId());
-            ownerOrganization = resolveOwnerOrganization(request.getOwnerOrganizationId());
+            accessControlService.assertCanCreateFolderForOwner(actorUserId, actorUserId);
         }
 
-        rejectDuplicateActiveSibling(name, ownerUser, ownerOrganization, parentFolder);
+        rejectDuplicateActiveSibling(name, ownerUser, parentFolder);
 
         FolderEntity folder = FolderEntity.builder()
                 .name(name)
                 .parentFolder(parentFolder)
                 .ownerUser(ownerUser)
-                .ownerOrganization(ownerOrganization)
                 .createdByUser(createdByUser)
                 .build();
 
@@ -92,7 +78,7 @@ public class FolderService {
         String name = normalizeFolderName(request.getName());
 
         if (!folder.getName().equalsIgnoreCase(name)) {
-            rejectDuplicateActiveSibling(name, folder.getOwnerUser(), folder.getOwnerOrganization(), folder.getParentFolder());
+            rejectDuplicateActiveSibling(name, folder.getOwnerUser(), folder.getParentFolder());
         }
 
         folder.setName(name);
@@ -114,31 +100,13 @@ public class FolderService {
     }
 
     @Transactional(readOnly = true)
-    public List<FolderSummaryResponse> listRootFolders(
-            UUID ownerUserId,
-            UUID ownerOrganizationId,
-            UUID tagId,
-            UUID actorUserId) {
-        validateExactlyOneOwner(ownerUserId, ownerOrganizationId);
-        accessControlService.assertCanViewContext(actorUserId, ownerUserId, ownerOrganizationId);
-        tagService.assertCanUseTagForFolderListing(tagId, actorUserId, ownerUserId, ownerOrganizationId, null);
-
-        if (ownerUserId != null) {
-            User ownerUser = resolveOwnerUser(ownerUserId);
-            List<FolderEntity> folders = tagId == null
-                    ? folderRepository.findByOwnerUserAndParentFolderIsNullAndDeletedAtIsNullOrderByNameAsc(ownerUser)
-                    : folderRepository.findTaggedRootFoldersByOwnerUser(ownerUser, tagId);
-            return folders
-                    .stream()
-                    .map(folderResponseMapper::toSummary)
-                    .toList();
-        }
-
-        Organization ownerOrganization = resolveOwnerOrganization(ownerOrganizationId);
+    public List<FolderSummaryResponse> listRootFolders(UUID tagId, UUID actorUserId) {
+        accessControlService.assertCanViewOwner(actorUserId, actorUserId);
+        tagService.assertCanUseTagForFolderListing(tagId, actorUserId, null);
+        User ownerUser = findUser(actorUserId);
         List<FolderEntity> folders = tagId == null
-                ? folderRepository
-                        .findByOwnerOrganizationAndParentFolderIsNullAndDeletedAtIsNullOrderByNameAsc(ownerOrganization)
-                : folderRepository.findTaggedRootFoldersByOwnerOrganization(ownerOrganization, tagId);
+                ? folderRepository.findByOwnerUserAndParentFolderIsNullAndDeletedAtIsNullOrderByNameAsc(ownerUser)
+                : folderRepository.findTaggedRootFoldersByOwnerUser(ownerUser, tagId);
         return folders
                 .stream()
                 .map(folderResponseMapper::toSummary)
@@ -148,12 +116,7 @@ public class FolderService {
     @Transactional(readOnly = true)
     public FolderChildrenResponse listChildFolders(UUID folderId, UUID tagId, UUID actorUserId) {
         FolderEntity parentFolder = findAccessibleFolder(folderId, actorUserId, Permission.FOLDER_VIEW);
-        tagService.assertCanUseTagForFolderListing(
-                tagId,
-                actorUserId,
-                parentFolder.getOwnerUser() != null ? parentFolder.getOwnerUser().getId() : null,
-                parentFolder.getOwnerOrganization() != null ? parentFolder.getOwnerOrganization().getId() : null,
-                folderId);
+        tagService.assertCanUseTagForFolderListing(tagId, actorUserId, folderId);
         List<FolderEntity> folderEntities = tagId == null
                 ? folderRepository.findByParentFolderAndDeletedAtIsNullOrderByNameAsc(parentFolder)
                 : folderRepository.findTaggedChildFolders(parentFolder, tagId);
@@ -165,21 +128,10 @@ public class FolderService {
     }
 
     @Transactional(readOnly = true)
-    public FolderUploadTarget getUploadTarget(UUID folderId, UUID actorUserId) {
-        FolderEntity folder = findAccessibleFolder(folderId, actorUserId, Permission.FOLDER_UPLOAD_FILE);
-        return new FolderUploadTarget(
-                folder.getOwnerUser() != null ? folder.getOwnerUser().getId() : null,
-                folder.getOwnerOrganization() != null ? folder.getOwnerOrganization().getId() : null);
-    }
-
-    @Transactional(readOnly = true)
     public FolderEntity findAccessibleFolder(UUID folderId, UUID actorUserId, Permission permission) {
         accessControlService.assertCanAccessFolder(actorUserId, folderId, permission);
         return folderRepository.findByIdAndDeletedAtIsNull(folderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Folder not found: " + folderId));
-    }
-
-    public record FolderUploadTarget(UUID ownerUserId, UUID ownerOrganizationId) {
     }
 
     private String normalizeFolderName(String rawName) {
@@ -203,71 +155,20 @@ public class FolderService {
         return name;
     }
 
-    private void validateExactlyOneOwner(UUID ownerUserId, UUID ownerOrganizationId) {
-        if ((ownerUserId != null && ownerOrganizationId != null) || (ownerUserId == null && ownerOrganizationId == null)) {
-            throw new IllegalArgumentException("Exactly one owner (user or organization) must be provided");
-        }
+    private User findUser(UUID userId) {
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
     }
 
-    private User resolveOwnerUser(UUID ownerUserId) {
-        if (ownerUserId == null) {
-            return null;
-        }
-        return userRepository.findById(ownerUserId)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + ownerUserId));
-    }
-
-    private Organization resolveOwnerOrganization(UUID ownerOrganizationId) {
-        if (ownerOrganizationId == null) {
-            return null;
-        }
-        return organizationRepository.findById(ownerOrganizationId)
-                .orElseThrow(() -> new ResourceNotFoundException("Organization not found: " + ownerOrganizationId));
-    }
-
-    private void validateParentOwnerRequest(
-            FolderEntity parentFolder,
-            UUID requestedOwnerUserId,
-            UUID requestedOwnerOrganizationId) {
-        if (requestedOwnerUserId == null && requestedOwnerOrganizationId == null) {
-            return;
-        }
-
-        UUID parentOwnerUserId = parentFolder.getOwnerUser() != null ? parentFolder.getOwnerUser().getId() : null;
-        UUID parentOwnerOrganizationId = parentFolder.getOwnerOrganization() != null
-                ? parentFolder.getOwnerOrganization().getId()
-                : null;
-        if (!Objects.equals(parentOwnerUserId, requestedOwnerUserId)
-                || !Objects.equals(parentOwnerOrganizationId, requestedOwnerOrganizationId)) {
-            throw new IllegalArgumentException("Child folder owner context must match parent folder");
-        }
-    }
-
-    private void rejectDuplicateActiveSibling(
-            String name,
-            User ownerUser,
-            Organization ownerOrganization,
-            FolderEntity parentFolder) {
-        boolean exists;
-        if (ownerUser != null && parentFolder != null) {
-            exists = folderRepository.existsByNameIgnoreCaseAndOwnerUserAndParentFolderAndDeletedAtIsNull(
-                    name,
-                    ownerUser,
-                    parentFolder);
-        } else if (ownerUser != null) {
-            exists = folderRepository.existsByNameIgnoreCaseAndOwnerUserAndParentFolderIsNullAndDeletedAtIsNull(
-                    name,
-                    ownerUser);
-        } else if (parentFolder != null) {
-            exists = folderRepository.existsByNameIgnoreCaseAndOwnerOrganizationAndParentFolderAndDeletedAtIsNull(
-                    name,
-                    ownerOrganization,
-                    parentFolder);
-        } else {
-            exists = folderRepository.existsByNameIgnoreCaseAndOwnerOrganizationAndParentFolderIsNullAndDeletedAtIsNull(
-                    name,
-                    ownerOrganization);
-        }
+    private void rejectDuplicateActiveSibling(String name, User ownerUser, FolderEntity parentFolder) {
+        boolean exists = parentFolder != null
+                ? folderRepository.existsByNameIgnoreCaseAndOwnerUserAndParentFolderAndDeletedAtIsNull(
+                        name,
+                        ownerUser,
+                        parentFolder)
+                : folderRepository.existsByNameIgnoreCaseAndOwnerUserAndParentFolderIsNullAndDeletedAtIsNull(
+                        name,
+                        ownerUser);
 
         if (exists) {
             throw new ConflictException("An active sibling folder with this name already exists");

@@ -1,6 +1,5 @@
 package com.filemanager.api.entity;
 
-import jakarta.persistence.CheckConstraint;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -22,12 +21,7 @@ import java.time.OffsetDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "folders", check = {
-    @CheckConstraint(
-            name = "chk_folder_owner_exclusive",
-            constraint = "(owner_user_id IS NOT NULL AND owner_organization_id IS NULL) "
-                    + "OR (owner_user_id IS NULL AND owner_organization_id IS NOT NULL)")
-})
+@Table(name = "folders")
 @Getter
 @Setter
 @NoArgsConstructor
@@ -45,13 +39,9 @@ public class FolderEntity {
     @JoinColumn(name = "parent_folder_id")
     private FolderEntity parentFolder;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "owner_user_id")
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "owner_user_id", nullable = false)
     private User ownerUser;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "owner_organization_id")
-    private Organization ownerOrganization;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "created_by_user_id", nullable = false)
@@ -67,4 +57,8 @@ public class FolderEntity {
 
     @Column(name = "deleted_at")
     private OffsetDateTime deletedAt;
+
+    public boolean isOwnedBy(UUID userId) {
+        return ownerUser != null && ownerUser.getId() != null && ownerUser.getId().equals(userId);
+    }
 }

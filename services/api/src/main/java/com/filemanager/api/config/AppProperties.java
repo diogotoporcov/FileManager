@@ -224,8 +224,5 @@ public class AppProperties {
     public static class Quota {
         @Min(1)
         private long userBytes = 15L * 1024 * 1024 * 1024;
-
-        @Min(1)
-        private long organizationBytes = 100L * 1024 * 1024 * 1024;
     }
 }

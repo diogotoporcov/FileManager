@@ -7,6 +7,7 @@ import org.springframework.stereotype.Component;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.List;
+import java.util.UUID;
 
 @Component
 public class FileSearchCriteriaMapper {
@@ -18,14 +19,13 @@ public class FileSearchCriteriaMapper {
         this.fileSortMapper = fileSortMapper;
     }
 
-    public FileSearchCriteria toCriteria(FileSearchQuery query) {
+    public FileSearchCriteria toCriteria(FileSearchQuery query, UUID actorUserId) {
         SortSpec sort = fileSortMapper.parse(query.getSort());
         BoundedPageRequest pageRequest = BoundedPageRequest.of(requestedLimit(query), query.getCursor());
         FileSearchCursor cursor = FileSearchCursor.decode(query.getCursor(), sort);
 
         return new FileSearchCriteria(
-                query.getOwnerUserId(),
-                query.getOwnerOrganizationId(),
+                actorUserId,
                 query.getFolderId(),
                 query.getTagId(),
                 new DateTimeRange(parseDateTime("createdAtFrom", query.getCreatedAtFrom()), parseDateTime("createdAtTo", query.getCreatedAtTo())),

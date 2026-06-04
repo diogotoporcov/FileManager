@@ -2,17 +2,13 @@ package com.filemanager.api.auth;
 
 import com.filemanager.api.entity.FileEntity;
 import com.filemanager.api.entity.FolderEntity;
-import com.filemanager.api.entity.OrganizationMember;
 import com.filemanager.api.exception.AccessDeniedException;
 import com.filemanager.api.exception.ResourceNotFoundException;
-import com.filemanager.api.port.RolePermissionPolicyPort;
 import com.filemanager.api.repository.FileRepository;
 import com.filemanager.api.repository.FolderRepository;
-import com.filemanager.api.repository.OrganizationMemberRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
-import java.time.OffsetDateTime;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -22,8 +18,6 @@ public class AccessControlService {
 
     private final FileRepository fileRepository;
     private final FolderRepository folderRepository;
-    private final OrganizationMemberRepository organizationMemberRepository;
-    private final RolePermissionPolicyPort rolePermissionPolicyPort;
 
     public void assertCanAccessFile(UUID actorUserId, UUID fileId, Permission permission) {
         FileEntity file = fileRepository.findByIdAndDeletedAtIsNull(fileId)
@@ -43,86 +37,45 @@ public class AccessControlService {
         }
     }
 
-    private boolean hasFilePermission(UUID actorUserId, FileEntity file, Permission permission) {
-        return hasOwnedResourcePermission(
-                actorUserId,
-                file.getOwnerUser() != null ? file.getOwnerUser().getId() : null,
-                file.getOwnerOrganization() != null ? file.getOwnerOrganization().getId() : null,
-                file.getDeletedAt(),
-                permission);
-    }
-
-    private boolean hasFolderPermission(UUID actorUserId, FolderEntity folder, Permission permission) {
-        return hasOwnedResourcePermission(
-                actorUserId,
-                folder.getOwnerUser() != null ? folder.getOwnerUser().getId() : null,
-                folder.getOwnerOrganization() != null ? folder.getOwnerOrganization().getId() : null,
-                folder.getDeletedAt(),
-                permission);
-    }
-
-    private boolean hasOwnedResourcePermission(
-            UUID actorUserId,
-            UUID ownerUserId,
-            UUID ownerOrganizationId,
-            OffsetDateTime deletedAt,
-            Permission permission) {
-        if (deletedAt != null) {
+    public boolean hasFilePermission(UUID actorUserId, FileEntity file, Permission permission) {
+        Objects.requireNonNull(permission, "permission must not be null");
+        if (actorUserId == null || file == null || file.getDeletedAt() != null) {
             return false;
         }
 
-        if (ownerUserId != null) {
-            return Objects.equals(ownerUserId, actorUserId);
-        }
-
-        if (ownerOrganizationId != null) {
-            return organizationMemberRepository.findByOrganizationIdAndUserId(ownerOrganizationId, actorUserId)
-                    .map(member -> rolePermissionPolicyPort.hasPermission(member.getRole(), permission))
-                    .orElse(false);
-        }
-
-        return false;
+        return file.isOwnedBy(actorUserId);
     }
 
-    public void assertOrganizationPermission(UUID actorUserId, UUID organizationId, Permission permission) {
+    public boolean hasFolderPermission(UUID actorUserId, FolderEntity folder, Permission permission) {
+        Objects.requireNonNull(permission, "permission must not be null");
+        if (actorUserId == null || folder == null || folder.getDeletedAt() != null) {
+            return false;
+        }
+
+        return folder.isOwnedBy(actorUserId);
+    }
+
+    public void assertCanUploadToOwner(UUID actorUserId, UUID ownerUserId) {
+        assertActorOwnsContext(actorUserId, ownerUserId, "You can only upload files to your own user account.");
+    }
+
+    public void assertCanViewOwner(UUID actorUserId, UUID ownerUserId) {
+        assertActorOwnsContext(actorUserId, ownerUserId, "You can only view your own user account.");
+    }
+
+    public void assertCanCreateFolderForOwner(UUID actorUserId, UUID ownerUserId) {
+        assertActorOwnsContext(actorUserId, ownerUserId, "You can only create folders in your own user account.");
+    }
+
+    private void assertActorOwnsContext(UUID actorUserId, UUID ownerUserId, String deniedMessage) {
         if (actorUserId == null) {
-             throw new AccessDeniedException("Actor user ID is required.");
+            throw new AccessDeniedException("Actor user ID is required.");
         }
-        
-        OrganizationMember member = organizationMemberRepository.findByOrganizationIdAndUserId(organizationId, actorUserId)
-                .orElseThrow(() -> new AccessDeniedException("User is not a member of the organization."));
-
-        if (!rolePermissionPolicyPort.hasPermission(member.getRole(), permission)) {
-            throw new AccessDeniedException("User does not have required permission: " + permission);
+        if (ownerUserId == null) {
+            throw new IllegalArgumentException("ownerUserId must be provided.");
         }
-    }
-
-    public void assertCanUploadToContext(UUID actorUserId, UUID ownerUserId, UUID ownerOrganizationId) {
-        assertOwnershipContext(actorUserId, ownerUserId, ownerOrganizationId, Permission.FILE_UPLOAD, "You can only upload files to your own user account.");
-    }
-
-    public void assertCanViewContext(UUID actorUserId, UUID ownerUserId, UUID ownerOrganizationId) {
-        assertOwnershipContext(actorUserId, ownerUserId, ownerOrganizationId, Permission.FOLDER_VIEW, "You can only view your own user account.");
-    }
-
-    public void assertCanCreateFolderInContext(UUID actorUserId, UUID ownerUserId, UUID ownerOrganizationId) {
-        assertOwnershipContext(actorUserId, ownerUserId, ownerOrganizationId, Permission.FOLDER_CREATE, "You can only create folders in your own user account.");
-    }
-
-    private void assertOwnershipContext(UUID actorUserId, UUID ownerUserId, UUID ownerOrganizationId, Permission orgPermission, String userDeniedMessage) {
-        if (ownerUserId != null) {
-            if (!ownerUserId.equals(actorUserId)) {
-                throw new AccessDeniedException(userDeniedMessage);
-            }
-
-            return;
+        if (!Objects.equals(ownerUserId, actorUserId)) {
+            throw new AccessDeniedException(deniedMessage);
         }
-
-        if (ownerOrganizationId != null) {
-            assertOrganizationPermission(actorUserId, ownerOrganizationId, orgPermission);
-            return;
-        }
-
-        throw new IllegalArgumentException("Either ownerUserId or ownerOrganizationId must be provided.");
     }
 }

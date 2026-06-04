@@ -15,12 +15,6 @@ public class CreateFolderRequest {
     @Schema(description = "Folder name. Path separators and control characters are not allowed.")
     private String name;
 
-    @Schema(description = "Parent folder ID. Omit for a root folder.")
+    @Schema(description = "Parent folder ID. Omit for a root folder. Root folders are owned by the authenticated user.")
     private UUID parentFolderId;
-
-    @Schema(description = "Owner user ID. Exactly one owner scope is required for root folders.")
-    private UUID ownerUserId;
-
-    @Schema(description = "Owner organization ID. Exactly one owner scope is required for root folders.")
-    private UUID ownerOrganizationId;
 }

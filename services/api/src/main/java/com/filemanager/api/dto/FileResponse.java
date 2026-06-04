@@ -21,8 +21,6 @@ public class FileResponse {
     Long size;
     @Schema(description = "User ID of the owner")
     UUID ownerUserId;
-    @Schema(description = "Organization ID of the owner")
-    UUID ownerOrganizationId;
     @Schema(description = "Folder ID containing this file, or null for a root-level file")
     UUID folderId;
     @Schema(description = "User ID that uploaded the file")

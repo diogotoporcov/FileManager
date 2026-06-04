@@ -7,7 +7,6 @@ import java.util.UUID;
 
 public record FileSearchCriteria(
         UUID ownerUserId,
-        UUID ownerOrganizationId,
         UUID folderId,
         UUID tagId,
         DateTimeRange createdAt,

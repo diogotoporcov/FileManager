@@ -39,7 +39,6 @@ def audio_event() -> FileProcessingRequestedEvent:
         mime_type="audio/mpeg",
         size=11,
         owner_user_id=uuid.uuid4(),
-        owner_organization_id=None,
     )
 
 

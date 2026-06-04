@@ -25,13 +25,10 @@ public class FileSearchSpecificationBuilder {
             List<Predicate> predicates = new ArrayList<>();
             predicates.add(cb.isNull(root.get("deletedAt")));
 
-            if (criteria.ownerUserId() != null) {
-                predicates.add(cb.equal(root.get("ownerUser").get("id"), criteria.ownerUserId()));
-            } else if (criteria.ownerOrganizationId() != null) {
-                predicates.add(cb.equal(root.get("ownerOrganization").get("id"), criteria.ownerOrganizationId()));
-            } else {
+            if (criteria.ownerUserId() == null) {
                 throw new SearchValidationException("Exactly one owner scope is required");
             }
+            predicates.add(cb.equal(root.get("ownerUser").get("id"), criteria.ownerUserId()));
 
             if (criteria.folderId() != null) {
                 predicates.add(cb.equal(root.get("folder").get("id"), criteria.folderId()));

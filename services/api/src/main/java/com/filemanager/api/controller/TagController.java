@@ -62,14 +62,10 @@ public class TagController {
                     """)
     @GetMapping("/tags")
     public List<TagResponse> listTags(
-            @Parameter(description = "Owner user ID for OWNER-scoped tags") @RequestParam(required = false) UUID ownerUserId,
-            @Parameter(description = "Owner organization ID for OWNER-scoped tags") @RequestParam(required = false) UUID ownerOrganizationId,
             @Parameter(description = "Folder ID for FOLDER-scoped tags") @RequestParam(required = false) UUID scopeFolderId,
             @Parameter(description = "Normalized contains search text") @RequestParam(required = false) String q,
             @Parameter(description = "Maximum tags to return. Default 50, maximum 100.") @RequestParam(required = false) Integer limit) {
         return tagService.listTags(
-                ownerUserId,
-                ownerOrganizationId,
                 scopeFolderId,
                 q,
                 limit,

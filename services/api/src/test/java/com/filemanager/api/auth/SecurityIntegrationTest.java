@@ -130,7 +130,6 @@ class SecurityIntegrationTest {
                 .thenReturn(CursorPageResponse.<FileResponse>builder().items(java.util.List.of()).build());
 
         mockMvc.perform(get("/files")
-                        .param("ownerUserId", userId.toString())
                         .param("createdAtFrom", "2026-01-01T00:00:00Z")
                         .param("createdAtTo", "2026-02-01T00:00:00Z")
                         .param("sizeMin", "1024")
@@ -145,7 +144,6 @@ class SecurityIntegrationTest {
         ArgumentCaptor<FileSearchQuery> queryCaptor = ArgumentCaptor.forClass(FileSearchQuery.class);
         verify(fileService).searchFiles(queryCaptor.capture(), eq(userId));
         FileSearchQuery query = queryCaptor.getValue();
-        assertEquals(userId, query.getOwnerUserId());
         assertEquals("2026-01-01T00:00:00Z", query.getCreatedAtFrom());
         assertEquals("2026-02-01T00:00:00Z", query.getCreatedAtTo());
         assertEquals(1024L, query.getSizeMin());

@@ -54,7 +54,6 @@ def video_event() -> FileProcessingRequestedEvent:
         mime_type="video/mp4",
         size=11,
         owner_user_id=uuid.uuid4(),
-        owner_organization_id=None,
     )
 
 

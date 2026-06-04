@@ -11,12 +11,6 @@ import java.util.UUID;
 @Setter
 @Schema(description = "Allowlisted file list/search query parameters")
 public class FileSearchQuery {
-    @Schema(description = "Owner user ID. Must match the authenticated user.")
-    private UUID ownerUserId;
-
-    @Schema(description = "Owner organization ID. Authenticated user must have file view permission.")
-    private UUID ownerOrganizationId;
-
     @Schema(description = "Folder ID. When set, lists files directly inside that folder only.")
     private UUID folderId;
 

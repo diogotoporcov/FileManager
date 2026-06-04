@@ -1,13 +1,6 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS vector;
 
-CREATE TABLE organizations (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    name VARCHAR(255) NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
 CREATE TABLE users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     email VARCHAR(255) NOT NULL UNIQUE,
@@ -26,14 +19,6 @@ CREATE TABLE user_identities (
     UNIQUE(provider, provider_subject)
 );
 
-CREATE TABLE organization_members (
-    organization_id UUID NOT NULL REFERENCES organizations(id),
-    user_id UUID NOT NULL REFERENCES users(id),
-    role VARCHAR(50) NOT NULL CHECK (role IN ('VIEWER', 'CONTRIBUTOR', 'EDITOR', 'MANAGER', 'ADMIN', 'OWNER')),
-    joined_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (organization_id, user_id)
-);
-
 CREATE TABLE files (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name VARCHAR(255) NOT NULL,
@@ -41,24 +26,15 @@ CREATE TABLE files (
     etag VARCHAR(255),
     mime_type VARCHAR(255) NOT NULL,
     size BIGINT NOT NULL,
-    owner_user_id UUID REFERENCES users(id),
-    owner_organization_id UUID REFERENCES organizations(id),
+    owner_user_id UUID NOT NULL REFERENCES users(id),
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    deleted_at TIMESTAMP WITH TIME ZONE,
-    CONSTRAINT owner_check CHECK (
-        (owner_user_id IS NOT NULL AND owner_organization_id IS NULL) OR
-        (owner_user_id IS NULL AND owner_organization_id IS NOT NULL)
-    )
+    deleted_at TIMESTAMP WITH TIME ZONE
 );
 
 CREATE INDEX idx_files_owner_user_active_created
     ON files(owner_user_id, created_at DESC, id DESC)
-    WHERE deleted_at IS NULL AND owner_user_id IS NOT NULL;
-
-CREATE INDEX idx_files_owner_organization_active_created
-    ON files(owner_organization_id, created_at DESC, id DESC)
-    WHERE deleted_at IS NULL AND owner_organization_id IS NOT NULL;
+    WHERE deleted_at IS NULL;
 
 CREATE TABLE file_fingerprints (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

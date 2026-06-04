@@ -1,7 +1,6 @@
 package com.filemanager.api.repository;
 
 import com.filemanager.api.entity.FolderEntity;
-import com.filemanager.api.entity.Organization;
 import com.filemanager.api.entity.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -30,22 +29,6 @@ public interface FolderRepository extends JpaRepository<FolderEntity, UUID> {
             """)
     List<FolderEntity> findTaggedRootFoldersByOwnerUser(User ownerUser, UUID tagId);
 
-    List<FolderEntity> findByOwnerOrganizationAndParentFolderIsNullAndDeletedAtIsNullOrderByNameAsc(
-            Organization ownerOrganization);
-
-    @Query("""
-            select folder
-            from FolderEntity folder, FolderTagEntity assignment
-            where assignment.folder = folder
-              and assignment.tag.id = :tagId
-              and assignment.tag.deletedAt is null
-              and folder.ownerOrganization = :ownerOrganization
-              and folder.parentFolder is null
-              and folder.deletedAt is null
-            order by folder.name asc, folder.id asc
-            """)
-    List<FolderEntity> findTaggedRootFoldersByOwnerOrganization(Organization ownerOrganization, UUID tagId);
-
     List<FolderEntity> findByParentFolderAndDeletedAtIsNullOrderByNameAsc(FolderEntity parentFolder);
 
     @Query("""
@@ -69,12 +52,4 @@ public interface FolderRepository extends JpaRepository<FolderEntity, UUID> {
 
     boolean existsByNameIgnoreCaseAndOwnerUserAndParentFolderIsNullAndDeletedAtIsNull(String name, User ownerUser);
 
-    boolean existsByNameIgnoreCaseAndOwnerOrganizationAndParentFolderAndDeletedAtIsNull(
-            String name,
-            Organization ownerOrganization,
-            FolderEntity parentFolder);
-
-    boolean existsByNameIgnoreCaseAndOwnerOrganizationAndParentFolderIsNullAndDeletedAtIsNull(
-            String name,
-            Organization ownerOrganization);
 }

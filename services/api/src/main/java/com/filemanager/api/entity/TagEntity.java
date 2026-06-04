@@ -1,6 +1,5 @@
 package com.filemanager.api.entity;
 
-import jakarta.persistence.CheckConstraint;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -24,16 +23,7 @@ import java.time.OffsetDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "tags", check = {
-        @CheckConstraint(
-                name = "chk_tag_owner_exclusive",
-                constraint = "(owner_user_id IS NOT NULL AND owner_organization_id IS NULL) "
-                        + "OR (owner_user_id IS NULL AND owner_organization_id IS NOT NULL)"),
-        @CheckConstraint(
-                name = "chk_tag_scope_folder",
-                constraint = "(scope_type = 'OWNER' AND scope_folder_id IS NULL) "
-                        + "OR (scope_type = 'FOLDER' AND scope_folder_id IS NOT NULL)")
-})
+@Table(name = "tags")
 @Getter
 @Setter
 @NoArgsConstructor
@@ -58,13 +48,9 @@ public class TagEntity {
     @JoinColumn(name = "scope_folder_id")
     private FolderEntity scopeFolder;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "owner_user_id")
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "owner_user_id", nullable = false)
     private User ownerUser;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "owner_organization_id")
-    private Organization ownerOrganization;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "created_by_user_id", nullable = false)

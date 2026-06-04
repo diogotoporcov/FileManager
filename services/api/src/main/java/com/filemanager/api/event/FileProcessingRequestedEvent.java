@@ -15,7 +15,6 @@ public record FileProcessingRequestedEvent(
     String storagePath,
     String mimeType,
     long size,
-    UUID ownerUserId,
-    UUID ownerOrganizationId
+    UUID ownerUserId
 ) {
 }

@@ -50,8 +50,5 @@ public class User {
     private OffsetDateTime updatedAt;
 
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
-    private Set<OrganizationMember> memberships;
-
-    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     private Set<UserIdentity> identities;
 }

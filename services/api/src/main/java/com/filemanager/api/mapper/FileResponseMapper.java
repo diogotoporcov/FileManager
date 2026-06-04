@@ -13,7 +13,6 @@ public class FileResponseMapper {
                 .mimeType(file.getMimeType())
                 .size(file.getSize())
                 .ownerUserId(file.getOwnerUser() != null ? file.getOwnerUser().getId() : null)
-                .ownerOrganizationId(file.getOwnerOrganization() != null ? file.getOwnerOrganization().getId() : null)
                 .folderId(file.getFolder() != null ? file.getFolder().getId() : null)
                 .createdByUserId(file.getCreatedByUser() != null ? file.getCreatedByUser().getId() : null)
                 .createdAt(file.getCreatedAt())

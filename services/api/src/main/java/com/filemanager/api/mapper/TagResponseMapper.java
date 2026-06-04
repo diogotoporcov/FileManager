@@ -14,7 +14,6 @@ public class TagResponseMapper {
                 .scopeType(tag.getScopeType())
                 .scopeFolderId(tag.getScopeFolder() != null ? tag.getScopeFolder().getId() : null)
                 .ownerUserId(tag.getOwnerUser() != null ? tag.getOwnerUser().getId() : null)
-                .ownerOrganizationId(tag.getOwnerOrganization() != null ? tag.getOwnerOrganization().getId() : null)
                 .createdByUserId(tag.getCreatedByUser().getId())
                 .createdAt(tag.getCreatedAt())
                 .updatedAt(tag.getUpdatedAt())

@@ -20,11 +20,6 @@ public interface TagRepository extends JpaRepository<TagEntity, UUID> {
             TagScopeType scopeType,
             String normalizedName);
 
-    Optional<TagEntity> findByOwnerOrganizationIdAndScopeTypeAndNormalizedNameAndDeletedAtIsNull(
-            UUID ownerOrganizationId,
-            TagScopeType scopeType,
-            String normalizedName);
-
     Optional<TagEntity> findByScopeFolderIdAndNormalizedNameAndDeletedAtIsNull(
             UUID scopeFolderId,
             String normalizedName);
@@ -39,17 +34,6 @@ public interface TagRepository extends JpaRepository<TagEntity, UUID> {
             order by tag.normalizedName asc, tag.id asc
             """)
     List<TagEntity> listOwnerUserTags(UUID ownerUserId, String query, Pageable pageable);
-
-    @Query("""
-            select tag
-            from TagEntity tag
-            where tag.deletedAt is null
-              and tag.ownerOrganization.id = :ownerOrganizationId
-              and tag.scopeType = com.filemanager.api.entity.TagScopeType.OWNER
-              and (:query is null or tag.normalizedName like concat('%', :query, '%'))
-            order by tag.normalizedName asc, tag.id asc
-            """)
-    List<TagEntity> listOwnerOrganizationTags(UUID ownerOrganizationId, String query, Pageable pageable);
 
     @Query("""
             select tag

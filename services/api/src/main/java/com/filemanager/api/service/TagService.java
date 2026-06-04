@@ -10,7 +10,6 @@ import com.filemanager.api.entity.FileTagId;
 import com.filemanager.api.entity.FolderEntity;
 import com.filemanager.api.entity.FolderTagEntity;
 import com.filemanager.api.entity.FolderTagId;
-import com.filemanager.api.entity.Organization;
 import com.filemanager.api.entity.TagEntity;
 import com.filemanager.api.entity.TagScopeType;
 import com.filemanager.api.entity.User;
@@ -21,7 +20,6 @@ import com.filemanager.api.repository.FileRepository;
 import com.filemanager.api.repository.FileTagRepository;
 import com.filemanager.api.repository.FolderRepository;
 import com.filemanager.api.repository.FolderTagRepository;
-import com.filemanager.api.repository.OrganizationRepository;
 import com.filemanager.api.repository.TagRepository;
 import com.filemanager.api.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -52,7 +50,6 @@ public class TagService {
     private final FileRepository fileRepository;
     private final FolderRepository folderRepository;
     private final UserRepository userRepository;
-    private final OrganizationRepository organizationRepository;
     private final AccessControlService accessControlService;
     private final TagResponseMapper tagResponseMapper;
     private final TransactionTemplate transactionTemplate;
@@ -61,7 +58,7 @@ public class TagService {
         Objects.requireNonNull(request, "request must not be null");
         NormalizedTagName tagName = normalizeTagName(request.getName());
         assertCanCreateTagInRequestedScope(request, actorUserId);
-        Optional<TagResponse> existing = executeInTransaction(() -> findExistingTag(request, tagName.normalizedName())
+        Optional<TagResponse> existing = executeInTransaction(() -> findExistingTag(request, actorUserId, tagName.normalizedName())
                 .map(tagResponseMapper::toResponse));
         if (existing.isPresent()) {
             return existing.get();
@@ -75,6 +72,7 @@ public class TagService {
         } catch (DataIntegrityViolationException ex) {
             Optional<TagResponse> concurrentlyCreated = executeInTransaction(() -> findExistingTag(
                             request,
+                            actorUserId,
                             tagName.normalizedName())
                     .map(tagResponseMapper::toResponse));
 
@@ -94,8 +92,6 @@ public class TagService {
 
     @Transactional(readOnly = true)
     public List<TagResponse> listTags(
-            UUID ownerUserId,
-            UUID ownerOrganizationId,
             UUID scopeFolderId,
             String query,
             Integer requestedLimit,
@@ -104,10 +100,6 @@ public class TagService {
         String normalizedQuery = normalizeOptionalQuery(query);
 
         if (scopeFolderId != null) {
-            if (ownerUserId != null || ownerOrganizationId != null) {
-                throw new IllegalArgumentException("Specify either scopeFolderId or owner context, not both");
-            }
-
             accessControlService.assertCanAccessFolder(actorUserId, scopeFolderId, Permission.FOLDER_VIEW);
             folderRepository.findByIdAndDeletedAtIsNull(scopeFolderId)
                     .orElseThrow(() -> new ResourceNotFoundException("Folder not found: " + scopeFolderId));
@@ -117,22 +109,9 @@ public class TagService {
                     .toList();
         }
 
-        validateExactlyOneOwner(ownerUserId, ownerOrganizationId);
-        accessControlService.assertCanViewContext(actorUserId, ownerUserId, ownerOrganizationId);
-        if (ownerUserId != null) {
-            userRepository.findById(ownerUserId)
-                    .orElseThrow(() -> new ResourceNotFoundException("User not found: " + ownerUserId));
-
-            return tagRepository.listOwnerUserTags(ownerUserId, normalizedQuery, PageRequest.of(0, limit))
-                    .stream()
-                    .map(tagResponseMapper::toResponse)
-                    .toList();
-        }
-
-        organizationRepository.findById(ownerOrganizationId)
-                .orElseThrow(() -> new ResourceNotFoundException("Organization not found: " + ownerOrganizationId));
-
-        return tagRepository.listOwnerOrganizationTags(ownerOrganizationId, normalizedQuery, PageRequest.of(0, limit))
+        accessControlService.assertCanViewOwner(actorUserId, actorUserId);
+        findUser(actorUserId);
+        return tagRepository.listOwnerUserTags(actorUserId, normalizedQuery, PageRequest.of(0, limit))
                 .stream()
                 .map(tagResponseMapper::toResponse)
                 .toList();
@@ -222,58 +201,49 @@ public class TagService {
     }
 
     @Transactional(readOnly = true)
-    public void assertCanUseTagForFileSearch(
-            UUID tagId,
-            UUID actorUserId,
-            UUID ownerUserId,
-            UUID ownerOrganizationId,
-            UUID folderId) {
+    public void assertCanUseTagForFileSearch(UUID tagId, UUID actorUserId, UUID folderId) {
         if (tagId == null) {
             return;
         }
 
         TagEntity tag = findActiveTag(tagId);
         assertCanViewTag(actorUserId, tag);
-        assertOwnerContextMatches(tag, ownerUserId, ownerOrganizationId, "Tag owner context must match file search context");
-        if (tag.getScopeType() == TagScopeType.FOLDER) {
-            if (folderId == null) {
-                throw new AccessDeniedException("Folder-scoped tag requires an explicit matching folder search context.");
-            }
+        if (tag.getScopeType() == TagScopeType.OWNER) {
+            assertTagOwnedBy(tag, actorUserId, "Tag owner context must match file search context");
+            return;
+        }
 
-            if (!folderId.equals(tag.getScopeFolder().getId())) {
-                throw new AccessDeniedException("Folder-scoped tag cannot be used outside its folder scope.");
-            }
+        if (folderId == null) {
+            throw new AccessDeniedException("Folder-scoped tag requires an explicit matching folder search context.");
+        }
+        if (!folderId.equals(tag.getScopeFolder().getId())) {
+            throw new AccessDeniedException("Folder-scoped tag cannot be used outside its folder scope.");
         }
     }
 
     @Transactional(readOnly = true)
-    public void assertCanUseTagForFolderListing(
-            UUID tagId,
-            UUID actorUserId,
-            UUID ownerUserId,
-            UUID ownerOrganizationId,
-            UUID parentFolderId) {
+    public void assertCanUseTagForFolderListing(UUID tagId, UUID actorUserId, UUID parentFolderId) {
         if (tagId == null) {
             return;
         }
         TagEntity tag = findActiveTag(tagId);
         assertCanViewTag(actorUserId, tag);
-        assertOwnerContextMatches(tag, ownerUserId, ownerOrganizationId, "Tag owner context must match folder listing context");
-        if (tag.getScopeType() == TagScopeType.FOLDER) {
-            if (parentFolderId == null) {
-                throw new AccessDeniedException("Folder-scoped tag cannot be used for root folder listing.");
-            }
+        if (tag.getScopeType() == TagScopeType.OWNER) {
+            assertTagOwnedBy(tag, actorUserId, "Tag owner context must match folder listing context");
+            return;
+        }
 
-            if (!parentFolderId.equals(tag.getScopeFolder().getId())) {
-                throw new AccessDeniedException("Folder-scoped tag cannot be used outside its folder scope.");
-            }
+        if (parentFolderId == null) {
+            throw new AccessDeniedException("Folder-scoped tag cannot be used for root folder listing.");
+        }
+        if (!parentFolderId.equals(tag.getScopeFolder().getId())) {
+            throw new AccessDeniedException("Folder-scoped tag cannot be used outside its folder scope.");
         }
     }
 
     private TagEntity buildTag(CreateTagRequest request, UUID actorUserId, NormalizedTagName tagName) {
         User createdByUser = findUser(actorUserId);
         if (request.getScopeType() == TagScopeType.OWNER) {
-            validateExactlyOneOwner(request.getOwnerUserId(), request.getOwnerOrganizationId());
             if (request.getScopeFolderId() != null) {
                 throw new IllegalArgumentException("OWNER-scoped tags must not include scopeFolderId");
             }
@@ -282,8 +252,7 @@ public class TagService {
                     .displayName(tagName.displayName())
                     .normalizedName(tagName.normalizedName())
                     .scopeType(TagScopeType.OWNER)
-                    .ownerUser(resolveOwnerUser(request.getOwnerUserId()))
-                    .ownerOrganization(resolveOwnerOrganization(request.getOwnerOrganizationId()))
+                    .ownerUser(createdByUser)
                     .createdByUser(createdByUser)
                     .build();
         }
@@ -304,32 +273,23 @@ public class TagService {
                 .scopeType(TagScopeType.FOLDER)
                 .scopeFolder(folder)
                 .ownerUser(folder.getOwnerUser())
-                .ownerOrganization(folder.getOwnerOrganization())
                 .createdByUser(createdByUser)
                 .build();
     }
 
     private void assertCanCreateTagInRequestedScope(CreateTagRequest request, UUID actorUserId) {
         if (request.getScopeType() == TagScopeType.OWNER) {
-            validateExactlyOneOwner(request.getOwnerUserId(), request.getOwnerOrganizationId());
             if (request.getScopeFolderId() != null) {
                 throw new IllegalArgumentException("OWNER-scoped tags must not include scopeFolderId");
             }
 
-            accessControlService.assertCanUploadToContext(
-                    actorUserId,
-                    request.getOwnerUserId(),
-                    request.getOwnerOrganizationId());
+            accessControlService.assertCanUploadToOwner(actorUserId, actorUserId);
             return;
         }
 
         if (request.getScopeType() == TagScopeType.FOLDER) {
             if (request.getScopeFolderId() == null) {
                 throw new IllegalArgumentException("FOLDER-scoped tags require scopeFolderId");
-            }
-
-            if (request.getOwnerUserId() != null || request.getOwnerOrganizationId() != null) {
-                throw new IllegalArgumentException("FOLDER-scoped tags derive owner context from scopeFolderId");
             }
             accessControlService.assertCanAccessFolder(actorUserId, request.getScopeFolderId(), Permission.FOLDER_UPLOAD_FILE);
             return;
@@ -338,7 +298,7 @@ public class TagService {
         throw new IllegalArgumentException("Unsupported tag scope type");
     }
 
-    private Optional<TagEntity> findExistingTag(CreateTagRequest request, String normalizedName) {
+    private Optional<TagEntity> findExistingTag(CreateTagRequest request, UUID actorUserId, String normalizedName) {
         if (request.getScopeType() == TagScopeType.FOLDER) {
             if (request.getScopeFolderId() == null) {
                 return Optional.empty();
@@ -349,16 +309,9 @@ public class TagService {
                     normalizedName);
         }
 
-        if (request.getScopeType() == TagScopeType.OWNER && request.getOwnerUserId() != null) {
+        if (request.getScopeType() == TagScopeType.OWNER) {
             return tagRepository.findByOwnerUserIdAndScopeTypeAndNormalizedNameAndDeletedAtIsNull(
-                    request.getOwnerUserId(),
-                    TagScopeType.OWNER,
-                    normalizedName);
-        }
-
-        if (request.getScopeType() == TagScopeType.OWNER && request.getOwnerOrganizationId() != null) {
-            return tagRepository.findByOwnerOrganizationIdAndScopeTypeAndNormalizedNameAndDeletedAtIsNull(
-                    request.getOwnerOrganizationId(),
+                    actorUserId,
                     TagScopeType.OWNER,
                     normalizedName);
         }
@@ -368,25 +321,28 @@ public class TagService {
 
     private void assertTagApplicableToFile(TagEntity tag, FileEntity file, UUID actorUserId) {
         assertCanViewTag(actorUserId, tag);
-        assertOwnerContextMatches(tag, fileOwnerUserId(file), fileOwnerOrganizationId(file), "Tag cannot be applied across owner contexts.");
-        if (tag.getScopeType() == TagScopeType.FOLDER) {
-            UUID fileFolderId = file.getFolder() != null ? file.getFolder().getId() : null;
-            if (!Objects.equals(tag.getScopeFolder().getId(), fileFolderId)) {
-                throw new AccessDeniedException("Folder-scoped tag cannot be applied to a file outside its folder scope.");
-            }
+        if (tag.getScopeType() == TagScopeType.OWNER) {
+            assertTagOwnedBy(tag, fileOwnerUserId(file), "Tag cannot be applied across owner contexts.");
+            return;
+        }
+
+        UUID fileFolderId = file.getFolder() != null ? file.getFolder().getId() : null;
+        if (!Objects.equals(tag.getScopeFolder().getId(), fileFolderId)) {
+            throw new AccessDeniedException("Folder-scoped tag cannot be applied to a file outside its folder scope.");
         }
     }
 
     private void assertTagApplicableToFolder(TagEntity tag, FolderEntity folder, UUID actorUserId) {
         assertCanViewTag(actorUserId, tag);
-        assertOwnerContextMatches(tag, folderOwnerUserId(folder), folderOwnerOrganizationId(folder), "Tag cannot be applied across owner contexts.");
-        if (tag.getScopeType() == TagScopeType.FOLDER) {
-            UUID scopeFolderId = tag.getScopeFolder().getId();
-            UUID parentFolderId = folder.getParentFolder() != null ? folder.getParentFolder().getId() : null;
+        if (tag.getScopeType() == TagScopeType.OWNER) {
+            assertTagOwnedBy(tag, folderOwnerUserId(folder), "Tag cannot be applied across owner contexts.");
+            return;
+        }
 
-            if (!scopeFolderId.equals(folder.getId()) && !scopeFolderId.equals(parentFolderId)) {
-                throw new AccessDeniedException("Folder-scoped tag cannot be applied to an unrelated folder.");
-            }
+        UUID scopeFolderId = tag.getScopeFolder().getId();
+        UUID parentFolderId = folder.getParentFolder() != null ? folder.getParentFolder().getId() : null;
+        if (!scopeFolderId.equals(folder.getId()) && !scopeFolderId.equals(parentFolderId)) {
+            throw new AccessDeniedException("Folder-scoped tag cannot be applied to an unrelated folder.");
         }
     }
 
@@ -396,20 +352,11 @@ public class TagService {
             return;
         }
 
-        accessControlService.assertCanViewContext(
-                actorUserId,
-                tag.getOwnerUser() != null ? tag.getOwnerUser().getId() : null,
-                tag.getOwnerOrganization() != null ? tag.getOwnerOrganization().getId() : null);
+        accessControlService.assertCanViewOwner(actorUserId, tag.getOwnerUser().getId());
     }
 
-    private void assertOwnerContextMatches(
-            TagEntity tag,
-            UUID ownerUserId,
-            UUID ownerOrganizationId,
-            String message) {
-        if (!Objects.equals(tag.getOwnerUser() != null ? tag.getOwnerUser().getId() : null, ownerUserId)
-                || !Objects.equals(tag.getOwnerOrganization() != null ? tag.getOwnerOrganization().getId() : null,
-                ownerOrganizationId)) {
+    private void assertTagOwnedBy(TagEntity tag, UUID ownerUserId, String message) {
+        if (!Objects.equals(tag.getOwnerUser() != null ? tag.getOwnerUser().getId() : null, ownerUserId)) {
             throw new AccessDeniedException(message);
         }
     }
@@ -473,44 +420,12 @@ public class TagService {
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
     }
 
-    private User resolveOwnerUser(UUID ownerUserId) {
-        if (ownerUserId == null) {
-            return null;
-        }
-
-        return userRepository.findById(ownerUserId)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + ownerUserId));
-    }
-
-    private Organization resolveOwnerOrganization(UUID ownerOrganizationId) {
-        if (ownerOrganizationId == null) {
-            return null;
-        }
-
-        return organizationRepository.findById(ownerOrganizationId)
-                .orElseThrow(() -> new ResourceNotFoundException("Organization not found: " + ownerOrganizationId));
-    }
-
-    private void validateExactlyOneOwner(UUID ownerUserId, UUID ownerOrganizationId) {
-        if ((ownerUserId != null && ownerOrganizationId != null) || (ownerUserId == null && ownerOrganizationId == null)) {
-            throw new IllegalArgumentException("Exactly one owner (user or organization) must be provided");
-        }
-    }
-
     private UUID fileOwnerUserId(FileEntity file) {
         return file.getOwnerUser() != null ? file.getOwnerUser().getId() : null;
     }
 
-    private UUID fileOwnerOrganizationId(FileEntity file) {
-        return file.getOwnerOrganization() != null ? file.getOwnerOrganization().getId() : null;
-    }
-
     private UUID folderOwnerUserId(FolderEntity folder) {
         return folder.getOwnerUser() != null ? folder.getOwnerUser().getId() : null;
-    }
-
-    private UUID folderOwnerOrganizationId(FolderEntity folder) {
-        return folder.getOwnerOrganization() != null ? folder.getOwnerOrganization().getId() : null;
     }
 
     private record NormalizedTagName(String displayName, String normalizedName) {

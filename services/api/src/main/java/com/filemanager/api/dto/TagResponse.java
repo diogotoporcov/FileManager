@@ -18,7 +18,6 @@ public class TagResponse {
     TagScopeType scopeType;
     UUID scopeFolderId;
     UUID ownerUserId;
-    UUID ownerOrganizationId;
     UUID createdByUserId;
     OffsetDateTime createdAt;
     OffsetDateTime updatedAt;

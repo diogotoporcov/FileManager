@@ -26,8 +26,7 @@ def sample_event():
         storage_path="test.jpg",
         mime_type="image/jpeg",
         size=500,
-        owner_user_id=uuid.uuid4(),
-        owner_organization_id=None
+        owner_user_id=uuid.uuid4()
     )
 
 @pytest.mark.asyncio

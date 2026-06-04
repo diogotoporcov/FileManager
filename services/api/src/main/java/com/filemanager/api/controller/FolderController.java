@@ -12,7 +12,6 @@ import com.filemanager.api.mapper.FileResponseMapper;
 import com.filemanager.api.search.file.FileSearchQuery;
 import com.filemanager.api.service.FileService;
 import com.filemanager.api.service.FolderService;
-import com.filemanager.api.service.FolderService.FolderUploadTarget;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -54,7 +53,7 @@ public class FolderController {
     private final CurrentUserService currentUserService;
     private final FileResponseMapper fileResponseMapper;
 
-    @Operation(summary = "Create a folder", description = "Creates a root folder or child folder in an owner scope.")
+    @Operation(summary = "Create a folder", description = "Creates a root folder owned by the authenticated user or a child folder under an accessible parent.")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Folder created successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid input", content = @Content),
@@ -66,16 +65,12 @@ public class FolderController {
         return folderService.createFolder(request, currentUserService.getCurrentUserId());
     }
 
-    @Operation(summary = "List root folders", description = "Lists active root folders for exactly one owner scope.")
+    @Operation(summary = "List root folders", description = "Lists active root folders visible to the authenticated user.")
     @GetMapping
     public FolderChildrenResponse listRootFolders(
-            @Parameter(description = "Owner user ID") @RequestParam(required = false) UUID ownerUserId,
-            @Parameter(description = "Owner organization ID") @RequestParam(required = false) UUID ownerOrganizationId,
             @Parameter(description = "Tag ID to filter root folders by assignment") @RequestParam(required = false) UUID tagId) {
         return FolderChildrenResponse.builder()
                 .folders(folderService.listRootFolders(
-                        ownerUserId,
-                        ownerOrganizationId,
                         tagId,
                         currentUserService.getCurrentUserId()))
                 .build();
@@ -137,7 +132,7 @@ public class FolderController {
         return fileService.searchFiles(query, currentUserService.getCurrentUserId());
     }
 
-    @Operation(summary = "Upload file into folder", description = "Uploads a file into the folder owner scope.")
+    @Operation(summary = "Upload file into folder", description = "Uploads a file owned by the authenticated user into the folder.")
     @PostMapping(value = "/{folderId}/files", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
     public FileResponse uploadFileIntoFolder(
@@ -146,14 +141,11 @@ public class FolderController {
         validateUpload(file);
 
         UUID actorUserId = currentUserService.getCurrentUserId();
-        FolderUploadTarget uploadTarget = folderService.getUploadTarget(folderId, actorUserId);
         FileEntity entity = fileService.uploadFile(
                 file.getOriginalFilename(),
                 file.getContentType(),
                 file.getSize(),
                 file.getInputStream(),
-                uploadTarget.ownerUserId(),
-                uploadTarget.ownerOrganizationId(),
                 folderId,
                 actorUserId);
 
