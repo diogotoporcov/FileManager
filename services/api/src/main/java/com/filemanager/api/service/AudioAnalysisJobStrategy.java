@@ -14,11 +14,20 @@ import java.util.Optional;
 public class AudioAnalysisJobStrategy implements JobStrategy {
 
     private final AppProperties appProperties;
+    private final ProcessingPolicyResolver processingPolicyResolver;
 
     @Override
-    public Optional<ProcessingJob.JobType> getJobType(String mimeType) {
+    public Optional<ProcessingJob.JobType> getJobType(ProcessingPolicyContext context) {
+        String mimeType = context.mimeType();
+        ProcessingPolicyContext jobContext = context.withJobType(ProcessingJob.JobType.AUDIO_ANALYSIS);
+
         if (ProcessableAudioMimeTypes.contains(appProperties.getProcessableAudioMimeTypes(), mimeType)
-                || ProcessableVideoMimeTypes.contains(appProperties.getProcessableVideoMimeTypes(), mimeType)) {
+                && processingPolicyResolver.isEnabled(ProcessingCapability.AUDIO_FINGERPRINT, jobContext)) {
+            return Optional.of(ProcessingJob.JobType.AUDIO_ANALYSIS);
+        }
+
+        if (ProcessableVideoMimeTypes.contains(appProperties.getProcessableVideoMimeTypes(), mimeType)
+                && processingPolicyResolver.isEnabled(ProcessingCapability.VIDEO_AUDIO_ANALYSIS, jobContext)) {
             return Optional.of(ProcessingJob.JobType.AUDIO_ANALYSIS);
         }
 

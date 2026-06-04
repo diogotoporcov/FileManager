@@ -28,9 +28,12 @@ class ChecksumProcessor(Processor):
         return "checksum"
 
     def should_process(self, event: FileProcessingRequestedEvent) -> bool:
-        return True
+        return settings.worker_checksum_enabled
 
     async def process(self, event: FileProcessingRequestedEvent) -> ProcessorResult:
+        if not settings.worker_checksum_enabled:
+            raise NonRetryableProcessingError("Checksum processing is disabled")
+
         logger.info(f"Computing SHA-256 for file {event.file_id}")
         sha256_hash = hashlib.sha256()
 
@@ -58,9 +61,15 @@ class PHashProcessor(Processor):
         return "phash"
 
     def should_process(self, event: FileProcessingRequestedEvent) -> bool:
+        if not settings.worker_image_phash_enabled:
+            return False
+
         return is_processable_image_mime_type(event.mime_type, self.processable_image_mime_types)
 
     async def process(self, event: FileProcessingRequestedEvent) -> ProcessorResult:
+        if not settings.worker_image_phash_enabled:
+            raise NonRetryableProcessingError("Image pHash processing is disabled")
+
         logger.info(f"Computing pHash for image {event.file_id}")
 
         total_bytes = 0

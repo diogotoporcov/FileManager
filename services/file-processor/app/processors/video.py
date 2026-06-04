@@ -20,7 +20,7 @@ from app.embeddings.base import (
     ImageEmbeddingServiceUnavailable,
 )
 from app.events.models import FileProcessingRequestedEvent
-from app.processors.base import Processor, ProcessorResult
+from app.processors.base import Processor, ProcessorResult, ProcessorResultValue
 from app.processors.embedding import normalize_embedding_image, preprocess_clip_image
 from app.processors.video_mime_types import is_processable_video_mime_type, parse_processable_video_mime_types
 from app.storage.base import StorageObjectReader
@@ -42,15 +42,15 @@ class VideoMetadata:
 class SampledVideoFrame:
     timestamp_ms: int
     frame_index: int
-    phash: str
-    embedding: Sequence[float]
+    phash: str | None
+    embedding: Sequence[float] | None
 
 
 class VideoAnalysisProcessor(Processor):
     def __init__(
         self,
         storage_reader: StorageObjectReader,
-        embedding_client: ImageEmbeddingInferenceClient,
+        embedding_client: ImageEmbeddingInferenceClient | None,
         *,
         model_name: str | None = None,
         model_version: str | None = None,
@@ -92,12 +92,24 @@ class VideoAnalysisProcessor(Processor):
         if event.job_type.upper() != "VIDEO_ANALYSIS":
             return False
 
-        return settings.worker_video_enabled and is_processable_video_mime_type(
+        if not settings.worker_video_enabled or not settings.worker_video_analysis_enabled:
+            return False
+
+        if not settings.worker_video_frame_phash_enabled and not settings.worker_video_frame_embedding_enabled:
+            return False
+
+        return is_processable_video_mime_type(
             event.mime_type,
             self.processable_video_mime_types,
         )
 
     async def process(self, event: FileProcessingRequestedEvent) -> ProcessorResult:
+        if not settings.worker_video_enabled or not settings.worker_video_analysis_enabled:
+            raise NonRetryableProcessingError("Video analysis processing is disabled")
+
+        if not settings.worker_video_frame_phash_enabled and not settings.worker_video_frame_embedding_enabled:
+            raise NonRetryableProcessingError("Video analysis has no enabled frame outputs")
+
         if event.size > self.max_file_bytes:
             raise NonRetryableProcessingError("Video exceeds maximum processing size")
 
@@ -116,8 +128,8 @@ class VideoAnalysisProcessor(Processor):
 
             for frame_index, timestamp_seconds in enumerate(timestamps):
                 frame_image = await asyncio.to_thread(self._extract_frame, video_path, timestamp_seconds)
-                phash = self._compute_frame_phash(frame_image)
-                embedding = await self._embed_frame(frame_image)
+                phash = self._compute_frame_phash(frame_image) if settings.worker_video_frame_phash_enabled else None
+                embedding = await self._embed_frame(frame_image) if settings.worker_video_frame_embedding_enabled else None
                 frames.append(
                     SampledVideoFrame(
                         timestamp_ms=round(timestamp_seconds * 1000),
@@ -128,9 +140,9 @@ class VideoAnalysisProcessor(Processor):
                 )
 
             logger.info("Computed video analysis for file %s with %s sampled frames", event.file_id, len(frames))
-            embedding_dimension = len(frames[0].embedding)
+            embedding_dimension = next((len(frame.embedding) for frame in frames if frame.embedding is not None), None)
 
-            return {
+            result: dict[str, ProcessorResultValue] = {
                 "durationMs": round(metadata.duration_seconds * 1000),
                 "width": metadata.width,
                 "height": metadata.height,
@@ -138,19 +150,19 @@ class VideoAnalysisProcessor(Processor):
                 "codec": metadata.codec,
                 "sampledFrameCount": len(frames),
                 "samplingStrategy": self._sampling_strategy(),
-                "modelName": self.model_name,
-                "modelVersion": self.model_version,
-                "dimension": embedding_dimension,
                 "frames": [
-                    {
-                        "timestampMs": frame.timestamp_ms,
-                        "frameIndex": frame.frame_index,
-                        "phash": frame.phash,
-                        "embedding": list(frame.embedding),
-                    }
+                    _frame_result(frame)
                     for frame in frames
                 ],
             }
+            if embedding_dimension is not None:
+                result.update({
+                    "modelName": self.model_name,
+                    "modelVersion": self.model_version,
+                    "dimension": embedding_dimension,
+                })
+
+            return result
 
         finally:
             video_path.unlink(missing_ok=True)
@@ -294,6 +306,9 @@ class VideoAnalysisProcessor(Processor):
         return phash
 
     async def _embed_frame(self, image: Image.Image) -> Sequence[float]:
+        if self.embedding_client is None:
+            raise NonRetryableProcessingError("Video frame embedding client is unavailable")
+
         try:
             prepared = normalize_embedding_image(
                 image,
@@ -338,6 +353,19 @@ class VideoAnalysisProcessor(Processor):
             f"even_interval:min={self.min_sampled_frames},max={self.max_sampled_frames},"
             f"target_seconds={self.target_interval_seconds:g}"
         )
+
+
+def _frame_result(frame: SampledVideoFrame) -> dict[str, ProcessorResultValue]:
+    result: dict[str, ProcessorResultValue] = {
+        "timestampMs": frame.timestamp_ms,
+        "frameIndex": frame.frame_index,
+    }
+    if frame.phash is not None:
+        result["phash"] = frame.phash
+    if frame.embedding is not None:
+        result["embedding"] = list(frame.embedding)
+
+    return result
 
 
 def sample_timestamps(

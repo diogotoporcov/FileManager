@@ -34,7 +34,17 @@ processors: MutableSequence[Processor] = [
     PHashProcessor(storage_reader),
 ]
 
-if settings.embedding_processor_enabled:
+needs_embedding_client = settings.embedding_processor_enabled and (
+    settings.worker_image_embedding_enabled
+    or (
+        settings.worker_video_enabled
+        and settings.worker_video_analysis_enabled
+        and settings.worker_video_frame_embedding_enabled
+    )
+)
+embedding_client = None
+
+if needs_embedding_client:
     embedding_client = TritonImageEmbeddingClient(
         grpc_url=settings.triton_grpc_url,
         model_name=settings.triton_model_name,
@@ -42,11 +52,17 @@ if settings.embedding_processor_enabled:
         input_tensor_name=settings.triton_input_tensor_name,
         output_tensor_name=settings.triton_output_tensor_name,
     )
+
+if settings.worker_image_embedding_enabled and embedding_client is not None:
     processors.append(ImageEmbeddingProcessor(storage_reader, embedding_client))
-    if settings.worker_video_enabled:
+
+if settings.worker_video_enabled and settings.worker_video_analysis_enabled:
+    if settings.worker_video_frame_phash_enabled or settings.worker_video_frame_embedding_enabled:
         processors.append(VideoAnalysisProcessor(storage_reader, embedding_client))
 
-if settings.worker_audio_enabled:
+if settings.worker_audio_enabled and (
+    settings.worker_audio_fingerprint_enabled or settings.worker_video_audio_analysis_enabled
+):
     processors.append(AudioFingerprintProcessor(storage_reader))
 
 flow = ProcessingFlow(processors, result_sink)

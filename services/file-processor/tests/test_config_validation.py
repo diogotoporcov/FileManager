@@ -123,6 +123,41 @@ def test_worker_topics_default_subscribes_to_all_workload_topics():
         "file.processing.video",
     )
 
+
+def test_processing_capability_toggles_default_enabled():
+    settings = Settings(internal_api_token="test-token-1234567890123456789012")
+
+    assert settings.worker_checksum_enabled is True
+    assert settings.worker_image_phash_enabled is True
+    assert settings.worker_image_embedding_enabled is True
+    assert settings.worker_video_analysis_enabled is True
+    assert settings.worker_video_frame_phash_enabled is True
+    assert settings.worker_video_frame_embedding_enabled is True
+    assert settings.worker_video_audio_analysis_enabled is True
+    assert settings.worker_audio_fingerprint_enabled is True
+
+
+def test_processing_capability_toggles_bind_from_environment(monkeypatch):
+    monkeypatch.setenv("WORKER_CHECKSUM_ENABLED", "false")
+    monkeypatch.setenv("WORKER_IMAGE_PHASH_ENABLED", "false")
+    monkeypatch.setenv("WORKER_IMAGE_EMBEDDING_ENABLED", "false")
+    monkeypatch.setenv("WORKER_VIDEO_ANALYSIS_ENABLED", "false")
+    monkeypatch.setenv("WORKER_VIDEO_FRAME_PHASH_ENABLED", "false")
+    monkeypatch.setenv("WORKER_VIDEO_FRAME_EMBEDDING_ENABLED", "false")
+    monkeypatch.setenv("WORKER_VIDEO_AUDIO_ANALYSIS_ENABLED", "false")
+    monkeypatch.setenv("WORKER_AUDIO_FINGERPRINT_ENABLED", "false")
+
+    settings = Settings(internal_api_token="test-token-1234567890123456789012")
+
+    assert settings.worker_checksum_enabled is False
+    assert settings.worker_image_phash_enabled is False
+    assert settings.worker_image_embedding_enabled is False
+    assert settings.worker_video_analysis_enabled is False
+    assert settings.worker_video_frame_phash_enabled is False
+    assert settings.worker_video_frame_embedding_enabled is False
+    assert settings.worker_video_audio_analysis_enabled is False
+    assert settings.worker_audio_fingerprint_enabled is False
+
 def test_worker_topics_accepts_one_topic(monkeypatch):
     monkeypatch.setenv("WORKER_TOPICS", "file.processing.video")
 

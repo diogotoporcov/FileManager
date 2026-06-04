@@ -189,22 +189,51 @@ public class ProcessingJobService {
         if (request == null) {
             throw new IllegalArgumentException("Video analysis result request must not be null");
         }
+
         if (request.getFrames() == null || request.getFrames().isEmpty()) {
             throw new IllegalArgumentException("Video analysis frames must not be empty");
         }
+
         if (request.getSampledFrameCount() == null || request.getSampledFrameCount() != request.getFrames().size()) {
             throw new IllegalArgumentException("Sampled frame count must match frame results");
         }
+
         if (request.getSampledFrameCount() > VideoAnalysisResultRequest.MAX_FRAMES) {
             throw new IllegalArgumentException("Sampled frame count exceeds maximum");
         }
-        validateEmbeddingModel(request.getModelName(), request.getModelVersion(), request.getDimension(), embeddingProperties);
+
+        boolean hasFramePhashes = false;
+        boolean hasFrameEmbeddings = false;
+
         for (VideoAnalysisResultRequest.FrameResult frame : request.getFrames()) {
             if (frame == null) {
                 throw new IllegalArgumentException("Video analysis frame must not be null");
             }
-            validatePhashFormat(frame.getPhash());
-            validateEmbeddingValues(request.getDimension(), frame.getEmbedding());
+
+            if (frame.getPhash() != null && !frame.getPhash().isBlank()) {
+                validatePhashFormat(frame.getPhash());
+                hasFramePhashes = true;
+            }
+
+            if (frame.getEmbedding() != null && !frame.getEmbedding().isEmpty()) {
+                validateEmbeddingModel(
+                        request.getModelName(),
+                        request.getModelVersion(),
+                        request.getDimension(),
+                        embeddingProperties);
+                validateEmbeddingValues(request.getDimension(), frame.getEmbedding());
+                hasFrameEmbeddings = true;
+            }
+
+            if ((frame.getPhash() == null || frame.getPhash().isBlank())
+                    && (frame.getEmbedding() == null || frame.getEmbedding().isEmpty())) {
+                throw new IllegalArgumentException("Video analysis frame must include pHash or embedding");
+            }
+
+        }
+
+        if (!hasFramePhashes && !hasFrameEmbeddings) {
+            throw new IllegalArgumentException("Video analysis must include at least one frame signal");
         }
     }
 
@@ -212,24 +241,31 @@ public class ProcessingJobService {
         if (request == null) {
             throw new IllegalArgumentException("Audio analysis result request must not be null");
         }
+
         if (request.getDurationMs() == null || request.getDurationMs() <= 0) {
             throw new IllegalArgumentException("Audio duration must be positive");
         }
+
         if (request.getSampleRate() == null || request.getSampleRate() <= 0) {
             throw new IllegalArgumentException("Audio sample rate must be positive");
         }
+
         if (request.getChannels() == null || request.getChannels() <= 0) {
             throw new IllegalArgumentException("Audio channels must be positive");
         }
+
         if (request.getBitRate() != null && request.getBitRate() <= 0) {
             throw new IllegalArgumentException("Audio bit rate must be positive");
         }
+
         if (request.getAudioStreamIndex() != null && request.getAudioStreamIndex() < 0) {
             throw new IllegalArgumentException("Audio stream index must be non-negative");
         }
+
         if (request.getFingerprintDurationSeconds() == null || request.getFingerprintDurationSeconds() <= 0) {
             throw new IllegalArgumentException("Audio fingerprint duration must be positive");
         }
+
         validateRequiredText(request.getCodec(), "Audio codec", 255);
         validateRequiredText(request.getFingerprint(), "Audio fingerprint", AudioFingerprint.MAX_FINGERPRINT_LENGTH);
         validateRequiredText(
@@ -250,6 +286,7 @@ public class ProcessingJobService {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(fieldName + " must not be blank");
         }
+
         if (value.trim().length() > maxLength) {
             throw new IllegalArgumentException(fieldName + " exceeds maximum length");
         }
@@ -266,15 +303,14 @@ public class ProcessingJobService {
             String modelVersion,
             Integer dimension,
             AppProperties.Embedding embeddingProperties) {
-        if (!embeddingProperties.isEnabled()) {
-            throw new IllegalArgumentException("Embedding processing is disabled");
-        }
         if (!Objects.equals(modelName, embeddingProperties.getModelName())) {
             throw new IllegalArgumentException("Embedding model name mismatch");
         }
+
         if (!Objects.equals(modelVersion, embeddingProperties.getModelVersion())) {
             throw new IllegalArgumentException("Embedding model version mismatch");
         }
+
         if (dimension == null || dimension != embeddingProperties.getDimension()) {
             throw new IllegalArgumentException("Embedding dimension mismatch");
         }
@@ -284,9 +320,11 @@ public class ProcessingJobService {
         if (embedding == null || embedding.isEmpty()) {
             throw new IllegalArgumentException("Embedding must not be empty");
         }
+
         if (embedding.size() != dimension) {
             throw new IllegalArgumentException("Embedding length must match dimension");
         }
+
         if (embedding.stream().anyMatch(value -> value == null || !Double.isFinite(value))) {
             throw new IllegalArgumentException("Embedding values must be finite");
         }
@@ -403,6 +441,7 @@ public class ProcessingJobService {
         videoFrameEmbeddingRepository.deleteByFileId(file.getId());
 
         List<VideoFrameFingerprint> fingerprints = request.getFrames().stream()
+                .filter(frame -> frame.getPhash() != null && !frame.getPhash().isBlank())
                 .map(frame -> VideoFrameFingerprint.builder()
                         .file(file)
                         .timestampMs(frame.getTimestampMs())
@@ -410,9 +449,12 @@ public class ProcessingJobService {
                         .phash(frame.getPhash().toLowerCase(Locale.ROOT))
                         .build())
                 .toList();
-        videoFrameFingerprintRepository.saveAll(fingerprints);
+        if (!fingerprints.isEmpty()) {
+            videoFrameFingerprintRepository.saveAll(fingerprints);
+        }
 
         List<VideoFrameEmbedding> embeddings = request.getFrames().stream()
+                .filter(frame -> frame.getEmbedding() != null && !frame.getEmbedding().isEmpty())
                 .map(frame -> VideoFrameEmbedding.builder()
                         .file(file)
                         .timestampMs(frame.getTimestampMs())
@@ -423,7 +465,9 @@ public class ProcessingJobService {
                         .embedding(normalizeEmbedding(frame.getEmbedding()))
                         .build())
                 .toList();
-        videoFrameEmbeddingRepository.saveAll(embeddings);
+        if (!embeddings.isEmpty()) {
+            videoFrameEmbeddingRepository.saveAll(embeddings);
+        }
     }
 
     private void updateAudioFingerprint(FileEntity file, AudioAnalysisResultRequest request) {

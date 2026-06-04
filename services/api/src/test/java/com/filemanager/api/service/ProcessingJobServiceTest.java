@@ -39,7 +39,9 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import static org.mockito.Mockito.when;
@@ -84,7 +86,6 @@ class ProcessingJobServiceTest {
     @BeforeEach
     void setup() {
         AppProperties.Embedding embedding = new AppProperties.Embedding();
-        embedding.setEnabled(true);
         embedding.setModelName("openai/clip-vit-large-patch14");
         embedding.setModelVersion("1");
         embedding.setDimension(EmbeddingDimensions.IMAGE_EMBEDDING_DIMENSION);
@@ -241,6 +242,53 @@ class ProcessingJobServiceTest {
     }
 
     @Test
+    void handleVideoAnalysisResult_PersistsFramePhashesWithoutEmbeddings() {
+        UUID jobId = UUID.randomUUID();
+        UUID fileId = UUID.randomUUID();
+        FileEntity file = file(fileId);
+        ProcessingJob job = job(jobId, file, ProcessingJob.JobType.VIDEO_ANALYSIS);
+        VideoAnalysisResultRequest request = videoAnalysisRequest(fileId);
+        request.setModelName(null);
+        request.setModelVersion(null);
+        request.setDimension(null);
+        request.getFrames().forEach(frame -> frame.setEmbedding(null));
+
+        when(processingJobRepository.findById(jobId)).thenReturn(Optional.of(job));
+        when(fileRepository.findByIdAndDeletedAtIsNull(fileId)).thenReturn(Optional.of(file));
+        when(videoFingerprintRepository.findByFileId(fileId)).thenReturn(Optional.empty());
+
+        processingJobService.handleVideoAnalysisResult(jobId, request);
+
+        verify(videoFrameFingerprintRepository).saveAll(frameFingerprintsCaptor.capture());
+        assertThat(frameFingerprintsCaptor.getValue()).hasSize(2);
+        verify(videoFrameEmbeddingRepository).deleteByFileId(fileId);
+        verify(videoFrameEmbeddingRepository, never()).saveAll(any());
+        assertThat(job.getStatus()).isEqualTo(ProcessingJob.JobStatus.COMPLETED);
+    }
+
+    @Test
+    void handleVideoAnalysisResult_PersistsFrameEmbeddingsWithoutPhashes() {
+        UUID jobId = UUID.randomUUID();
+        UUID fileId = UUID.randomUUID();
+        FileEntity file = file(fileId);
+        ProcessingJob job = job(jobId, file, ProcessingJob.JobType.VIDEO_ANALYSIS);
+        VideoAnalysisResultRequest request = videoAnalysisRequest(fileId);
+        request.getFrames().forEach(frame -> frame.setPhash(null));
+
+        when(processingJobRepository.findById(jobId)).thenReturn(Optional.of(job));
+        when(fileRepository.findByIdAndDeletedAtIsNull(fileId)).thenReturn(Optional.of(file));
+        when(videoFingerprintRepository.findByFileId(fileId)).thenReturn(Optional.empty());
+
+        processingJobService.handleVideoAnalysisResult(jobId, request);
+
+        verify(videoFrameEmbeddingRepository).saveAll(frameEmbeddingsCaptor.capture());
+        assertThat(frameEmbeddingsCaptor.getValue()).hasSize(2);
+        verify(videoFrameFingerprintRepository).deleteByFileId(fileId);
+        verify(videoFrameFingerprintRepository, never()).saveAll(any());
+        assertThat(job.getStatus()).isEqualTo(ProcessingJob.JobStatus.COMPLETED);
+    }
+
+    @Test
     void handleAudioAnalysisResult_PersistsFingerprintAndCompletesJob() {
         UUID jobId = UUID.randomUUID();
         UUID fileId = UUID.randomUUID();
@@ -393,6 +441,22 @@ class ProcessingJobServiceTest {
         UUID fileId = UUID.randomUUID();
         VideoAnalysisResultRequest request = videoAnalysisRequest(fileId);
         request.getFrames().getFirst().getEmbedding().set(0, Double.NaN);
+
+        assertThrows(IllegalArgumentException.class, () -> processingJobService.handleVideoAnalysisResult(jobId, request));
+    }
+
+    @Test
+    void handleVideoAnalysisResult_RejectsFramesWithoutSignals() {
+        UUID jobId = UUID.randomUUID();
+        UUID fileId = UUID.randomUUID();
+        VideoAnalysisResultRequest request = videoAnalysisRequest(fileId);
+        request.setModelName(null);
+        request.setModelVersion(null);
+        request.setDimension(null);
+        request.getFrames().forEach(frame -> {
+            frame.setPhash(null);
+            frame.setEmbedding(null);
+        });
 
         assertThrows(IllegalArgumentException.class, () -> processingJobService.handleVideoAnalysisResult(jobId, request));
     }

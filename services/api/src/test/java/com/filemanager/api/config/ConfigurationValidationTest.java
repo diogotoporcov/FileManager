@@ -128,6 +128,33 @@ class ConfigurationValidationTest {
     }
 
     @Test
+    void appProperties_ProcessingCapabilityTogglesBindCorrectly() {
+        MapConfigurationPropertySource source = new MapConfigurationPropertySource(Map.of(
+                "app.processing.checksum.enabled", "false",
+                "app.processing.image.phash-enabled", "false",
+                "app.processing.image.embedding-enabled", "false",
+                "app.processing.video.analysis-enabled", "false",
+                "app.processing.video.frame-phash-enabled", "false",
+                "app.processing.video.frame-embedding-enabled", "false",
+                "app.processing.video.audio-analysis-enabled", "false",
+                "app.processing.audio.fingerprint-enabled", "false"
+        ));
+
+        AppProperties properties = new Binder(source)
+                .bind("app", Bindable.of(AppProperties.class))
+                .get();
+
+        assertThat(properties.getProcessing().getChecksum().isEnabled()).isFalse();
+        assertThat(properties.getProcessing().getImage().isPhashEnabled()).isFalse();
+        assertThat(properties.getProcessing().getImage().isEmbeddingEnabled()).isFalse();
+        assertThat(properties.getProcessing().getVideo().isAnalysisEnabled()).isFalse();
+        assertThat(properties.getProcessing().getVideo().isFramePhashEnabled()).isFalse();
+        assertThat(properties.getProcessing().getVideo().isFrameEmbeddingEnabled()).isFalse();
+        assertThat(properties.getProcessing().getVideo().isAudioAnalysisEnabled()).isFalse();
+        assertThat(properties.getProcessing().getAudio().isFingerprintEnabled()).isFalse();
+    }
+
+    @Test
     void appProperties_InvalidEmbeddingValues_Fail() {
         AppProperties properties = new AppProperties();
         properties.getEmbedding().setModelName("");

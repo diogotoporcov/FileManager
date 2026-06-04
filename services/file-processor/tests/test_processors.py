@@ -19,7 +19,11 @@ from app.worker.errors import NonRetryableProcessingError
 
 
 class FakeStorageReader(StorageObjectReader):
+    def __init__(self):
+        self.reads = 0
+
     async def read_content(self, reference: StorageObjectReference) -> AsyncIterator[bytes]:
+        self.reads += 1
         yield b"test data"
 
 
@@ -112,8 +116,10 @@ class FakeEmbeddingClient(ImageEmbeddingInferenceClient):
         self.output = output if output is not None else np.ones((1, 768), dtype=np.float32)
         self.error = error
         self.last_pixel_values: np.ndarray | None = None
+        self.calls = 0
 
     async def embed_image(self, pixel_values: np.ndarray) -> np.ndarray:
+        self.calls += 1
         self.last_pixel_values = pixel_values
 
         if self.error:
@@ -203,6 +209,32 @@ async def test_phash_processor_real_hash(sample_event):
     # Check if it's a valid hex
     int(phash, 16)
 
+
+@pytest.mark.asyncio
+async def test_checksum_disabled_rejects_without_hashing(monkeypatch, sample_event):
+    monkeypatch.setattr("app.processors.impl.settings.worker_checksum_enabled", False)
+    storage = FakeStorageReader()
+    processor = ChecksumProcessor(storage)
+
+    assert processor.should_process(sample_event) is False
+    with pytest.raises(NonRetryableProcessingError, match="Checksum processing is disabled"):
+        await processor.process(sample_event)
+
+    assert storage.reads == 0
+
+
+@pytest.mark.asyncio
+async def test_phash_disabled_rejects_without_reading(monkeypatch, sample_event):
+    monkeypatch.setattr("app.processors.impl.settings.worker_image_phash_enabled", False)
+    storage = FakeStorageReader()
+    processor = PHashProcessor(storage)
+
+    assert processor.should_process(sample_event) is False
+    with pytest.raises(NonRetryableProcessingError, match="Image pHash processing is disabled"):
+        await processor.process(sample_event)
+
+    assert storage.reads == 0
+
 @pytest.mark.asyncio
 async def test_phash_processor_rejects_oversized_image(sample_event):
     storage = OversizedImageStorageReader()
@@ -259,6 +291,21 @@ async def test_embedding_processor_valid_response(sample_event):
     assert np.isclose(np.linalg.norm(np.array(embedding, dtype=np.float32)), 1.0)
     assert client.last_pixel_values is not None
     assert client.last_pixel_values.shape == (1, 3, 224, 224)
+
+
+@pytest.mark.asyncio
+async def test_embedding_disabled_rejects_without_triton(monkeypatch, sample_event):
+    monkeypatch.setattr("app.processors.embedding.settings.worker_image_embedding_enabled", False)
+    sample_event.job_type = "EMBEDDING"
+    storage = ImageStorageReader()
+    client = FakeEmbeddingClient()
+    processor = ImageEmbeddingProcessor(storage, client, max_image_bytes=1024 * 1024)
+
+    assert processor.should_process(sample_event) is False
+    with pytest.raises(NonRetryableProcessingError, match="Image embedding processing is disabled"):
+        await processor.process(sample_event)
+
+    assert client.calls == 0
 
 
 @pytest.mark.asyncio

@@ -50,20 +50,17 @@ public class VideoAnalysisResultRequest {
     @NotBlank
     private String samplingStrategy;
 
-    @NotBlank
     private String modelName;
 
-    @NotBlank
     private String modelVersion;
 
-    @NotNull
     @Positive
     private Integer dimension;
 
     @Valid
     @NotEmpty
     @Size(max = MAX_FRAMES)
-    private List<FrameResult> frames;
+    private List<@NotNull FrameResult> frames;
 
     @JsonIgnore
     @AssertTrue(message = "frame count must match sampledFrameCount")
@@ -80,6 +77,30 @@ public class VideoAnalysisResultRequest {
                 .allMatch(frame -> frame.getEmbedding() == null || frame.getEmbedding().size() == dimension);
     }
 
+    @JsonIgnore
+    @AssertTrue(message = "embedding metadata is required when frame embeddings are present")
+    @SuppressWarnings("unused")
+    public boolean isEmbeddingMetadataValid() {
+        if (frames == null || frames.stream()
+                .noneMatch(frame -> frame != null && frame.getEmbedding() != null && !frame.getEmbedding().isEmpty())) {
+            return true;
+        }
+
+        return modelName != null && !modelName.isBlank()
+                && modelVersion != null && !modelVersion.isBlank()
+                && dimension != null;
+    }
+
+    @JsonIgnore
+    @AssertTrue(message = "each frame must include pHash or embedding")
+    @SuppressWarnings("unused")
+    public boolean isFrameSignalValid() {
+        return frames == null || frames.stream().allMatch(frame ->
+                frame != null
+                        && (frame.getPhash() != null && !frame.getPhash().isBlank()
+                        || (frame.getEmbedding() != null && !frame.getEmbedding().isEmpty())));
+    }
+
     @Data
     @Builder
     @NoArgsConstructor
@@ -93,11 +114,9 @@ public class VideoAnalysisResultRequest {
         @PositiveOrZero
         private Integer frameIndex;
 
-        @NotBlank
         @Pattern(regexp = "^[0-9a-fA-F]{16}$", message = "phash must be a 16-character hex string")
         private String phash;
 
-        @NotEmpty
         private List<@NotNull Double> embedding;
     }
 }

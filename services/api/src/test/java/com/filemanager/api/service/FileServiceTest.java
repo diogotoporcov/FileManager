@@ -127,7 +127,7 @@ class FileServiceTest {
                 .etag("test-etag")
                 .build());
         
-        when(processingJobPlanner.planJobs(contentType)).thenReturn(List.of(ProcessingJob.JobType.CHECKSUM));
+        when(processingJobPlanner.planJobs(any(ProcessingPolicyContext.class))).thenReturn(List.of(ProcessingJob.JobType.CHECKSUM));
 
         ProcessingJob processingJob = new ProcessingJob();
         processingJob.setId(UUID.randomUUID());
@@ -183,7 +183,7 @@ class FileServiceTest {
                 .etag("test-etag")
                 .build());
 
-        when(processingJobPlanner.planJobs(contentType)).thenReturn(List.of(ProcessingJob.JobType.CHECKSUM, ProcessingJob.JobType.PHASH));
+        when(processingJobPlanner.planJobs(any(ProcessingPolicyContext.class))).thenReturn(List.of(ProcessingJob.JobType.CHECKSUM, ProcessingJob.JobType.PHASH));
 
         ProcessingJob checksumJob = ProcessingJob.builder().id(UUID.randomUUID()).jobType(ProcessingJob.JobType.CHECKSUM).build();
         ProcessingJob phashJob = ProcessingJob.builder().id(UUID.randomUUID()).jobType(ProcessingJob.JobType.PHASH).build();
@@ -241,7 +241,7 @@ class FileServiceTest {
                 .etag("test-etag")
                 .build());
 
-        when(processingJobPlanner.planJobs(contentType)).thenReturn(List.of(ProcessingJob.JobType.CHECKSUM));
+        when(processingJobPlanner.planJobs(any(ProcessingPolicyContext.class))).thenReturn(List.of(ProcessingJob.JobType.CHECKSUM));
         
         ProcessingJob job = ProcessingJob.builder().id(UUID.randomUUID()).jobType(ProcessingJob.JobType.CHECKSUM).build();
         when(processingJobRepository.save(any(ProcessingJob.class))).thenReturn(job);
@@ -268,7 +268,7 @@ class FileServiceTest {
                 .storagePath("storage-path")
                 .etag("test-etag")
                 .build());
-        when(processingJobPlanner.planJobs("text/plain")).thenReturn(List.of());
+        when(processingJobPlanner.planJobs(any(ProcessingPolicyContext.class))).thenReturn(List.of());
 
         try (ByteArrayInputStream content = new ByteArrayInputStream("hello".getBytes())) {
             fileService.uploadFile("folder.txt", "text/plain", 5L, content, userId, null, folderId, userId);

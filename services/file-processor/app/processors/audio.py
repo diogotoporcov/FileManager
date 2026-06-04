@@ -71,18 +71,28 @@ class AudioFingerprintProcessor(Processor):
         if event.job_type.upper() != "AUDIO_ANALYSIS":
             return False
 
-        if not settings.worker_audio_enabled:
-            return False
-
-        return is_processable_audio_mime_type(
+        if is_processable_audio_mime_type(
             event.mime_type,
             self.processable_audio_mime_types,
-        ) or is_processable_video_mime_type(
+        ):
+            return settings.worker_audio_enabled and settings.worker_audio_fingerprint_enabled
+
+        if is_processable_video_mime_type(
             event.mime_type,
             self.processable_video_mime_types,
-        )
+        ):
+            return settings.worker_audio_enabled and settings.worker_video_audio_analysis_enabled
+
+        return False
 
     async def process(self, event: FileProcessingRequestedEvent) -> ProcessorResult:
+        if is_processable_video_mime_type(event.mime_type, self.processable_video_mime_types):
+            if not settings.worker_audio_enabled or not settings.worker_video_audio_analysis_enabled:
+                raise NonRetryableProcessingError("Video audio-track analysis is disabled")
+        elif is_processable_audio_mime_type(event.mime_type, self.processable_audio_mime_types):
+            if not settings.worker_audio_enabled or not settings.worker_audio_fingerprint_enabled:
+                raise NonRetryableProcessingError("Standalone audio fingerprint processing is disabled")
+
         if event.size > self.max_file_bytes:
             raise NonRetryableProcessingError("Audio exceeds maximum processing size")
 

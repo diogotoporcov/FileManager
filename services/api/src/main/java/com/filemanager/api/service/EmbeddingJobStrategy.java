@@ -14,15 +14,21 @@ import java.util.Optional;
 public class EmbeddingJobStrategy implements JobStrategy {
 
     private final AppProperties appProperties;
+    private final ProcessingPolicyResolver processingPolicyResolver;
 
     @Override
-    public Optional<ProcessingJob.JobType> getJobType(String mimeType) {
-        if (!appProperties.getEmbedding().isEnabled()) {
+    public Optional<ProcessingJob.JobType> getJobType(ProcessingPolicyContext context) {
+        if (!processingPolicyResolver.isEnabled(
+                ProcessingCapability.IMAGE_EMBEDDING,
+                context.withJobType(ProcessingJob.JobType.EMBEDDING))) {
             return Optional.empty();
         }
+
+        String mimeType = context.mimeType();
         if (ProcessableImageMimeTypes.contains(appProperties.getProcessableImageMimeTypes(), mimeType)) {
             return Optional.of(ProcessingJob.JobType.EMBEDDING);
         }
+
         return Optional.empty();
     }
 }

@@ -11,6 +11,7 @@ from app.events.models import FileProcessingRequestedEvent
 from app.processors.base import Processor, ProcessorResult
 from app.sinks.base import ProcessingResultSink
 from app.worker.errors import NonRetryableProcessingError, RetryableProcessingError
+from app.worker.policy import WorkerProcessingPolicy
 
 logger = logging.getLogger(__name__)
 
@@ -23,9 +24,15 @@ class EmbeddingResult(TypedDict):
 
 
 class ProcessingFlow:
-    def __init__(self, processors: Sequence[Processor], result_sink: ProcessingResultSink):
+    def __init__(
+        self,
+        processors: Sequence[Processor],
+        result_sink: ProcessingResultSink,
+        processing_policy: WorkerProcessingPolicy | None = None,
+    ):
         self.processors = {p.name.upper(): p for p in processors}
         self.result_sink = result_sink
+        self.processing_policy = processing_policy or WorkerProcessingPolicy()
 
     async def run(self, event: FileProcessingRequestedEvent) -> ProcessorResult:
         logger.info(f"Starting processing flow for job: {event.processing_job_id} ({event.job_type})")
@@ -45,6 +52,10 @@ class ProcessingFlow:
 
     def _get_processor(self, event: FileProcessingRequestedEvent) -> Processor:
         job_type = event.job_type.upper()
+        decision = self.processing_policy.is_enabled(event)
+        if not decision.enabled:
+            raise NonRetryableProcessingError(f"Processing capability disabled: {decision.reason}")
+
         processor = self.processors.get(job_type)
 
         if not processor:
@@ -169,9 +180,9 @@ class ProcessingFlow:
                 f"Processor {processor_name} did not produce required embedding output: {missing_keys}"
             )
 
-        model_name = result["modelName"]
-        model_version = result["modelVersion"]
-        dimension = result["dimension"]
+        model_name = result.get("modelName")
+        model_version = result.get("modelVersion")
+        dimension = result.get("dimension")
         embedding = result["embedding"]
 
         if not isinstance(model_name, str) or not model_name.strip():
@@ -202,9 +213,6 @@ class ProcessingFlow:
             "durationMs",
             "sampledFrameCount",
             "samplingStrategy",
-            "modelName",
-            "modelVersion",
-            "dimension",
             "frames",
         }
         missing = required_keys - result.keys()
@@ -217,9 +225,9 @@ class ProcessingFlow:
         duration_ms = result["durationMs"]
         sampled_frame_count = result["sampledFrameCount"]
         sampling_strategy = result["samplingStrategy"]
-        model_name = result["modelName"]
-        model_version = result["modelVersion"]
-        dimension = result["dimension"]
+        model_name = result.get("modelName")
+        model_version = result.get("modelVersion")
+        dimension = result.get("dimension")
         frames = result["frames"]
 
         if not isinstance(duration_ms, int) or duration_ms <= 0:
@@ -228,16 +236,22 @@ class ProcessingFlow:
             raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid sampled frame count")
         if not isinstance(sampling_strategy, str) or not sampling_strategy.strip():
             raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid sampling strategy")
-        if not isinstance(model_name, str) or not model_name.strip():
-            raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid embedding model name")
-        if not isinstance(model_version, str) or not model_version.strip():
-            raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid embedding model version")
-        if not isinstance(dimension, int) or dimension <= 0:
-            raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid embedding dimension")
         if not isinstance(frames, list) or len(frames) != sampled_frame_count:
             raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid video frame list")
 
         normalized_frames: list[JsonValue] = []
+        has_embedding = any(
+            isinstance(frame, dict) and isinstance(frame.get("embedding"), list) and len(frame["embedding"]) > 0
+            for frame in frames
+        )
+        if has_embedding:
+            if not isinstance(model_name, str) or not model_name.strip():
+                raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid embedding model name")
+            if not isinstance(model_version, str) or not model_version.strip():
+                raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid embedding model version")
+            if not isinstance(dimension, int) or dimension <= 0:
+                raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid embedding dimension")
+
         for frame in frames:
             if not isinstance(frame, dict):
                 raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid video frame item")
@@ -251,19 +265,25 @@ class ProcessingFlow:
                 raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid video frame timestamp")
             if not isinstance(frame_index, int) or frame_index < 0:
                 raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid video frame index")
-            if not isinstance(phash, str) or len(phash) != 16 or not all(c in "0123456789abcdef" for c in phash.lower()):
-                raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid video frame pHash")
-            if not isinstance(embedding, list) or len(embedding) != dimension:
-                raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid video frame embedding")
-            if not all(isinstance(value, (int, float)) and math.isfinite(float(value)) for value in embedding):
-                raise NonRetryableProcessingError(f"Processor {processor_name} produced non-finite video embedding values")
+            if phash is None and embedding is None:
+                raise NonRetryableProcessingError(f"Processor {processor_name} produced video frame without signals")
 
-            normalized_frames.append({
+            normalized_frame: dict[str, JsonValue] = {
                 "timestampMs": timestamp_ms,
                 "frameIndex": frame_index,
-                "phash": phash.lower(),
-                "embedding": [float(value) for value in embedding],
-            })
+            }
+            if phash is not None:
+                if not isinstance(phash, str) or len(phash) != 16 or not all(c in "0123456789abcdef" for c in phash.lower()):
+                    raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid video frame pHash")
+                normalized_frame["phash"] = phash.lower()
+            if embedding is not None:
+                if not has_embedding or not isinstance(embedding, list) or len(embedding) != dimension:
+                    raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid video frame embedding")
+                if not all(isinstance(value, (int, float)) and math.isfinite(float(value)) for value in embedding):
+                    raise NonRetryableProcessingError(f"Processor {processor_name} produced non-finite video embedding values")
+                normalized_frame["embedding"] = [float(value) for value in embedding]
+
+            normalized_frames.append(normalized_frame)
 
         payload: dict[str, JsonValue] = {
             "durationMs": duration_ms,
@@ -273,11 +293,12 @@ class ProcessingFlow:
             "codec": ProcessingFlow._optional_string(result.get("codec")),
             "sampledFrameCount": sampled_frame_count,
             "samplingStrategy": sampling_strategy,
-            "modelName": model_name,
-            "modelVersion": model_version,
-            "dimension": dimension,
             "frames": normalized_frames,
         }
+        if has_embedding:
+            payload["modelName"] = model_name
+            payload["modelVersion"] = model_version
+            payload["dimension"] = dimension
         return payload
 
     @staticmethod

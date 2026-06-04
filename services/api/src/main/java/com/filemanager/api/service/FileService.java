@@ -146,7 +146,13 @@ public class FileService {
             applicationMetricsPort.recordFileUpload(size, ownerType);
 
             // Determine and initiate background processing jobs.
-            List<ProcessingJob.JobType> plannedJobs = processingJobPlanner.planJobs(effectiveContentType);
+            ProcessingPolicyContext processingContext = new ProcessingPolicyContext(
+                    ownerUserId,
+                    ownerOrganizationId,
+                    folderId,
+                    effectiveContentType,
+                    null);
+            List<ProcessingJob.JobType> plannedJobs = processingJobPlanner.planJobs(processingContext);
 
             for (ProcessingJob.JobType jobType : plannedJobs) {
                 ProcessingJob job = ProcessingJob.builder()

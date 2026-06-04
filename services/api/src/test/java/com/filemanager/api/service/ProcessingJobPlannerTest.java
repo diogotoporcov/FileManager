@@ -19,11 +19,11 @@ class ProcessingJobPlannerTest {
     void setUp() {
         AppProperties appProperties = new AppProperties();
         planner = new ProcessingJobPlanner(List.of(
-                new ChecksumJobStrategy(),
-                new PhashJobStrategy(appProperties),
-                new EmbeddingJobStrategy(appProperties),
-                new VideoAnalysisJobStrategy(appProperties),
-                new AudioAnalysisJobStrategy(appProperties)
+                new ChecksumJobStrategy(new GlobalProcessingPolicyResolver(appProperties)),
+                new PhashJobStrategy(appProperties, new GlobalProcessingPolicyResolver(appProperties)),
+                new EmbeddingJobStrategy(appProperties, new GlobalProcessingPolicyResolver(appProperties)),
+                new VideoAnalysisJobStrategy(appProperties, new GlobalProcessingPolicyResolver(appProperties)),
+                new AudioAnalysisJobStrategy(appProperties, new GlobalProcessingPolicyResolver(appProperties))
         ));
     }
 
@@ -136,11 +136,11 @@ class ProcessingJobPlannerTest {
         AppProperties appProperties = new AppProperties();
         appProperties.setProcessableImageMimeTypes(Set.of("image/example"));
         ProcessingJobPlanner customPlanner = new ProcessingJobPlanner(List.of(
-                new ChecksumJobStrategy(),
-                new PhashJobStrategy(appProperties),
-                new EmbeddingJobStrategy(appProperties),
-                new VideoAnalysisJobStrategy(appProperties),
-                new AudioAnalysisJobStrategy(appProperties)
+                new ChecksumJobStrategy(new GlobalProcessingPolicyResolver(appProperties)),
+                new PhashJobStrategy(appProperties, new GlobalProcessingPolicyResolver(appProperties)),
+                new EmbeddingJobStrategy(appProperties, new GlobalProcessingPolicyResolver(appProperties)),
+                new VideoAnalysisJobStrategy(appProperties, new GlobalProcessingPolicyResolver(appProperties)),
+                new AudioAnalysisJobStrategy(appProperties, new GlobalProcessingPolicyResolver(appProperties))
         ));
 
         List<ProcessingJob.JobType> supportedJobs = customPlanner.planJobs("image/example");
@@ -157,11 +157,11 @@ class ProcessingJobPlannerTest {
         AppProperties appProperties = new AppProperties();
         appProperties.setProcessableVideoMimeTypes(Set.of("video/example"));
         ProcessingJobPlanner customPlanner = new ProcessingJobPlanner(List.of(
-                new ChecksumJobStrategy(),
-                new PhashJobStrategy(appProperties),
-                new EmbeddingJobStrategy(appProperties),
-                new VideoAnalysisJobStrategy(appProperties),
-                new AudioAnalysisJobStrategy(appProperties)
+                new ChecksumJobStrategy(new GlobalProcessingPolicyResolver(appProperties)),
+                new PhashJobStrategy(appProperties, new GlobalProcessingPolicyResolver(appProperties)),
+                new EmbeddingJobStrategy(appProperties, new GlobalProcessingPolicyResolver(appProperties)),
+                new VideoAnalysisJobStrategy(appProperties, new GlobalProcessingPolicyResolver(appProperties)),
+                new AudioAnalysisJobStrategy(appProperties, new GlobalProcessingPolicyResolver(appProperties))
         ));
 
         List<ProcessingJob.JobType> supportedJobs = customPlanner.planJobs("video/example");
@@ -258,6 +258,144 @@ class ProcessingJobPlannerTest {
         assertFalse(defaultAudioJobs.contains(ProcessingJob.JobType.AUDIO_ANALYSIS));
     }
 
+    @Test
+    void planJobs_ChecksumDisabledSkipsChecksumForAllFiles() {
+        AppProperties appProperties = new AppProperties();
+        appProperties.getProcessing().getChecksum().setEnabled(false);
+        ProcessingJobPlanner customPlanner = plannerWith(appProperties);
+
+        List<ProcessingJob.JobType> jobs = customPlanner.planJobs("application/pdf");
+
+        assertFalse(jobs.contains(ProcessingJob.JobType.CHECKSUM));
+    }
+
+    @Test
+    void planJobs_ImagePhashDisabledSkipsOnlyPhash() {
+        AppProperties appProperties = new AppProperties();
+        appProperties.getProcessing().getImage().setPhashEnabled(false);
+        ProcessingJobPlanner customPlanner = plannerWith(appProperties);
+
+        List<ProcessingJob.JobType> jobs = customPlanner.planJobs("image/png");
+
+        assertTrue(jobs.contains(ProcessingJob.JobType.CHECKSUM));
+        assertFalse(jobs.contains(ProcessingJob.JobType.PHASH));
+        assertTrue(jobs.contains(ProcessingJob.JobType.EMBEDDING));
+    }
+
+    @Test
+    void planJobs_ImageEmbeddingDisabledSkipsOnlyEmbedding() {
+        AppProperties appProperties = new AppProperties();
+        appProperties.getProcessing().getImage().setEmbeddingEnabled(false);
+        ProcessingJobPlanner customPlanner = plannerWith(appProperties);
+
+        List<ProcessingJob.JobType> jobs = customPlanner.planJobs("image/png");
+
+        assertTrue(jobs.contains(ProcessingJob.JobType.CHECKSUM));
+        assertTrue(jobs.contains(ProcessingJob.JobType.PHASH));
+        assertFalse(jobs.contains(ProcessingJob.JobType.EMBEDDING));
+    }
+
+    @Test
+    void planJobs_ImageCapabilitiesDisabledLeavesOnlyChecksum() {
+        AppProperties appProperties = new AppProperties();
+        appProperties.getProcessing().getImage().setPhashEnabled(false);
+        appProperties.getProcessing().getImage().setEmbeddingEnabled(false);
+        ProcessingJobPlanner customPlanner = plannerWith(appProperties);
+
+        List<ProcessingJob.JobType> jobs = customPlanner.planJobs("image/png");
+
+        assertTrue(jobs.contains(ProcessingJob.JobType.CHECKSUM));
+        assertFalse(jobs.contains(ProcessingJob.JobType.PHASH));
+        assertFalse(jobs.contains(ProcessingJob.JobType.EMBEDDING));
+    }
+
+    @Test
+    void planJobs_VideoAnalysisDisabledSkipsVideoAnalysis() {
+        AppProperties appProperties = new AppProperties();
+        appProperties.getProcessing().getVideo().setAnalysisEnabled(false);
+        ProcessingJobPlanner customPlanner = plannerWith(appProperties);
+
+        List<ProcessingJob.JobType> jobs = customPlanner.planJobs("video/mp4");
+
+        assertTrue(jobs.contains(ProcessingJob.JobType.CHECKSUM));
+        assertFalse(jobs.contains(ProcessingJob.JobType.VIDEO_ANALYSIS));
+        assertTrue(jobs.contains(ProcessingJob.JobType.AUDIO_ANALYSIS));
+    }
+
+    @Test
+    void planJobs_VideoFramePhashDisabledStillCreatesVideoAnalysisForEmbedding() {
+        AppProperties appProperties = new AppProperties();
+        appProperties.getProcessing().getVideo().setFramePhashEnabled(false);
+        ProcessingJobPlanner customPlanner = plannerWith(appProperties);
+
+        List<ProcessingJob.JobType> jobs = customPlanner.planJobs("video/mp4");
+
+        assertTrue(jobs.contains(ProcessingJob.JobType.VIDEO_ANALYSIS));
+    }
+
+    @Test
+    void planJobs_VideoFrameEmbeddingDisabledStillCreatesVideoAnalysisForPhash() {
+        AppProperties appProperties = new AppProperties();
+        appProperties.getProcessing().getVideo().setFrameEmbeddingEnabled(false);
+        ProcessingJobPlanner customPlanner = plannerWith(appProperties);
+
+        List<ProcessingJob.JobType> jobs = customPlanner.planJobs("video/mp4");
+
+        assertTrue(jobs.contains(ProcessingJob.JobType.VIDEO_ANALYSIS));
+    }
+
+    @Test
+    void planJobs_VideoFrameSignalsDisabledSkipsVideoAnalysis() {
+        AppProperties appProperties = new AppProperties();
+        appProperties.getProcessing().getVideo().setFramePhashEnabled(false);
+        appProperties.getProcessing().getVideo().setFrameEmbeddingEnabled(false);
+        ProcessingJobPlanner customPlanner = plannerWith(appProperties);
+
+        List<ProcessingJob.JobType> jobs = customPlanner.planJobs("video/mp4");
+
+        assertTrue(jobs.contains(ProcessingJob.JobType.CHECKSUM));
+        assertFalse(jobs.contains(ProcessingJob.JobType.VIDEO_ANALYSIS));
+        assertTrue(jobs.contains(ProcessingJob.JobType.AUDIO_ANALYSIS));
+    }
+
+    @Test
+    void planJobs_VideoAudioAnalysisDisabledSkipsVideoAudioOnly() {
+        AppProperties appProperties = new AppProperties();
+        appProperties.getProcessing().getVideo().setAudioAnalysisEnabled(false);
+        ProcessingJobPlanner customPlanner = plannerWith(appProperties);
+
+        List<ProcessingJob.JobType> videoJobs = customPlanner.planJobs("video/mp4");
+        List<ProcessingJob.JobType> audioJobs = customPlanner.planJobs("audio/mpeg");
+
+        assertTrue(videoJobs.contains(ProcessingJob.JobType.VIDEO_ANALYSIS));
+        assertFalse(videoJobs.contains(ProcessingJob.JobType.AUDIO_ANALYSIS));
+        assertTrue(audioJobs.contains(ProcessingJob.JobType.AUDIO_ANALYSIS));
+    }
+
+    @Test
+    void planJobs_StandaloneAudioFingerprintDisabledSkipsAudioOnly() {
+        AppProperties appProperties = new AppProperties();
+        appProperties.getProcessing().getAudio().setFingerprintEnabled(false);
+        ProcessingJobPlanner customPlanner = plannerWith(appProperties);
+
+        List<ProcessingJob.JobType> audioJobs = customPlanner.planJobs("audio/mpeg");
+        List<ProcessingJob.JobType> videoJobs = customPlanner.planJobs("video/mp4");
+
+        assertFalse(audioJobs.contains(ProcessingJob.JobType.AUDIO_ANALYSIS));
+        assertTrue(videoJobs.contains(ProcessingJob.JobType.AUDIO_ANALYSIS));
+    }
+
+    @Test
+    void processingPolicyResolver_UsesGlobalProcessingDefaults() {
+        AppProperties appProperties = new AppProperties();
+        appProperties.getProcessing().getVideo().setFrameEmbeddingEnabled(false);
+        GlobalProcessingPolicyResolver resolver = new GlobalProcessingPolicyResolver(appProperties);
+        ProcessingPolicyContext context = ProcessingPolicyContext.forMimeType("video/mp4");
+
+        assertTrue(resolver.isEnabled(ProcessingCapability.CHECKSUM, context));
+        assertFalse(resolver.isEnabled(ProcessingCapability.VIDEO_FRAME_EMBEDDING, context));
+    }
+
     private static ProcessingJobPlanner plannerWithProcessableVideoMimeTypes(Set<String> processableVideoMimeTypes) {
         AppProperties appProperties = new AppProperties();
         appProperties.setProcessableVideoMimeTypes(processableVideoMimeTypes);
@@ -272,11 +410,11 @@ class ProcessingJobPlannerTest {
 
     private static ProcessingJobPlanner plannerWith(AppProperties appProperties) {
         return new ProcessingJobPlanner(List.of(
-                new ChecksumJobStrategy(),
-                new PhashJobStrategy(appProperties),
-                new EmbeddingJobStrategy(appProperties),
-                new VideoAnalysisJobStrategy(appProperties),
-                new AudioAnalysisJobStrategy(appProperties)
+                new ChecksumJobStrategy(new GlobalProcessingPolicyResolver(appProperties)),
+                new PhashJobStrategy(appProperties, new GlobalProcessingPolicyResolver(appProperties)),
+                new EmbeddingJobStrategy(appProperties, new GlobalProcessingPolicyResolver(appProperties)),
+                new VideoAnalysisJobStrategy(appProperties, new GlobalProcessingPolicyResolver(appProperties)),
+                new AudioAnalysisJobStrategy(appProperties, new GlobalProcessingPolicyResolver(appProperties))
         ));
     }
 }

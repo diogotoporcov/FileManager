@@ -15,8 +15,12 @@ public class ProcessingJobPlanner {
     private final List<JobStrategy> jobStrategies;
 
     public List<ProcessingJob.JobType> planJobs(String mimeType) {
+        return planJobs(ProcessingPolicyContext.forMimeType(mimeType));
+    }
+
+    public List<ProcessingJob.JobType> planJobs(ProcessingPolicyContext context) {
         return jobStrategies.stream()
-                .map(strategy -> strategy.getJobType(mimeType))
+                .map(strategy -> strategy.getJobType(context))
                 .filter(Optional::isPresent)
                 .map(Optional::get)
                 .collect(Collectors.toList());

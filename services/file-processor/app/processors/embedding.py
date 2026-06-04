@@ -60,9 +60,14 @@ class ImageEmbeddingProcessor(Processor):
     def should_process(self, event: FileProcessingRequestedEvent) -> bool:
         if event.job_type.upper() != "EMBEDDING":
             return False
+        if not settings.worker_image_embedding_enabled:
+            return False
         return is_processable_image_mime_type(event.mime_type, self.processable_image_mime_types)
 
     async def process(self, event: FileProcessingRequestedEvent) -> ProcessorResult:
+        if not settings.worker_image_embedding_enabled:
+            raise NonRetryableProcessingError("Image embedding processing is disabled")
+
         logger.info("Computing image embedding for file %s", event.file_id)
 
         pixel_values = await self._read_and_preprocess(event)

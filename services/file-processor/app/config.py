@@ -27,8 +27,15 @@ class Settings(BaseSettings):
     worker_max_attempts: int = Field(default=3, ge=1)
     worker_retry_backoff_seconds: float = Field(default=1.0, ge=0)
     worker_retry_backoff_multiplier: float = Field(default=2.0, ge=1)
+    worker_checksum_enabled: bool = True
+    worker_image_phash_enabled: bool = True
+    worker_image_embedding_enabled: bool = True
     worker_phash_max_image_bytes: int = Field(default=25 * 1024 * 1024, gt=0)
     worker_video_enabled: bool = True
+    worker_video_analysis_enabled: bool = True
+    worker_video_frame_phash_enabled: bool = True
+    worker_video_frame_embedding_enabled: bool = True
+    worker_video_audio_analysis_enabled: bool = True
     worker_video_max_file_bytes: int = Field(default=512 * 1024 * 1024, gt=0)
     worker_video_max_duration_seconds: float = Field(default=30 * 60, gt=0)
     worker_video_max_sampled_frames: int = Field(default=32, ge=1)
@@ -41,6 +48,7 @@ class Settings(BaseSettings):
         "video/x-matroska,video/x-m4v,video/mpeg,video/MP2T,video/3gpp,video/3gpp2"
     )
     worker_audio_enabled: bool = True
+    worker_audio_fingerprint_enabled: bool = True
     worker_audio_supported_mime_types: NonBlankString = (
         "audio/mpeg,audio/mp3,audio/wav,audio/x-wav,audio/wave,audio/vnd.wave,audio/flac,audio/x-flac,"
         "audio/ogg,audio/aac,audio/mp4,audio/x-m4a,audio/webm,audio/opus,audio/matroska,"

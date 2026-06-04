@@ -14,9 +14,16 @@ import java.util.Optional;
 public class PhashJobStrategy implements JobStrategy {
 
     private final AppProperties appProperties;
+    private final ProcessingPolicyResolver processingPolicyResolver;
 
     @Override
-    public Optional<ProcessingJob.JobType> getJobType(String mimeType) {
+    public Optional<ProcessingJob.JobType> getJobType(ProcessingPolicyContext context) {
+        if (!processingPolicyResolver.isEnabled(
+                ProcessingCapability.IMAGE_PHASH,
+                context.withJobType(ProcessingJob.JobType.PHASH))) {
+            return Optional.empty();
+        }
+        String mimeType = context.mimeType();
         if (ProcessableImageMimeTypes.contains(appProperties.getProcessableImageMimeTypes(), mimeType)) {
             return Optional.of(ProcessingJob.JobType.PHASH);
         }

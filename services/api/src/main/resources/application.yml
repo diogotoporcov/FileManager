@@ -48,11 +48,23 @@ app:
       file-processing-image: ${FILE_PROCESSING_IMAGE_TOPIC:file.processing.image}
       file-processing-audio: ${FILE_PROCESSING_AUDIO_TOPIC:file.processing.audio}
       file-processing-video: ${FILE_PROCESSING_VIDEO_TOPIC:file.processing.video}
+  processing:
+    checksum:
+      enabled: ${PROCESSING_CHECKSUM_ENABLED:true}
+    image:
+      phash-enabled: ${PROCESSING_IMAGE_PHASH_ENABLED:true}
+      embedding-enabled: ${PROCESSING_IMAGE_EMBEDDING_ENABLED:${EMBEDDING_ENABLED:true}}
+    video:
+      analysis-enabled: ${PROCESSING_VIDEO_ANALYSIS_ENABLED:true}
+      frame-phash-enabled: ${PROCESSING_VIDEO_FRAME_PHASH_ENABLED:true}
+      frame-embedding-enabled: ${PROCESSING_VIDEO_FRAME_EMBEDDING_ENABLED:${EMBEDDING_ENABLED:true}}
+      audio-analysis-enabled: ${PROCESSING_VIDEO_AUDIO_ANALYSIS_ENABLED:true}
+    audio:
+      fingerprint-enabled: ${PROCESSING_AUDIO_FINGERPRINT_ENABLED:true}
   phash:
     threshold: ${PHASH_THRESHOLD:10}
     max-candidates: ${PHASH_MAX_CANDIDATES:5000}
   embedding:
-    enabled: ${EMBEDDING_ENABLED:true}
     model-name: ${EMBEDDING_MODEL_NAME:openai/clip-vit-large-patch14}
     model-version: ${EMBEDDING_MODEL_VERSION:1}
     dimension: ${EMBEDDING_DIMENSION:768}

@@ -25,6 +25,8 @@ import java.util.Set;
 public class AppProperties {
 
     @Valid
+    private final Processing processing = new Processing();
+    @Valid
     private final Kafka kafka = new Kafka();
     @Valid
     private final Phash phash = new Phash();
@@ -147,6 +149,47 @@ public class AppProperties {
 
     @Getter
     @Setter
+    public static class Processing {
+        @Valid
+        private final Checksum checksum = new Checksum();
+        @Valid
+        private final Image image = new Image();
+        @Valid
+        private final Video video = new Video();
+        @Valid
+        private final Audio audio = new Audio();
+
+        @Getter
+        @Setter
+        public static class Checksum {
+            private boolean enabled = true;
+        }
+
+        @Getter
+        @Setter
+        public static class Image {
+            private boolean phashEnabled = true;
+            private boolean embeddingEnabled = true;
+        }
+
+        @Getter
+        @Setter
+        public static class Video {
+            private boolean analysisEnabled = true;
+            private boolean framePhashEnabled = true;
+            private boolean frameEmbeddingEnabled = true;
+            private boolean audioAnalysisEnabled = true;
+        }
+
+        @Getter
+        @Setter
+        public static class Audio {
+            private boolean fingerprintEnabled = true;
+        }
+    }
+
+    @Getter
+    @Setter
     public static class Phash {
         @Min(0)
         @Max(64)
@@ -159,8 +202,6 @@ public class AppProperties {
     @Getter
     @Setter
     public static class Embedding {
-        private boolean enabled = true;
-
         @NotBlank
         private String modelName = "openai/clip-vit-large-patch14";
 

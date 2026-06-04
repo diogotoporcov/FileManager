@@ -205,6 +205,92 @@ async def test_video_analysis_payload_dimension_uses_embedding_length(monkeypatc
 
 
 @pytest.mark.asyncio
+async def test_video_analysis_frame_phash_disabled_skips_phash(monkeypatch, video_event):
+    monkeypatch.setattr(video_module.settings, "worker_video_frame_phash_enabled", False)
+    monkeypatch.setattr(video_module.settings, "worker_video_frame_embedding_enabled", True)
+    client = FakeEmbeddingClient()
+    processor = VideoAnalysisProcessor(
+        VideoStorageReader(),
+        client,
+        embedding_dimension=2,
+        input_size=32,
+        min_sampled_frames=1,
+        max_sampled_frames=1,
+        max_file_bytes=1024,
+        max_duration_seconds=60,
+    )
+
+    def fake_run(args: list[str], **kwargs: Any) -> subprocess.CompletedProcess[bytes]:
+        if args[0] == "ffprobe":
+            return subprocess.CompletedProcess(args, 0, stdout=metadata_json(), stderr=b"")
+
+        return subprocess.CompletedProcess(args, 0, stdout=png_bytes(), stderr=b"")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    result = await processor.process(video_event)
+
+    frames = result["frames"]
+    assert isinstance(frames, list)
+    assert "phash" not in frames[0]
+    assert "embedding" in frames[0]
+    assert client.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_video_analysis_frame_embedding_disabled_skips_triton(monkeypatch, video_event):
+    monkeypatch.setattr(video_module.settings, "worker_video_frame_phash_enabled", True)
+    monkeypatch.setattr(video_module.settings, "worker_video_frame_embedding_enabled", False)
+    client = FakeEmbeddingClient()
+    processor = VideoAnalysisProcessor(
+        VideoStorageReader(),
+        client,
+        embedding_dimension=2,
+        input_size=32,
+        min_sampled_frames=1,
+        max_sampled_frames=1,
+        max_file_bytes=1024,
+        max_duration_seconds=60,
+    )
+
+    def fake_run(args: list[str], **kwargs: Any) -> subprocess.CompletedProcess[bytes]:
+        if args[0] == "ffprobe":
+            return subprocess.CompletedProcess(args, 0, stdout=metadata_json(), stderr=b"")
+
+        return subprocess.CompletedProcess(args, 0, stdout=png_bytes(), stderr=b"")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    result = await processor.process(video_event)
+
+    frames = result["frames"]
+    assert isinstance(frames, list)
+    assert "phash" in frames[0]
+    assert "embedding" not in frames[0]
+    assert "modelName" not in result
+    assert client.calls == 0
+
+
+@pytest.mark.asyncio
+async def test_video_analysis_rejects_no_enabled_frame_outputs_without_reading(monkeypatch, video_event):
+    monkeypatch.setattr(video_module.settings, "worker_video_frame_phash_enabled", False)
+    monkeypatch.setattr(video_module.settings, "worker_video_frame_embedding_enabled", False)
+    storage = VideoStorageReader()
+    processor = VideoAnalysisProcessor(
+        storage,
+        FakeEmbeddingClient(),
+        embedding_dimension=2,
+        input_size=32,
+        max_file_bytes=1024,
+    )
+
+    with pytest.raises(NonRetryableProcessingError, match="no enabled frame outputs"):
+        await processor.process(video_event)
+
+    assert storage.references == []
+
+
+@pytest.mark.asyncio
 async def test_video_analysis_rejects_oversized_file_without_reading(video_event):
     storage = VideoStorageReader()
     processor = VideoAnalysisProcessor(

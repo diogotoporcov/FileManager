@@ -14,17 +14,26 @@ import java.util.Optional;
 public class VideoAnalysisJobStrategy implements JobStrategy {
 
     private final AppProperties appProperties;
+    private final ProcessingPolicyResolver processingPolicyResolver;
 
     @Override
-    public Optional<ProcessingJob.JobType> getJobType(String mimeType) {
-        if (!appProperties.getEmbedding().isEnabled()) {
+    public Optional<ProcessingJob.JobType> getJobType(ProcessingPolicyContext context) {
+        ProcessingPolicyContext jobContext = context.withJobType(ProcessingJob.JobType.VIDEO_ANALYSIS);
+        if (!processingPolicyResolver.isEnabled(ProcessingCapability.VIDEO_ANALYSIS, jobContext)
+                || !isAnyFrameSignalEnabled(jobContext)) {
             return Optional.empty();
         }
 
+        String mimeType = context.mimeType();
         if (ProcessableVideoMimeTypes.contains(appProperties.getProcessableVideoMimeTypes(), mimeType)) {
             return Optional.of(ProcessingJob.JobType.VIDEO_ANALYSIS);
         }
 
         return Optional.empty();
+    }
+
+    private boolean isAnyFrameSignalEnabled(ProcessingPolicyContext context) {
+        return processingPolicyResolver.isEnabled(ProcessingCapability.VIDEO_FRAME_PHASH, context)
+                || processingPolicyResolver.isEnabled(ProcessingCapability.VIDEO_FRAME_EMBEDDING, context);
     }
 }
