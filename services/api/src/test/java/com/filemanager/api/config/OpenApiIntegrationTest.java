@@ -1,9 +1,9 @@
 package com.filemanager.api.config;
 
-import com.filemanager.api.event.FileProcessingRequestedEvent;
-import com.filemanager.api.service.FileService;
-import com.filemanager.api.service.IdentityResolutionService;
-import com.filemanager.api.service.ProcessingJobService;
+import com.filemanager.api.processing.messaging.FileProcessingRequestedEvent;
+import com.filemanager.api.file.application.FileService;
+import com.filemanager.api.identity.application.IdentityResolutionService;
+import com.filemanager.api.processing.application.ProcessingJobService;
 import io.minio.MinioClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

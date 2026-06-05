@@ -1,6 +1,6 @@
 package com.filemanager.api.config;
 
-import com.filemanager.api.auth.InternalApiTokenFilter;
+import com.filemanager.api.auth.security.InternalApiTokenFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
