@@ -40,15 +40,13 @@ public class FolderService {
     public FolderResponse createFolder(CreateFolderRequest request, UUID actorUserId) {
         Objects.requireNonNull(request, "request must not be null");
         String name = normalizeFolderName(request.getName());
-        User createdByUser = findUser(actorUserId);
+        User ownerUser = findUser(actorUserId);
 
         FolderEntity parentFolder = null;
-        User ownerUser = createdByUser;
         if (request.getParentFolderId() != null) {
             parentFolder = folderRepository.findByIdAndDeletedAtIsNull(request.getParentFolderId())
                     .orElseThrow(() -> new ResourceNotFoundException("Folder not found: " + request.getParentFolderId()));
             accessControlService.assertCanAccessFolder(actorUserId, parentFolder.getId(), Permission.FOLDER_CREATE);
-            ownerUser = parentFolder.getOwnerUser();
         } else {
             accessControlService.assertCanCreateFolderForOwner(actorUserId, actorUserId);
         }
@@ -59,7 +57,7 @@ public class FolderService {
                 .name(name)
                 .parentFolder(parentFolder)
                 .ownerUser(ownerUser)
-                .createdByUser(createdByUser)
+                .createdByUser(ownerUser)
                 .build();
 
         return folderResponseMapper.toResponse(folderRepository.save(folder));
@@ -104,12 +102,11 @@ public class FolderService {
 
     @Transactional(readOnly = true)
     public List<FolderSummaryResponse> listRootFolders(UUID tagId, UUID actorUserId) {
-        accessControlService.assertCanViewOwner(actorUserId, actorUserId);
+        findUser(actorUserId);
         tagService.assertCanUseTagForFolderListing(tagId, actorUserId, null);
-        User ownerUser = findUser(actorUserId);
         List<FolderEntity> folders = tagId == null
-                ? folderRepository.findByOwnerUserAndParentFolderIsNullAndDeletedAtIsNullOrderByNameAsc(ownerUser)
-                : folderRepository.findTaggedRootFoldersByOwnerUser(ownerUser, tagId);
+                ? folderRepository.findVisibleRootFolders(actorUserId)
+                : folderRepository.findVisibleTaggedRootFolders(actorUserId, tagId);
 
         return folders
                 .stream()
@@ -173,9 +170,8 @@ public class FolderService {
 
     private void rejectDuplicateActiveSibling(String name, User ownerUser, FolderEntity parentFolder) {
         boolean exists = parentFolder != null
-                ? folderRepository.existsByNameIgnoreCaseAndOwnerUserAndParentFolderAndDeletedAtIsNull(
+                ? folderRepository.existsByNameIgnoreCaseAndParentFolderAndDeletedAtIsNull(
                         name,
-                        ownerUser,
                         parentFolder)
                 : folderRepository.existsByNameIgnoreCaseAndOwnerUserAndParentFolderIsNullAndDeletedAtIsNull(
                         name,

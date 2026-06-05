@@ -82,7 +82,7 @@ class FolderServiceTest {
     }
 
     @Test
-    void createChildFolderInheritsParentOwner() {
+    void createChildFolderUsesAuthenticatedUserAsOwner() {
         UUID parentId = UUID.randomUUID();
         User parentOwner = User.builder().id(UUID.randomUUID()).email("owner@example.com").build();
         FolderEntity parent = FolderEntity.builder().id(parentId).ownerUser(parentOwner).build();
@@ -99,7 +99,7 @@ class FolderServiceTest {
         ArgumentCaptor<FolderEntity> folderCaptor = ArgumentCaptor.forClass(FolderEntity.class);
         verify(folderRepository).save(folderCaptor.capture());
         assertEquals(parent, folderCaptor.getValue().getParentFolder());
-        assertEquals(parentOwner, folderCaptor.getValue().getOwnerUser());
+        assertEquals(actorUser, folderCaptor.getValue().getOwnerUser());
         assertEquals(actorUser, folderCaptor.getValue().getCreatedByUser());
     }
 
@@ -114,6 +114,68 @@ class FolderServiceTest {
 
         assertThrows(ConflictException.class, () -> folderService.createFolder(request, actorUserId));
         verify(folderRepository, never()).save(any(FolderEntity.class));
+    }
+
+    @Test
+    void differentUsersCanCreateSameRootFolderName() {
+        CreateFolderRequest request = new CreateFolderRequest();
+        request.setName("Events");
+        when(userRepository.findById(actorUserId)).thenReturn(Optional.of(actorUser));
+        when(folderRepository.existsByNameIgnoreCaseAndOwnerUserAndParentFolderIsNullAndDeletedAtIsNull(
+                "Events",
+                actorUser)).thenReturn(false);
+        when(folderRepository.save(any(FolderEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        folderService.createFolder(request, actorUserId);
+
+        verify(folderRepository).save(any(FolderEntity.class));
+    }
+
+    @Test
+    void createChildFolderRejectsDuplicateNameUnderSameParentRegardlessOfOwner() {
+        UUID parentId = UUID.randomUUID();
+        FolderEntity parent = FolderEntity.builder().id(parentId).ownerUser(user(UUID.randomUUID())).build();
+        CreateFolderRequest request = new CreateFolderRequest();
+        request.setName("Uploads");
+        request.setParentFolderId(parentId);
+        when(userRepository.findById(actorUserId)).thenReturn(Optional.of(actorUser));
+        when(folderRepository.findByIdAndDeletedAtIsNull(parentId)).thenReturn(Optional.of(parent));
+        when(folderRepository.existsByNameIgnoreCaseAndParentFolderAndDeletedAtIsNull("Uploads", parent)).thenReturn(true);
+
+        assertThrows(ConflictException.class, () -> folderService.createFolder(request, actorUserId));
+        verify(folderRepository, never()).save(any(FolderEntity.class));
+    }
+
+    @Test
+    void ownerAndGuestCannotCreateSameChildFolderNameUnderSameParent() {
+        UUID parentId = UUID.randomUUID();
+        FolderEntity parent = FolderEntity.builder().id(parentId).ownerUser(actorUser).build();
+        CreateFolderRequest request = new CreateFolderRequest();
+        request.setName("Shared");
+        request.setParentFolderId(parentId);
+        when(userRepository.findById(actorUserId)).thenReturn(Optional.of(actorUser));
+        when(folderRepository.findByIdAndDeletedAtIsNull(parentId)).thenReturn(Optional.of(parent));
+        when(folderRepository.existsByNameIgnoreCaseAndParentFolderAndDeletedAtIsNull("Shared", parent)).thenReturn(true);
+
+        assertThrows(ConflictException.class, () -> folderService.createFolder(request, actorUserId));
+        verify(folderRepository, never()).save(any(FolderEntity.class));
+    }
+
+    @Test
+    void sameChildFolderNameUnderDifferentParentsIsAllowed() {
+        UUID parentId = UUID.randomUUID();
+        FolderEntity parent = FolderEntity.builder().id(parentId).ownerUser(user(UUID.randomUUID())).build();
+        CreateFolderRequest request = new CreateFolderRequest();
+        request.setName("Uploads");
+        request.setParentFolderId(parentId);
+        when(userRepository.findById(actorUserId)).thenReturn(Optional.of(actorUser));
+        when(folderRepository.findByIdAndDeletedAtIsNull(parentId)).thenReturn(Optional.of(parent));
+        when(folderRepository.existsByNameIgnoreCaseAndParentFolderAndDeletedAtIsNull("Uploads", parent)).thenReturn(false);
+        when(folderRepository.save(any(FolderEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        folderService.createFolder(request, actorUserId);
+
+        verify(folderRepository).save(any(FolderEntity.class));
     }
 
     @Test
@@ -176,11 +238,10 @@ class FolderServiceTest {
                 .createdByUser(actorUser)
                 .build();
         when(userRepository.findById(actorUserId)).thenReturn(Optional.of(actorUser));
-        when(folderRepository.findTaggedRootFoldersByOwnerUser(actorUser, tagId)).thenReturn(List.of(folder));
+        when(folderRepository.findVisibleTaggedRootFolders(actorUserId, tagId)).thenReturn(List.of(folder));
 
         var response = folderService.listRootFolders(tagId, actorUserId);
 
-        verify(accessControlService).assertCanViewOwner(actorUserId, actorUserId);
         verify(tagService).assertCanUseTagForFolderListing(tagId, actorUserId, null);
         assertEquals(1, response.size());
         assertEquals("Tagged", response.getFirst().getName());
@@ -206,5 +267,9 @@ class FolderServiceTest {
         verify(accessControlService).assertCanAccessFolder(actorUserId, parentId, Permission.FOLDER_VIEW);
         verify(tagService).assertCanUseTagForFolderListing(tagId, actorUserId, parentId);
         assertEquals(1, response.getFolders().size());
+    }
+
+    private User user(UUID id) {
+        return User.builder().id(id).email(id + "@example.com").build();
     }
 }
