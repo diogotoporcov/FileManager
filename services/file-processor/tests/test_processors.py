@@ -13,56 +13,60 @@ from app.events.models import FileProcessingRequestedEvent
 from app.processors.embedding import ImageEmbeddingProcessor, preprocess_clip_image
 from app.processors.impl import ChecksumProcessor, PHashProcessor
 from app.sinks.base import ProcessingResultSink
-from app.storage.base import ObjectStorageReader
+from app.storage.base import StorageObjectReader, StorageObjectReference
 from app.worker.flow import ProcessingFlow
 from app.worker.errors import NonRetryableProcessingError
 
 
-class FakeStorageReader(ObjectStorageReader):
-    async def read_object(self, storage_path: str) -> AsyncIterator[bytes]:
+class FakeStorageReader(StorageObjectReader):
+    def __init__(self):
+        self.reads = 0
+
+    async def read_content(self, reference: StorageObjectReference) -> AsyncIterator[bytes]:
+        self.reads += 1
         yield b"test data"
 
 
-class ImageStorageReader(ObjectStorageReader):
-    async def read_object(self, storage_path: str) -> AsyncIterator[bytes]:
+class ImageStorageReader(StorageObjectReader):
+    async def read_content(self, reference: StorageObjectReference) -> AsyncIterator[bytes]:
         img = Image.new("RGB", (8, 8), color="red")
         buf = io.BytesIO()
         img.save(buf, format="PNG")
         yield buf.getvalue()
 
 
-class OversizedImageStorageReader(ObjectStorageReader):
-    async def read_object(self, storage_path: str) -> AsyncIterator[bytes]:
+class OversizedImageStorageReader(StorageObjectReader):
+    async def read_content(self, reference: StorageObjectReference) -> AsyncIterator[bytes]:
         yield b"a" * 6
         yield b"b" * 6
 
 
-class CorruptImageStorageReader(ObjectStorageReader):
-    async def read_object(self, storage_path: str) -> AsyncIterator[bytes]:
+class CorruptImageStorageReader(StorageObjectReader):
+    async def read_content(self, reference: StorageObjectReference) -> AsyncIterator[bytes]:
         yield b"not an image"
 
 
-class PillowImageStorageReader(ObjectStorageReader):
+class PillowImageStorageReader(StorageObjectReader):
     def __init__(self, image_format: str):
         self.image_format = image_format
 
-    async def read_object(self, storage_path: str) -> AsyncIterator[bytes]:
+    async def read_content(self, reference: StorageObjectReference) -> AsyncIterator[bytes]:
         img = Image.new("RGB", (64, 48), color="red")
         buf = io.BytesIO()
         img.save(buf, format=self.image_format)
         yield buf.getvalue()
 
 
-class LargeJpegStorageReader(ObjectStorageReader):
-    async def read_object(self, storage_path: str) -> AsyncIterator[bytes]:
+class LargeJpegStorageReader(StorageObjectReader):
+    async def read_content(self, reference: StorageObjectReference) -> AsyncIterator[bytes]:
         img = Image.new("RGB", (512, 512), color="red")
         buf = io.BytesIO()
         img.save(buf, format="JPEG")
         yield buf.getvalue()
 
 
-class LargeBmpStorageReader(ObjectStorageReader):
-    async def read_object(self, storage_path: str) -> AsyncIterator[bytes]:
+class LargeBmpStorageReader(StorageObjectReader):
+    async def read_content(self, reference: StorageObjectReference) -> AsyncIterator[bytes]:
         img = Image.new("RGB", (128, 128), color="red")
         buf = io.BytesIO()
         img.save(buf, format="BMP")
@@ -75,6 +79,7 @@ class FakeResultSink(ProcessingResultSink):
         self.reported_sha256: str | None = None
         self.phash_reported = False
         self.reported_phash: str | None = None
+        self.audio_reported = False
         self.failure_reported = False
 
     async def report_checksum_success(self, job_id: uuid.UUID, file_id: uuid.UUID, sha256: str):
@@ -96,6 +101,12 @@ class FakeResultSink(ProcessingResultSink):
     ):
         pass
 
+    async def report_video_analysis_success(self, job_id: uuid.UUID, file_id: uuid.UUID, result):
+        pass
+
+    async def report_audio_analysis_success(self, job_id: uuid.UUID, file_id: uuid.UUID, result):
+        self.audio_reported = True
+
     async def report_failure(self, job_id: uuid.UUID, file_id: uuid.UUID, error_message: str):
         self.failure_reported = True
 
@@ -105,8 +116,10 @@ class FakeEmbeddingClient(ImageEmbeddingInferenceClient):
         self.output = output if output is not None else np.ones((1, 768), dtype=np.float32)
         self.error = error
         self.last_pixel_values: np.ndarray | None = None
+        self.calls = 0
 
     async def embed_image(self, pixel_values: np.ndarray) -> np.ndarray:
+        self.calls += 1
         self.last_pixel_values = pixel_values
 
         if self.error:
@@ -128,7 +141,6 @@ def sample_event() -> FileProcessingRequestedEvent:
         mime_type="image/jpeg",
         size=500,
         owner_user_id=uuid.uuid4(),
-        owner_organization_id=None,
     )
 
 
@@ -196,6 +208,32 @@ async def test_phash_processor_real_hash(sample_event):
     # Check if it's a valid hex
     int(phash, 16)
 
+
+@pytest.mark.asyncio
+async def test_checksum_disabled_rejects_without_hashing(monkeypatch, sample_event):
+    monkeypatch.setattr("app.processors.impl.settings.worker_checksum_enabled", False)
+    storage = FakeStorageReader()
+    processor = ChecksumProcessor(storage)
+
+    assert processor.should_process(sample_event) is False
+    with pytest.raises(NonRetryableProcessingError, match="Checksum processing is disabled"):
+        await processor.process(sample_event)
+
+    assert storage.reads == 0
+
+
+@pytest.mark.asyncio
+async def test_phash_disabled_rejects_without_reading(monkeypatch, sample_event):
+    monkeypatch.setattr("app.processors.impl.settings.worker_image_phash_enabled", False)
+    storage = FakeStorageReader()
+    processor = PHashProcessor(storage)
+
+    assert processor.should_process(sample_event) is False
+    with pytest.raises(NonRetryableProcessingError, match="Image pHash processing is disabled"):
+        await processor.process(sample_event)
+
+    assert storage.reads == 0
+
 @pytest.mark.asyncio
 async def test_phash_processor_rejects_oversized_image(sample_event):
     storage = OversizedImageStorageReader()
@@ -219,7 +257,7 @@ def test_embedding_preprocessing_shape_and_dtype():
 
     async def collect() -> bytes:
         nonlocal data
-        async for chunk in image.read_object("test"):
+        async for chunk in image.read_content(StorageObjectReference(path="test")):
             data += chunk
         return data
 
@@ -252,6 +290,21 @@ async def test_embedding_processor_valid_response(sample_event):
     assert np.isclose(np.linalg.norm(np.array(embedding, dtype=np.float32)), 1.0)
     assert client.last_pixel_values is not None
     assert client.last_pixel_values.shape == (1, 3, 224, 224)
+
+
+@pytest.mark.asyncio
+async def test_embedding_disabled_rejects_without_triton(monkeypatch, sample_event):
+    monkeypatch.setattr("app.processors.embedding.settings.worker_image_embedding_enabled", False)
+    sample_event.job_type = "EMBEDDING"
+    storage = ImageStorageReader()
+    client = FakeEmbeddingClient()
+    processor = ImageEmbeddingProcessor(storage, client, max_image_bytes=1024 * 1024)
+
+    assert processor.should_process(sample_event) is False
+    with pytest.raises(NonRetryableProcessingError, match="Image embedding processing is disabled"):
+        await processor.process(sample_event)
+
+    assert client.calls == 0
 
 
 @pytest.mark.asyncio

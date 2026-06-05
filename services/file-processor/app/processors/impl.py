@@ -9,7 +9,7 @@ from app.config import settings
 from app.events.models import FileProcessingRequestedEvent
 from app.processors.base import Processor, ProcessorResult
 from app.processors.image_mime_types import is_processable_image_mime_type, parse_processable_image_mime_types
-from app.storage.base import ObjectStorageReader
+from app.storage.base import StorageObjectReader
 
 from app.worker.errors import NonRetryableProcessingError, RetryableProcessingError
 
@@ -20,7 +20,7 @@ ImageFile.LOAD_TRUNCATED_IMAGES = False
 
 
 class ChecksumProcessor(Processor):
-    def __init__(self, storage_reader: ObjectStorageReader):
+    def __init__(self, storage_reader: StorageObjectReader):
         self.storage_reader = storage_reader
 
     @property
@@ -28,14 +28,17 @@ class ChecksumProcessor(Processor):
         return "checksum"
 
     def should_process(self, event: FileProcessingRequestedEvent) -> bool:
-        return True
+        return settings.worker_checksum_enabled
 
     async def process(self, event: FileProcessingRequestedEvent) -> ProcessorResult:
+        if not settings.worker_checksum_enabled:
+            raise NonRetryableProcessingError("Checksum processing is disabled")
+
         logger.info(f"Computing SHA-256 for file {event.file_id}")
         sha256_hash = hashlib.sha256()
 
         try:
-            async for chunk in self.storage_reader.read_object(event.storage_path):
+            async for chunk in self.storage_reader.read_content(event.storage_reference):
                 sha256_hash.update(chunk)
 
         except Exception as exc:
@@ -44,11 +47,12 @@ class ChecksumProcessor(Processor):
 
         digest = sha256_hash.hexdigest()
         logger.info(f"Computed SHA-256 for file {event.file_id}: {digest}")
+
         return {"sha256": digest}
 
 
 class PHashProcessor(Processor):
-    def __init__(self, storage_reader: ObjectStorageReader, max_image_bytes: int | None = None):
+    def __init__(self, storage_reader: StorageObjectReader, max_image_bytes: int | None = None):
         self.storage_reader = storage_reader
         self.max_image_bytes = max_image_bytes or settings.worker_phash_max_image_bytes
         self.processable_image_mime_types = parse_processable_image_mime_types(settings.processable_image_mime_types)
@@ -58,16 +62,22 @@ class PHashProcessor(Processor):
         return "phash"
 
     def should_process(self, event: FileProcessingRequestedEvent) -> bool:
+        if not settings.worker_image_phash_enabled:
+            return False
+
         return is_processable_image_mime_type(event.mime_type, self.processable_image_mime_types)
 
     async def process(self, event: FileProcessingRequestedEvent) -> ProcessorResult:
+        if not settings.worker_image_phash_enabled:
+            raise NonRetryableProcessingError("Image pHash processing is disabled")
+
         logger.info(f"Computing pHash for image {event.file_id}")
 
         total_bytes = 0
 
         try:
             with tempfile.SpooledTemporaryFile(max_size=min(self.max_image_bytes, 1024 * 1024)) as buffer:
-                async for chunk in self.storage_reader.read_object(event.storage_path):
+                async for chunk in self.storage_reader.read_content(event.storage_reference):
                     total_bytes += len(chunk)
 
                     if total_bytes > self.max_image_bytes:
@@ -94,6 +104,7 @@ class PHashProcessor(Processor):
                         raise NonRetryableProcessingError(f"Invalid pHash format produced: {phash_str}")
 
                     logger.info(f"Computed pHash for image {event.file_id}: {phash_str}")
+
                     return {"phash": phash_str}
 
                 except Image.DecompressionBombWarning as exc:

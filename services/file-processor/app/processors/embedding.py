@@ -17,7 +17,7 @@ from app.embeddings.base import (
 from app.events.models import FileProcessingRequestedEvent
 from app.processors.base import Processor, ProcessorResult
 from app.processors.image_mime_types import is_processable_image_mime_type, parse_processable_image_mime_types
-from app.storage.base import ObjectStorageReader
+from app.storage.base import StorageObjectReader
 from app.worker.errors import NonRetryableProcessingError, RetryableProcessingError
 
 logger = logging.getLogger(__name__)
@@ -31,7 +31,7 @@ CLIP_IMAGE_STD = np.array([0.26862954, 0.26130258, 0.27577711], dtype=np.float32
 class ImageEmbeddingProcessor(Processor):
     def __init__(
         self,
-        storage_reader: ObjectStorageReader,
+        storage_reader: StorageObjectReader,
         embedding_client: ImageEmbeddingInferenceClient,
         *,
         model_name: str | None = None,
@@ -60,9 +60,15 @@ class ImageEmbeddingProcessor(Processor):
     def should_process(self, event: FileProcessingRequestedEvent) -> bool:
         if event.job_type.upper() != "EMBEDDING":
             return False
+        if not settings.worker_image_embedding_enabled:
+            return False
+
         return is_processable_image_mime_type(event.mime_type, self.processable_image_mime_types)
 
     async def process(self, event: FileProcessingRequestedEvent) -> ProcessorResult:
+        if not settings.worker_image_embedding_enabled:
+            raise NonRetryableProcessingError("Image embedding processing is disabled")
+
         logger.info("Computing image embedding for file %s", event.file_id)
 
         pixel_values = await self._read_and_preprocess(event)
@@ -78,6 +84,7 @@ class ImageEmbeddingProcessor(Processor):
 
         embedding = self._normalize_model_output(model_output)
         logger.info("Computed image embedding for file %s using model %s", event.file_id, self.model_name)
+
         return {
             "modelName": self.model_name,
             "modelVersion": self.model_version,
@@ -93,7 +100,7 @@ class ImageEmbeddingProcessor(Processor):
 
         try:
             with tempfile.SpooledTemporaryFile(max_size=min(self.max_image_bytes, 1024 * 1024)) as buffer:
-                async for chunk in self.storage_reader.read_object(event.storage_path):
+                async for chunk in self.storage_reader.read_content(event.storage_reference):
                     total_bytes += len(chunk)
 
                     if total_bytes > self.max_image_bytes:
@@ -119,6 +126,7 @@ class ImageEmbeddingProcessor(Processor):
                                 self.max_source_pixels,
                                 self.direct_decode_max_pixels,
                             )
+
                             return preprocess_clip_image(prepared, self.input_size)
 
                 except Image.DecompressionBombWarning as exc:
@@ -160,6 +168,7 @@ class ImageEmbeddingProcessor(Processor):
             raise NonRetryableProcessingError("Image embedding output norm must be finite and non-zero")
 
         normalized = np.asarray(output / norm, dtype=np.float32)
+
         return [float(value) for value in normalized.tolist()]
 
 
@@ -205,6 +214,9 @@ def normalize_embedding_image(
         )
 
     transposed = ImageOps.exif_transpose(image)
+    if transposed is None:
+        raise NonRetryableProcessingError("Failed to transpose image using EXIF metadata")
+
     return transposed.convert("RGB")
 
 

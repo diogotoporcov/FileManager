@@ -6,7 +6,12 @@ import jakarta.validation.Validator;
 import jakarta.validation.ValidatorFactory;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.context.properties.bind.Bindable;
+import org.springframework.boot.context.properties.bind.Binder;
+import org.springframework.boot.context.properties.source.MapConfigurationPropertySource;
+import com.filemanager.api.storage.config.MinioProperties;
 
+import java.util.Map;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -64,7 +69,10 @@ class ConfigurationValidationTest {
         properties.getAuth().getClaims().setFirstName("given_name");
         properties.getAuth().getClaims().setLastName("family_name");
         properties.getAuth().getClaims().setEmailVerified("email_verified");
-        properties.getKafka().getTopics().setFileProcessingRequested("topic");
+        properties.getKafka().getTopics().setFileProcessingChecksum("checksum-topic");
+        properties.getKafka().getTopics().setFileProcessingImage("image-topic");
+        properties.getKafka().getTopics().setFileProcessingAudio("audio-topic");
+        properties.getKafka().getTopics().setFileProcessingVideo("video-topic");
         properties.getPhash().setThreshold(10);
         properties.getEmbedding().setModelName("openai/clip-vit-large-patch14");
         properties.getEmbedding().setModelVersion("1");
@@ -93,11 +101,58 @@ class ConfigurationValidationTest {
     @Test
     void appProperties_BlankKafkaTopic_Fail() {
         AppProperties properties = new AppProperties();
-        properties.getKafka().getTopics().setFileProcessingRequested("");
+        properties.getKafka().getTopics().setFileProcessingChecksum("");
 
         Set<ConstraintViolation<AppProperties>> violations = validator.validate(properties);
         assertThat(violations).hasSize(1);
-        assertThat(violations.iterator().next().getPropertyPath().toString()).isEqualTo("kafka.topics.fileProcessingRequested");
+        assertThat(violations.iterator().next().getPropertyPath().toString())
+                .isEqualTo("kafka.topics.fileProcessingChecksum");
+    }
+
+    @Test
+    void appProperties_WorkloadKafkaTopicsBindCorrectly() {
+        MapConfigurationPropertySource source = new MapConfigurationPropertySource(Map.of(
+                "app.kafka.topics.file-processing-checksum", "checksum-topic",
+                "app.kafka.topics.file-processing-image", "image-topic",
+                "app.kafka.topics.file-processing-audio", "audio-topic",
+                "app.kafka.topics.file-processing-video", "video-topic"
+        ));
+
+        AppProperties properties = new Binder(source)
+                .bind("app", Bindable.of(AppProperties.class))
+                .get();
+
+        assertThat(properties.getKafka().getTopics().getFileProcessingChecksum()).isEqualTo("checksum-topic");
+        assertThat(properties.getKafka().getTopics().getFileProcessingImage()).isEqualTo("image-topic");
+        assertThat(properties.getKafka().getTopics().getFileProcessingAudio()).isEqualTo("audio-topic");
+        assertThat(properties.getKafka().getTopics().getFileProcessingVideo()).isEqualTo("video-topic");
+    }
+
+    @Test
+    void appProperties_ProcessingCapabilityTogglesBindCorrectly() {
+        MapConfigurationPropertySource source = new MapConfigurationPropertySource(Map.of(
+                "app.processing.checksum.enabled", "false",
+                "app.processing.image.phash-enabled", "false",
+                "app.processing.image.embedding-enabled", "false",
+                "app.processing.video.analysis-enabled", "false",
+                "app.processing.video.frame-phash-enabled", "false",
+                "app.processing.video.frame-embedding-enabled", "false",
+                "app.processing.video.audio-analysis-enabled", "false",
+                "app.processing.audio.fingerprint-enabled", "false"
+        ));
+
+        AppProperties properties = new Binder(source)
+                .bind("app", Bindable.of(AppProperties.class))
+                .get();
+
+        assertThat(properties.getProcessing().getChecksum().isEnabled()).isFalse();
+        assertThat(properties.getProcessing().getImage().isPhashEnabled()).isFalse();
+        assertThat(properties.getProcessing().getImage().isEmbeddingEnabled()).isFalse();
+        assertThat(properties.getProcessing().getVideo().isAnalysisEnabled()).isFalse();
+        assertThat(properties.getProcessing().getVideo().isFramePhashEnabled()).isFalse();
+        assertThat(properties.getProcessing().getVideo().isFrameEmbeddingEnabled()).isFalse();
+        assertThat(properties.getProcessing().getVideo().isAudioAnalysisEnabled()).isFalse();
+        assertThat(properties.getProcessing().getAudio().isFingerprintEnabled()).isFalse();
     }
 
     @Test
@@ -127,6 +182,21 @@ class ConfigurationValidationTest {
         violations = validator.validate(properties);
         assertThat(violations).hasSize(1);
         assertThat(violations.iterator().next().getPropertyPath().toString()).isEqualTo("processableImageMimeTypes[].<iterable element>");
+    }
+
+    @Test
+    void appProperties_InvalidProcessableVideoMimeTypes_Fail() {
+        AppProperties properties = new AppProperties();
+        properties.setProcessableVideoMimeTypes(Set.of());
+
+        Set<ConstraintViolation<AppProperties>> violations = validator.validate(properties);
+        assertThat(violations).hasSize(1);
+        assertThat(violations.iterator().next().getPropertyPath().toString()).isEqualTo("processableVideoMimeTypes");
+
+        properties.setProcessableVideoMimeTypes(Set.of(""));
+        violations = validator.validate(properties);
+        assertThat(violations).hasSize(1);
+        assertThat(violations.iterator().next().getPropertyPath().toString()).isEqualTo("processableVideoMimeTypes[].<iterable element>");
     }
 
     @Test

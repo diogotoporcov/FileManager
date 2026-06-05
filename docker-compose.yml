@@ -45,7 +45,7 @@ services:
       - --kafka-addr
       - "PLAINTEXT://0.0.0.0:29092,OUTSIDE://0.0.0.0:9092"
       - --advertise-kafka-addr
-      - "PLAINTEXT://filemanager-redpanda:29092,OUTSIDE://localhost:9092"
+      - "PLAINTEXT://filemanager-redpanda:29092,OUTSIDE://localhost:${PORT_REDPANDA}"
     ports:
       - "${PORT_REDPANDA}:9092"
     networks:

@@ -4,16 +4,11 @@ CREATE TABLE tags (
     normalized_name VARCHAR(100) NOT NULL,
     scope_type VARCHAR(20) NOT NULL CHECK (scope_type IN ('OWNER', 'FOLDER')),
     scope_folder_id UUID REFERENCES folders(id),
-    owner_user_id UUID REFERENCES users(id),
-    owner_organization_id UUID REFERENCES organizations(id),
+    owner_user_id UUID NOT NULL REFERENCES users(id),
     created_by_user_id UUID NOT NULL REFERENCES users(id),
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     deleted_at TIMESTAMP WITH TIME ZONE,
-    CONSTRAINT tag_owner_check CHECK (
-        (owner_user_id IS NOT NULL AND owner_organization_id IS NULL) OR
-        (owner_user_id IS NULL AND owner_organization_id IS NOT NULL)
-    ),
     CONSTRAINT tag_scope_folder_check CHECK (
         (scope_type = 'OWNER' AND scope_folder_id IS NULL) OR
         (scope_type = 'FOLDER' AND scope_folder_id IS NOT NULL)
@@ -22,23 +17,14 @@ CREATE TABLE tags (
 
 CREATE UNIQUE INDEX ux_tags_owner_user_active_normalized
     ON tags(owner_user_id, scope_type, normalized_name)
-    WHERE deleted_at IS NULL AND owner_user_id IS NOT NULL AND scope_type = 'OWNER';
-
-CREATE UNIQUE INDEX ux_tags_owner_organization_active_normalized
-    ON tags(owner_organization_id, scope_type, normalized_name)
-    WHERE deleted_at IS NULL AND owner_organization_id IS NOT NULL AND scope_type = 'OWNER';
+    WHERE deleted_at IS NULL AND scope_type = 'OWNER';
 
 CREATE UNIQUE INDEX ux_tags_scope_folder_active_normalized
     ON tags(scope_folder_id, normalized_name)
     WHERE deleted_at IS NULL AND scope_type = 'FOLDER';
 
 CREATE INDEX idx_tags_owner_user_scope_normalized
-    ON tags(owner_user_id, scope_type, normalized_name)
-    WHERE owner_user_id IS NOT NULL;
-
-CREATE INDEX idx_tags_owner_organization_scope_normalized
-    ON tags(owner_organization_id, scope_type, normalized_name)
-    WHERE owner_organization_id IS NOT NULL;
+    ON tags(owner_user_id, scope_type, normalized_name);
 
 CREATE INDEX idx_tags_scope_folder_normalized
     ON tags(scope_folder_id, normalized_name)

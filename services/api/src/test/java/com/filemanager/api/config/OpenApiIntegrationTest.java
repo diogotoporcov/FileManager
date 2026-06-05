@@ -1,9 +1,9 @@
 package com.filemanager.api.config;
 
-import com.filemanager.api.event.FileProcessingRequestedEvent;
-import com.filemanager.api.service.FileService;
-import com.filemanager.api.service.IdentityResolutionService;
-import com.filemanager.api.service.ProcessingJobService;
+import com.filemanager.api.processing.messaging.FileProcessingRequestedEvent;
+import com.filemanager.api.file.application.FileService;
+import com.filemanager.api.identity.application.IdentityResolutionService;
+import com.filemanager.api.processing.application.ProcessingJobService;
 import io.minio.MinioClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -69,8 +69,9 @@ public class OpenApiIntegrationTest {
                 .andExpect(jsonPath("$.paths['/folders/{folderId}/files']").exists())
                 .andExpect(jsonPath("$.paths['/files/{fileId}']").exists())
                 .andExpect(jsonPath("$.paths['/files/{fileId}/download']").exists())
-                .andExpect(jsonPath("$.paths['/files/{fileId}/duplicates']").exists())
-                .andExpect(jsonPath("$.paths['/duplicate-candidates']").exists())
+                .andExpect(jsonPath("$.paths['/files/{fileId}/duplicates']").doesNotExist())
+                .andExpect(jsonPath("$.paths['/duplicates']").doesNotExist())
+                .andExpect(jsonPath("$.paths['/duplicate-candidates']").doesNotExist())
                 .andExpect(jsonPath("$.paths['/files/{fileId}/processing-jobs']").exists())
                 .andExpect(jsonPath("$.paths['/files/{fileId}/processing-status']").exists())
                 .andExpect(jsonPath("$.components.securitySchemes.bearerAuth").exists())
@@ -79,7 +80,9 @@ public class OpenApiIntegrationTest {
                 .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.bearerFormat").value("JWT"))
                 .andExpect(jsonPath("$.paths['/internal/processing/jobs']").doesNotExist())
                 .andExpect(jsonPath("$.paths['/internal/processing/jobs/{jobId}/checksum-result']").doesNotExist())
-                .andExpect(jsonPath("$.paths['/internal/processing/jobs/{jobId}/embedding-result']").doesNotExist());
+                .andExpect(jsonPath("$.paths['/internal/processing/jobs/{jobId}/embedding-result']").doesNotExist())
+                .andExpect(jsonPath("$.paths['/internal/processing/jobs/{jobId}/video-analysis-result']").doesNotExist())
+                .andExpect(jsonPath("$.paths['/internal/processing/jobs/{jobId}/audio-analysis-result']").doesNotExist());
     }
 
     @Test
@@ -89,7 +92,9 @@ public class OpenApiIntegrationTest {
                 .andExpect(jsonPath("$.paths['/files']").exists())
                 .andExpect(jsonPath("$.paths['/folders']").exists())
                 .andExpect(jsonPath("$.paths['/internal/processing/jobs/{jobId}/checksum-result']").doesNotExist())
-                .andExpect(jsonPath("$.paths['/internal/processing/jobs/{jobId}/embedding-result']").doesNotExist());
+                .andExpect(jsonPath("$.paths['/internal/processing/jobs/{jobId}/embedding-result']").doesNotExist())
+                .andExpect(jsonPath("$.paths['/internal/processing/jobs/{jobId}/video-analysis-result']").doesNotExist())
+                .andExpect(jsonPath("$.paths['/internal/processing/jobs/{jobId}/audio-analysis-result']").doesNotExist());
     }
 
     @Test

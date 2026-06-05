@@ -1,16 +1,24 @@
 from typing import Annotated, Any, Literal
 
 from pydantic import AliasChoices, AnyHttpUrl, Field, StringConstraints, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 NonBlankString = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 InternalApiToken = Annotated[str, StringConstraints(strip_whitespace=True, min_length=32)]
+WorkerTopics = Annotated[tuple[NonBlankString, ...], NoDecode]
 
 
 class Settings(BaseSettings):
     # Kafka/Redpanda
     kafka_bootstrap_servers: NonBlankString = Field(default=...)
-    kafka_topic_file_processing: NonBlankString = Field(default="file.processing.requested")
+    worker_topics: WorkerTopics = Field(
+        default=(
+            "file.processing.checksum",
+            "file.processing.image",
+            "file.processing.audio",
+            "file.processing.video",
+        ),
+    )
     kafka_topic_dlq: NonBlankString = Field(default="file.processing.requested.dlq")
     kafka_consumer_group_id: NonBlankString = Field(default="filemanager-worker-group")
     worker_consumer_enabled: bool = False
@@ -19,7 +27,38 @@ class Settings(BaseSettings):
     worker_max_attempts: int = Field(default=3, ge=1)
     worker_retry_backoff_seconds: float = Field(default=1.0, ge=0)
     worker_retry_backoff_multiplier: float = Field(default=2.0, ge=1)
+    worker_checksum_enabled: bool = True
+    worker_image_phash_enabled: bool = True
+    worker_image_embedding_enabled: bool = True
     worker_phash_max_image_bytes: int = Field(default=25 * 1024 * 1024, gt=0)
+    worker_video_enabled: bool = True
+    worker_video_analysis_enabled: bool = True
+    worker_video_frame_phash_enabled: bool = True
+    worker_video_frame_embedding_enabled: bool = True
+    worker_video_audio_analysis_enabled: bool = True
+    worker_video_max_file_bytes: int = Field(default=512 * 1024 * 1024, gt=0)
+    worker_video_max_duration_seconds: float = Field(default=30 * 60, gt=0)
+    worker_video_max_sampled_frames: int = Field(default=32, ge=1)
+    worker_video_min_sampled_frames: int = Field(default=4, ge=1)
+    worker_video_target_interval_seconds: float = Field(default=10.0, gt=0)
+    worker_video_frame_timeout_seconds: float = Field(default=15.0, gt=0)
+    worker_video_max_frame_bytes: int = Field(default=25 * 1024 * 1024, gt=0)
+    worker_video_supported_mime_types: NonBlankString = (
+        "video/mp4,video/webm,video/quicktime,video/x-msvideo,video/avi,video/matroska,"
+        "video/x-matroska,video/x-m4v,video/mpeg,video/MP2T,video/3gpp,video/3gpp2"
+    )
+    worker_audio_enabled: bool = True
+    worker_audio_fingerprint_enabled: bool = True
+    worker_audio_supported_mime_types: NonBlankString = (
+        "audio/mpeg,audio/mp3,audio/wav,audio/x-wav,audio/wave,audio/vnd.wave,audio/flac,audio/x-flac,"
+        "audio/ogg,audio/aac,audio/mp4,audio/x-m4a,audio/webm,audio/opus,audio/matroska,"
+        "audio/x-matroska,audio/ac3,audio/3gpp,audio/3gpp2,audio/x-aiff,audio/aiff"
+    )
+    worker_audio_max_file_bytes: int = Field(default=256 * 1024 * 1024, gt=0)
+    worker_audio_max_duration_seconds: float = Field(default=30 * 60, gt=0)
+    worker_audio_fingerprint_length_seconds: int = Field(default=120, gt=0)
+    worker_audio_subprocess_timeout_seconds: float = Field(default=30.0, gt=0)
+    worker_audio_max_fingerprint_chars: int = Field(default=32_768, gt=0)
     processable_image_mime_types: NonBlankString = (
         "image/apng,image/avif,image/bmp,image/gif,image/icns,image/jp2,image/jpeg,image/mpo,"
         "image/palm,image/png,image/sgi,image/tiff,image/vnd.adobe.photoshop,image/webp,"
@@ -77,6 +116,26 @@ class Settings(BaseSettings):
     def validate_url(cls, v: Any) -> Any:
         if isinstance(v, str) and not v.strip():
             raise ValueError("URL cannot be blank")
+
+        return v
+
+    @field_validator("worker_topics", mode="before")
+    @classmethod
+    def parse_worker_topics(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            topics = [topic.strip() for topic in v.split(",")]
+            if not topics or any(not topic for topic in topics):
+                raise ValueError("worker_topics must contain one or more non-blank topics")
+
+            return tuple(topics)
+
+        return v
+
+    @field_validator("worker_topics")
+    @classmethod
+    def validate_worker_topics(cls, v: tuple[str, ...]) -> tuple[str, ...]:
+        if not v:
+            raise ValueError("worker_topics must contain one or more topics")
 
         return v
 

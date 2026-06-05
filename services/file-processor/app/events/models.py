@@ -4,6 +4,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.storage.base import StorageObjectReference
+
 
 class FileProcessingRequestedEvent(BaseModel):
     event_id: UUID = Field(validation_alias="eventId", serialization_alias="eventId")
@@ -15,21 +17,17 @@ class FileProcessingRequestedEvent(BaseModel):
     storage_path: str = Field(validation_alias="storagePath", serialization_alias="storagePath")
     mime_type: str = Field(validation_alias="mimeType", serialization_alias="mimeType")
     size: int = Field(validation_alias="size")
-    owner_user_id: UUID | None = Field(default=None, validation_alias="ownerUserId", serialization_alias="ownerUserId")
-    owner_organization_id: UUID | None = Field(
-        default=None,
-        validation_alias="ownerOrganizationId",
-        serialization_alias="ownerOrganizationId",
-    )
+    owner_user_id: UUID = Field(validation_alias="ownerUserId", serialization_alias="ownerUserId")
 
     model_config = ConfigDict(populate_by_name=True)
 
-    @model_validator(mode="after")
-    def validate_one_owner(self) -> Self:
-        if self.owner_user_id and self.owner_organization_id:
-            raise ValueError("Exactly one of owner_user_id or owner_organization_id must be present, not both.")
+    @property
+    def storage_reference(self) -> StorageObjectReference:
+        return StorageObjectReference(path=self.storage_path)
 
-        if not self.owner_user_id and not self.owner_organization_id:
-            raise ValueError("Exactly one of owner_user_id or owner_organization_id must be present, neither found.")
+    @model_validator(mode="after")
+    def validate_owner(self) -> Self:
+        if not self.owner_user_id:
+            raise ValueError("owner_user_id must be present.")
 
         return self

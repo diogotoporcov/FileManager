@@ -1,6 +1,6 @@
 package com.filemanager.api;
 
-import com.filemanager.api.event.FileProcessingRequestedEvent;
+import com.filemanager.api.processing.messaging.FileProcessingRequestedEvent;
 import io.minio.MinioClient;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;

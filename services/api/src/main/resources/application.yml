@@ -31,6 +31,8 @@ spring:
 
 app:
   processable-image-mime-types: ${PROCESSABLE_IMAGE_MIME_TYPES:image/apng,image/avif,image/bmp,image/gif,image/icns,image/jp2,image/jpeg,image/mpo,image/palm,image/png,image/sgi,image/tiff,image/vnd.adobe.photoshop,image/webp,image/x-icon,image/x-pcx,image/x-portable-anymap,image/x-tga,image/xbm,image/xpm}
+  processable-video-mime-types: ${PROCESSABLE_VIDEO_MIME_TYPES:video/mp4,video/webm,video/quicktime,video/x-msvideo,video/avi,video/matroska,video/x-matroska,video/x-m4v,video/mpeg,video/MP2T,video/3gpp,video/3gpp2}
+  processable-audio-mime-types: ${PROCESSABLE_AUDIO_MIME_TYPES:audio/mpeg,audio/mp3,audio/wav,audio/x-wav,audio/wave,audio/vnd.wave,audio/flac,audio/x-flac,audio/ogg,audio/aac,audio/mp4,audio/x-m4a,audio/webm,audio/opus,audio/matroska,audio/x-matroska,audio/ac3,audio/3gpp,audio/3gpp2,audio/x-aiff,audio/aiff}
   auth:
     provider-name: ${AUTH_PROVIDER_NAME:keycloak}
     auto-link-existing-users: ${AUTH_AUTO_LINK_EXISTING_USERS:false}
@@ -42,12 +44,27 @@ app:
       email-verified: ${AUTH_EMAIL_VERIFIED_CLAIM:email_verified}
   kafka:
     topics:
-      file-processing-requested: ${FILE_PROCESSING_REQUESTED_TOPIC:file.processing.requested}
+      file-processing-checksum: ${FILE_PROCESSING_CHECKSUM_TOPIC:file.processing.checksum}
+      file-processing-image: ${FILE_PROCESSING_IMAGE_TOPIC:file.processing.image}
+      file-processing-audio: ${FILE_PROCESSING_AUDIO_TOPIC:file.processing.audio}
+      file-processing-video: ${FILE_PROCESSING_VIDEO_TOPIC:file.processing.video}
+  processing:
+    checksum:
+      enabled: ${PROCESSING_CHECKSUM_ENABLED:true}
+    image:
+      phash-enabled: ${PROCESSING_IMAGE_PHASH_ENABLED:true}
+      embedding-enabled: ${PROCESSING_IMAGE_EMBEDDING_ENABLED:${EMBEDDING_ENABLED:true}}
+    video:
+      analysis-enabled: ${PROCESSING_VIDEO_ANALYSIS_ENABLED:true}
+      frame-phash-enabled: ${PROCESSING_VIDEO_FRAME_PHASH_ENABLED:true}
+      frame-embedding-enabled: ${PROCESSING_VIDEO_FRAME_EMBEDDING_ENABLED:${EMBEDDING_ENABLED:true}}
+      audio-analysis-enabled: ${PROCESSING_VIDEO_AUDIO_ANALYSIS_ENABLED:true}
+    audio:
+      fingerprint-enabled: ${PROCESSING_AUDIO_FINGERPRINT_ENABLED:true}
   phash:
     threshold: ${PHASH_THRESHOLD:10}
     max-candidates: ${PHASH_MAX_CANDIDATES:5000}
   embedding:
-    enabled: ${EMBEDDING_ENABLED:true}
     model-name: ${EMBEDDING_MODEL_NAME:openai/clip-vit-large-patch14}
     model-version: ${EMBEDDING_MODEL_VERSION:1}
     dimension: ${EMBEDDING_DIMENSION:768}
@@ -55,7 +72,6 @@ app:
     max-candidates: ${EMBEDDING_MAX_CANDIDATES:5000}
   quota:
     user-bytes: ${USER_STORAGE_QUOTA_BYTES:16106127360}
-    organization-bytes: ${ORGANIZATION_STORAGE_QUOTA_BYTES:107374182400}
 
 filemanager:
   internal:

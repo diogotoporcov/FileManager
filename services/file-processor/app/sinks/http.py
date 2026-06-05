@@ -35,6 +35,7 @@ class HttpProcessingResultSink(ProcessingResultSink):
     async def _post(self, url: str, payload: Mapping[str, JsonValue]) -> httpx.Response:
         response = await self._get_client().post(url, json=payload, headers=self.headers)
         response.raise_for_status()
+
         return response
 
     async def report_checksum_success(self, job_id: UUID, file_id: UUID, sha256: str) -> None:
@@ -103,6 +104,54 @@ class HttpProcessingResultSink(ProcessingResultSink):
 
         except httpx.HTTPError as e:
             logger.error(f"Failed to report embedding success for job {job_id}: {type(e).__name__}")
+            raise
+
+    async def report_video_analysis_success(
+        self,
+        job_id: UUID,
+        file_id: UUID,
+        result: Mapping[str, JsonValue],
+    ) -> None:
+        url = f"{self.base_url}/internal/processing/jobs/{job_id}/video-analysis-result"
+        payload: dict[str, JsonValue] = {
+            "fileId": str(file_id),
+            **result,
+        }
+
+        try:
+            await self._post(url, payload)
+            logger.info(f"Reported video analysis success for job {job_id}")
+
+        except httpx.HTTPStatusError as e:
+            logger.error(f"Failed to report video analysis success for job {job_id}: status {e.response.status_code}")
+            raise
+
+        except httpx.HTTPError as e:
+            logger.error(f"Failed to report video analysis success for job {job_id}: {type(e).__name__}")
+            raise
+
+    async def report_audio_analysis_success(
+        self,
+        job_id: UUID,
+        file_id: UUID,
+        result: Mapping[str, JsonValue],
+    ) -> None:
+        url = f"{self.base_url}/internal/processing/jobs/{job_id}/audio-analysis-result"
+        payload: dict[str, JsonValue] = {
+            "fileId": str(file_id),
+            **result,
+        }
+
+        try:
+            await self._post(url, payload)
+            logger.info(f"Reported audio analysis success for job {job_id}")
+
+        except httpx.HTTPStatusError as e:
+            logger.error(f"Failed to report audio analysis success for job {job_id}: status {e.response.status_code}")
+            raise
+
+        except httpx.HTTPError as e:
+            logger.error(f"Failed to report audio analysis success for job {job_id}: {type(e).__name__}")
             raise
 
     async def report_failure(self, job_id: UUID, file_id: UUID, error_message: str) -> None:

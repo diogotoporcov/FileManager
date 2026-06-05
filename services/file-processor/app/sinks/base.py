@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from uuid import UUID
+
+from pydantic import JsonValue
 
 
 class ProcessingResultSink(ABC):
@@ -21,6 +23,24 @@ class ProcessingResultSink(ABC):
         model_version: str,
         dimension: int,
         embedding: Sequence[float],
+    ) -> None:
+        pass
+
+    @abstractmethod
+    async def report_video_analysis_success(
+        self,
+        job_id: UUID,
+        file_id: UUID,
+        result: Mapping[str, JsonValue],
+    ) -> None:
+        pass
+
+    @abstractmethod
+    async def report_audio_analysis_success(
+        self,
+        job_id: UUID,
+        file_id: UUID,
+        result: Mapping[str, JsonValue],
     ) -> None:
         pass
 
