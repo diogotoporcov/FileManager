@@ -17,6 +17,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.OffsetDateTime;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
@@ -24,6 +25,8 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -58,7 +61,7 @@ class FileProcessingStatusServiceTest {
                 .jobType(ProcessingJob.JobType.CHECKSUM)
                 .status(ProcessingJob.JobStatus.COMPLETED)
                 .build();
-        when(processingJobRepository.findAllByFile_IdOrderByCreatedAtAsc(org.mockito.ArgumentMatchers.eq(fileId), org.mockito.ArgumentMatchers.any()))
+        when(processingJobRepository.findPage(eq(fileId), any()))
                 .thenReturn(List.of(job));
 
         CursorPageResponse<ProcessingJobResponse> result = fileProcessingStatusService.getProcessingJobs(
@@ -72,8 +75,55 @@ class FileProcessingStatusServiceTest {
     }
 
     @Test
+    void getProcessingJobs_ShouldUseCursor_WhenCursorProvided() {
+        OffsetDateTime cursorCreatedAt = OffsetDateTime.parse("2026-01-01T10:15:30Z");
+        UUID cursorId = UUID.randomUUID();
+        String cursor = BoundedPageRequest.encodeCursor(cursorCreatedAt, cursorId);
+        ProcessingJob job = ProcessingJob.builder()
+                .id(UUID.randomUUID())
+                .file(fileEntity)
+                .jobType(ProcessingJob.JobType.PHASH)
+                .status(ProcessingJob.JobStatus.PENDING)
+                .createdAt(cursorCreatedAt.plusSeconds(1))
+                .build();
+        when(processingJobRepository.findPageAfterCursor(eq(fileId), eq(cursorCreatedAt), eq(cursorId), any()))
+                .thenReturn(List.of(job));
+
+        CursorPageResponse<ProcessingJobResponse> result = fileProcessingStatusService.getProcessingJobs(
+                actorUserId,
+                fileId,
+                BoundedPageRequest.of(10, cursor));
+
+        assertEquals(1, result.getItems().size());
+        assertEquals(job.getId(), result.getItems().getFirst().getId());
+        verify(processingJobRepository).findPageAfterCursor(eq(fileId), eq(cursorCreatedAt), eq(cursorId), any());
+    }
+
+    @Test
+    void getProcessingJobs_ShouldReturnNextCursor_WhenMoreJobsExist() {
+        ProcessingJob job1 = processingJob(
+                UUID.randomUUID(),
+                OffsetDateTime.parse("2026-01-01T10:15:30Z"),
+                ProcessingJob.JobType.CHECKSUM);
+        ProcessingJob job2 = processingJob(
+                UUID.randomUUID(),
+                OffsetDateTime.parse("2026-01-01T10:16:30Z"),
+                ProcessingJob.JobType.PHASH);
+        when(processingJobRepository.findPage(eq(fileId), any())).thenReturn(List.of(job1, job2));
+
+        CursorPageResponse<ProcessingJobResponse> result = fileProcessingStatusService.getProcessingJobs(
+                actorUserId,
+                fileId,
+                BoundedPageRequest.of(1, null));
+
+        assertEquals(1, result.getItems().size());
+        assertTrue(result.isHasMore());
+        assertEquals(BoundedPageRequest.encodeCursor(job1.getCreatedAt(), job1.getId()), result.getNextCursor());
+    }
+
+    @Test
     void getFileProcessingStatus_ShouldReturnNotStarted_WhenNoJobs() {
-        when(processingJobRepository.findAllByFile_IdOrderByCreatedAtAsc(org.mockito.ArgumentMatchers.eq(fileId), org.mockito.ArgumentMatchers.any())).thenReturn(Collections.emptyList());
+        when(processingJobRepository.findPage(eq(fileId), any())).thenReturn(Collections.emptyList());
 
         FileProcessingStatusResponse result = fileProcessingStatusService.getFileProcessingStatus(actorUserId, fileId);
 
@@ -85,7 +135,7 @@ class FileProcessingStatusServiceTest {
     void getFileProcessingStatus_ShouldReturnProcessing_WhenAnyJobPending() {
         ProcessingJob job1 = ProcessingJob.builder().status(ProcessingJob.JobStatus.COMPLETED).file(fileEntity).build();
         ProcessingJob job2 = ProcessingJob.builder().status(ProcessingJob.JobStatus.PENDING).file(fileEntity).build();
-        when(processingJobRepository.findAllByFile_IdOrderByCreatedAtAsc(org.mockito.ArgumentMatchers.eq(fileId), org.mockito.ArgumentMatchers.any())).thenReturn(List.of(job1, job2));
+        when(processingJobRepository.findPage(eq(fileId), any())).thenReturn(List.of(job1, job2));
 
         FileProcessingStatusResponse result = fileProcessingStatusService.getFileProcessingStatus(actorUserId, fileId);
 
@@ -95,7 +145,7 @@ class FileProcessingStatusServiceTest {
     @Test
     void getFileProcessingStatus_ShouldReturnCompleted_WhenAllJobsCompleted() {
         ProcessingJob job1 = ProcessingJob.builder().status(ProcessingJob.JobStatus.COMPLETED).file(fileEntity).build();
-        when(processingJobRepository.findAllByFile_IdOrderByCreatedAtAsc(org.mockito.ArgumentMatchers.eq(fileId), org.mockito.ArgumentMatchers.any())).thenReturn(List.of(job1));
+        when(processingJobRepository.findPage(eq(fileId), any())).thenReturn(List.of(job1));
 
         FileProcessingStatusResponse result = fileProcessingStatusService.getFileProcessingStatus(actorUserId, fileId);
 
@@ -105,7 +155,7 @@ class FileProcessingStatusServiceTest {
     @Test
     void getFileProcessingStatus_ShouldReturnFailed_WhenAllJobsFailed() {
         ProcessingJob job1 = ProcessingJob.builder().status(ProcessingJob.JobStatus.FAILED).file(fileEntity).build();
-        when(processingJobRepository.findAllByFile_IdOrderByCreatedAtAsc(org.mockito.ArgumentMatchers.eq(fileId), org.mockito.ArgumentMatchers.any())).thenReturn(List.of(job1));
+        when(processingJobRepository.findPage(eq(fileId), any())).thenReturn(List.of(job1));
 
         FileProcessingStatusResponse result = fileProcessingStatusService.getFileProcessingStatus(actorUserId, fileId);
 
@@ -116,7 +166,7 @@ class FileProcessingStatusServiceTest {
     void getFileProcessingStatus_ShouldReturnPartialFailure_WhenMixed() {
         ProcessingJob job1 = ProcessingJob.builder().status(ProcessingJob.JobStatus.COMPLETED).file(fileEntity).build();
         ProcessingJob job2 = ProcessingJob.builder().status(ProcessingJob.JobStatus.FAILED).file(fileEntity).build();
-        when(processingJobRepository.findAllByFile_IdOrderByCreatedAtAsc(org.mockito.ArgumentMatchers.eq(fileId), org.mockito.ArgumentMatchers.any())).thenReturn(List.of(job1, job2));
+        when(processingJobRepository.findPage(eq(fileId), any())).thenReturn(List.of(job1, job2));
 
         FileProcessingStatusResponse result = fileProcessingStatusService.getFileProcessingStatus(actorUserId, fileId);
 
@@ -144,5 +194,15 @@ class FileProcessingStatusServiceTest {
         // Act & Assert
         assertThrows(com.filemanager.api.exception.ResourceNotFoundException.class,
                 () -> fileProcessingStatusService.getFileProcessingStatus(actorUserId, fileId));
+    }
+
+    private ProcessingJob processingJob(UUID id, OffsetDateTime createdAt, ProcessingJob.JobType jobType) {
+        return ProcessingJob.builder()
+                .id(id)
+                .file(fileEntity)
+                .jobType(jobType)
+                .status(ProcessingJob.JobStatus.PENDING)
+                .createdAt(createdAt)
+                .build();
     }
 }

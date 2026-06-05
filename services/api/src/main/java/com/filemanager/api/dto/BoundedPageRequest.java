@@ -32,13 +32,13 @@ public record BoundedPageRequest(int size, String cursor) {
             return null;
         }
 
-        try {
-            String decoded = new String(Base64.getUrlDecoder().decode(cursor), StandardCharsets.UTF_8);
-            String[] parts = decoded.split("\\|", 2);
-            if (parts.length != 2) {
-                throw new IllegalArgumentException("Invalid cursor");
-            }
+        String decoded = decodeBase64(cursor);
+        String[] parts = decoded.split("\\|", 2);
+        if (parts.length != 2) {
+            throw new IllegalArgumentException("Invalid cursor");
+        }
 
+        try {
             return new SeekCursor(OffsetDateTime.parse(parts[0]), UUID.fromString(parts[1]));
         } catch (RuntimeException ex) {
             throw new IllegalArgumentException("Invalid cursor", ex);
@@ -49,9 +49,18 @@ public record BoundedPageRequest(int size, String cursor) {
         if (createdAt == null || id == null) {
             return null;
         }
+
         String raw = createdAt + "|" + id;
 
         return Base64.getUrlEncoder().withoutPadding().encodeToString(raw.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static String decodeBase64(String value) {
+        try {
+            return new String(Base64.getUrlDecoder().decode(value), StandardCharsets.UTF_8);
+        } catch (RuntimeException ex) {
+            throw new IllegalArgumentException("Invalid cursor", ex);
+        }
     }
 
     public record SeekCursor(OffsetDateTime createdAt, UUID id) {

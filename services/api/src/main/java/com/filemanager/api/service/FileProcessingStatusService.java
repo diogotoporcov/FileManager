@@ -3,6 +3,7 @@ package com.filemanager.api.service;
 import com.filemanager.api.auth.AccessControlService;
 import com.filemanager.api.auth.Permission;
 import com.filemanager.api.dto.BoundedPageRequest;
+import com.filemanager.api.dto.BoundedPageRequest.SeekCursor;
 import com.filemanager.api.dto.CursorPageResponse;
 import com.filemanager.api.dto.FileProcessingStatusResponse;
 import com.filemanager.api.dto.FileProcessingStatusResponse.AggregateStatus;
@@ -32,21 +33,29 @@ public class FileProcessingStatusService {
             BoundedPageRequest pageRequest) {
         accessControlService.assertCanAccessFile(actorUserId, fileId, Permission.FILE_VIEW);
 
-        List<ProcessingJob> jobs = processingJobRepository.findAllByFile_IdOrderByCreatedAtAsc(
-                fileId,
-                PageRequest.of(0, pageRequest.fetchSize()));
+        List<ProcessingJob> jobs = findProcessingJobPage(fileId, pageRequest);
         boolean hasMore = jobs.size() > pageRequest.size();
         List<ProcessingJob> pageJobs = hasMore ? jobs.subList(0, pageRequest.size()) : jobs;
         ProcessingJob last = pageJobs.isEmpty() ? null : pageJobs.getLast();
 
         return CursorPageResponse.<ProcessingJobResponse>builder()
                 .items(pageJobs.stream()
-                .map(this::mapToResponse)
-                .collect(Collectors.toList()))
+                        .map(this::mapToResponse)
+                        .collect(Collectors.toList()))
                 .hasMore(hasMore)
                 .nextCursor(nextJobCursor(hasMore, last))
                 .pageSize(pageRequest.size())
                 .build();
+    }
+
+    private List<ProcessingJob> findProcessingJobPage(UUID fileId, BoundedPageRequest pageRequest) {
+        PageRequest pageable = PageRequest.of(0, pageRequest.fetchSize());
+        SeekCursor cursor = pageRequest.decodedCursor();
+        if (cursor == null) {
+            return processingJobRepository.findPage(fileId, pageable);
+        }
+
+        return processingJobRepository.findPageAfterCursor(fileId, cursor.createdAt(), cursor.id(), pageable);
     }
 
     private String nextJobCursor(boolean hasMore, ProcessingJob last) {
@@ -61,7 +70,7 @@ public class FileProcessingStatusService {
     public FileProcessingStatusResponse getFileProcessingStatus(UUID actorUserId, UUID fileId) {
         accessControlService.assertCanAccessFile(actorUserId, fileId, Permission.FILE_VIEW);
 
-        List<ProcessingJob> jobs = processingJobRepository.findAllByFile_IdOrderByCreatedAtAsc(
+        List<ProcessingJob> jobs = processingJobRepository.findPage(
                 fileId,
                 PageRequest.of(0, BoundedPageRequest.MAX_SIZE));
         AggregateStatus overallStatus = calculateAggregateStatus(jobs);
