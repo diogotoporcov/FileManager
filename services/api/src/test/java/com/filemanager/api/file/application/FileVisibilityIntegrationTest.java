@@ -1,0 +1,212 @@
+package com.filemanager.api.file.application;
+
+import com.filemanager.api.auth.domain.Permission;
+import com.filemanager.api.exception.AccessDeniedException;
+import com.filemanager.api.file.domain.FileEntity;
+import com.filemanager.api.file.persistence.FileRepository;
+import com.filemanager.api.file.web.FileResponse;
+import com.filemanager.api.file.web.search.FileSearchQuery;
+import com.filemanager.api.folder.domain.FolderEntity;
+import com.filemanager.api.folder.persistence.FolderRepository;
+import com.filemanager.api.identity.domain.User;
+import com.filemanager.api.identity.persistence.UserRepository;
+import com.filemanager.api.processing.messaging.FileProcessingRequestedEvent;
+import com.filemanager.api.sharing.domain.FileGrantEntity;
+import com.filemanager.api.sharing.domain.FolderGrantEntity;
+import com.filemanager.api.sharing.persistence.FileGrantRepository;
+import com.filemanager.api.sharing.persistence.FolderGrantRepository;
+import com.filemanager.api.tag.domain.FileTagEntity;
+import com.filemanager.api.tag.domain.FileTagId;
+import com.filemanager.api.tag.domain.TagEntity;
+import com.filemanager.api.tag.domain.TagScopeType;
+import com.filemanager.api.tag.persistence.FileTagRepository;
+import com.filemanager.api.tag.persistence.TagRepository;
+import io.minio.MinioClient;
+import java.util.List;
+import java.util.UUID;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.transaction.annotation.Transactional;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
+@SpringBootTest
+@ActiveProfiles("test")
+@Transactional
+class FileVisibilityIntegrationTest {
+    @Autowired
+    private FileService fileService;
+    @Autowired
+    private UserRepository userRepository;
+    @Autowired
+    private FileRepository fileRepository;
+    @Autowired
+    private FolderRepository folderRepository;
+    @Autowired
+    private FileGrantRepository fileGrantRepository;
+    @Autowired
+    private FolderGrantRepository folderGrantRepository;
+    @Autowired
+    private TagRepository tagRepository;
+    @Autowired
+    private FileTagRepository fileTagRepository;
+
+    @MockitoBean
+    private MinioClient minioClient;
+    @MockitoBean
+    private KafkaTemplate<String, FileProcessingRequestedEvent> kafkaTemplate;
+    @MockitoBean
+    private JwtDecoder jwtDecoder;
+
+    @Test
+    void searchReturnsOnlyActorVisibleFiles() {
+        User actor = saveUser("actor@example.com");
+        User other = saveUser("other@example.com");
+        FolderEntity actorFolder = saveFolder("actor-folder", actor, null);
+        FolderEntity sharedFolder = saveFolder("shared-folder", other, null);
+        FolderEntity unsharedFolder = saveFolder("unshared-folder", other, null);
+        FileEntity owned = saveFile("owned.txt", actor, null);
+        FileEntity privateOther = saveFile("private.txt", other, null);
+        FileEntity directGrant = saveFile("direct-grant.txt", other, null);
+        FileEntity folderGrant = saveFile("folder-grant.txt", other, sharedFolder);
+        FileEntity unsharedFolderFile = saveFile("unshared-folder.txt", other, unsharedFolder);
+        FileEntity guestOwnedInActorFolder = saveFile("guest-owned.txt", other, actorFolder);
+        saveFileGrant(directGrant, actor, other, Permission.FILE_VIEW);
+        saveFolderGrant(sharedFolder, actor, other, Permission.FOLDER_VIEW);
+
+        List<String> names = searchNames(actor, query("name,asc", null));
+
+        assertThat(names).containsExactly(
+                directGrant.getName(),
+                folderGrant.getName(),
+                guestOwnedInActorFolder.getName(),
+                owned.getName());
+        assertThat(names).doesNotContain(privateOther.getName(), unsharedFolderFile.getName());
+    }
+
+    @Test
+    void folderIdSearchRequiresFolderVisibility() {
+        User actor = saveUser("actor@example.com");
+        User other = saveUser("other@example.com");
+        FolderEntity unsharedFolder = saveFolder("unshared", other, null);
+        FileSearchQuery query = query("name,asc", null);
+        query.setFolderId(unsharedFolder.getId());
+
+        assertThrows(AccessDeniedException.class, () -> fileService.searchFiles(query, actor.getId()));
+    }
+
+    @Test
+    void tagFilterDoesNotLeakInaccessibleFiles() {
+        User actor = saveUser("actor@example.com");
+        User other = saveUser("other@example.com");
+        FileEntity visible = saveFile("visible.txt", actor, null);
+        FileEntity inaccessible = saveFile("inaccessible.txt", other, null);
+        TagEntity tag = saveOwnerTag("wedding", actor);
+        saveFileTag(visible, tag, actor);
+        saveFileTag(inaccessible, tag, actor);
+        FileSearchQuery query = query("name,asc", null);
+        query.setTagId(tag.getId());
+
+        List<String> names = searchNames(actor, query);
+
+        assertThat(names).containsExactly("visible.txt");
+    }
+
+    @Test
+    void limitAppliesAfterVisibilityAndSortRemainsDeterministic() {
+        User actor = saveUser("actor@example.com");
+        User other = saveUser("other@example.com");
+        saveFile("a-private.txt", other, null);
+        saveFile("b-private.txt", other, null);
+        saveFile("c-visible.txt", actor, null);
+        saveFile("d-visible.txt", actor, null);
+        saveFile("e-visible.txt", actor, null);
+        FileSearchQuery query = query("name,asc", 2);
+
+        var page = fileService.searchFiles(query, actor.getId());
+
+        assertThat(page.getItems()).extracting("name").containsExactly("c-visible.txt", "d-visible.txt");
+        assertThat(page.isHasMore()).isTrue();
+    }
+
+    private List<String> searchNames(User actor, FileSearchQuery query) {
+        return fileService.searchFiles(query, actor.getId()).getItems().stream()
+                .map(FileResponse::getName)
+                .toList();
+    }
+
+    private FileSearchQuery query(String sort, Integer limit) {
+        FileSearchQuery query = new FileSearchQuery();
+        query.setSort(sort);
+        query.setLimit(limit);
+
+        return query;
+    }
+
+    private User saveUser(String email) {
+        return userRepository.saveAndFlush(User.builder().email(email).build());
+    }
+
+    private FolderEntity saveFolder(String name, User owner, FolderEntity parent) {
+        return folderRepository.saveAndFlush(FolderEntity.builder()
+                .name(name)
+                .ownerUser(owner)
+                .createdByUser(owner)
+                .parentFolder(parent)
+                .build());
+    }
+
+    private FileEntity saveFile(String name, User owner, FolderEntity folder) {
+        return fileRepository.saveAndFlush(FileEntity.builder()
+                .name(name)
+                .storagePath(UUID.randomUUID().toString())
+                .mimeType("text/plain")
+                .size(1L)
+                .ownerUser(owner)
+                .createdByUser(owner)
+                .folder(folder)
+                .build());
+    }
+
+    private void saveFileGrant(FileEntity file, User grantee, User createdBy, Permission permission) {
+        fileGrantRepository.saveAndFlush(FileGrantEntity.builder()
+                .file(file)
+                .granteeUser(grantee)
+                .createdByUser(createdBy)
+                .permission(permission)
+                .build());
+    }
+
+    private void saveFolderGrant(FolderEntity folder, User grantee, User createdBy, Permission permission) {
+        folderGrantRepository.saveAndFlush(FolderGrantEntity.builder()
+                .folder(folder)
+                .granteeUser(grantee)
+                .createdByUser(createdBy)
+                .permission(permission)
+                .build());
+    }
+
+    private TagEntity saveOwnerTag(String normalizedName, User owner) {
+        return tagRepository.saveAndFlush(TagEntity.builder()
+                .displayName(normalizedName)
+                .normalizedName(normalizedName)
+                .scopeType(TagScopeType.OWNER)
+                .ownerUser(owner)
+                .createdByUser(owner)
+                .build());
+    }
+
+    private void saveFileTag(FileEntity file, TagEntity tag, User taggedBy) {
+        fileTagRepository.saveAndFlush(FileTagEntity.builder()
+                .id(new FileTagId(file.getId(), tag.getId()))
+                .file(file)
+                .tag(tag)
+                .taggedByUser(taggedBy)
+                .build());
+    }
+}

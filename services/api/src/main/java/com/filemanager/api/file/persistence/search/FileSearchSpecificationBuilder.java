@@ -1,11 +1,15 @@
 package com.filemanager.api.file.persistence.search;
 
+import com.filemanager.api.auth.domain.Permission;
 import com.filemanager.api.file.application.search.DateTimeRange;
 import com.filemanager.api.file.application.search.FileSearchCriteria;
 import com.filemanager.api.file.application.search.FileSearchCursor;
 import com.filemanager.api.file.application.search.LongRange;
 import com.filemanager.api.file.application.search.SearchValidationException;
 import com.filemanager.api.file.domain.FileEntity;
+import com.filemanager.api.folder.domain.FolderEntity;
+import com.filemanager.api.sharing.domain.FileGrantEntity;
+import com.filemanager.api.sharing.domain.FolderGrantEntity;
 import com.filemanager.api.tag.domain.FileTagEntity;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.CriteriaQuery;
@@ -28,10 +32,10 @@ public class FileSearchSpecificationBuilder {
             List<Predicate> predicates = new ArrayList<>();
             predicates.add(cb.isNull(root.get("deletedAt")));
 
-            if (criteria.ownerUserId() == null) {
-                throw new SearchValidationException("Exactly one owner scope is required");
+            if (criteria.actorUserId() == null) {
+                throw new IllegalArgumentException("Actor user ID is required");
             }
-            predicates.add(cb.equal(root.get("ownerUser").get("id"), criteria.ownerUserId()));
+            predicates.add(visibleToActor(root, query, cb, criteria.actorUserId()));
 
             if (criteria.folderId() != null) {
                 predicates.add(cb.equal(root.get("folder").get("id"), criteria.folderId()));
@@ -55,6 +59,72 @@ public class FileSearchSpecificationBuilder {
 
             return cb.and(predicates.toArray(Predicate[]::new));
         };
+    }
+
+    private Predicate visibleToActor(
+            Root<FileEntity> root,
+            CriteriaQuery<?> query,
+            CriteriaBuilder cb,
+            UUID actorUserId) {
+        Predicate ownedByActor = cb.equal(root.get("ownerUser").get("id"), actorUserId);
+        Predicate containingFolderOwnedByActor = containingFolderOwnedByActor(root, query, cb, actorUserId);
+
+        return cb.or(
+                ownedByActor,
+                containingFolderOwnedByActor,
+                activeFileGrantExists(root, query, cb, actorUserId),
+                activeFolderGrantExists(root, query, cb, actorUserId));
+    }
+
+    private Predicate containingFolderOwnedByActor(
+            Root<FileEntity> root,
+            CriteriaQuery<?> query,
+            CriteriaBuilder cb,
+            UUID actorUserId) {
+        Subquery<UUID> subquery = query.subquery(UUID.class);
+        Root<FolderEntity> folder = subquery.from(FolderEntity.class);
+        subquery.select(folder.get("id"));
+        subquery.where(
+                cb.equal(folder.get("id"), root.get("folder").get("id")),
+                cb.equal(folder.get("ownerUser").get("id"), actorUserId),
+                cb.isNull(folder.get("deletedAt")));
+
+        return cb.exists(subquery);
+    }
+
+    private Predicate activeFileGrantExists(
+            Root<FileEntity> root,
+            CriteriaQuery<?> query,
+            CriteriaBuilder cb,
+            UUID actorUserId) {
+        Subquery<UUID> subquery = query.subquery(UUID.class);
+        Root<FileGrantEntity> grant = subquery.from(FileGrantEntity.class);
+        subquery.select(grant.get("file").get("id"));
+        subquery.where(
+                cb.equal(grant.get("file").get("id"), root.get("id")),
+                cb.equal(grant.get("granteeUser").get("id"), actorUserId),
+                cb.equal(grant.get("permission"), Permission.FILE_VIEW),
+                cb.isNull(grant.get("revokedAt")));
+
+        return cb.exists(subquery);
+    }
+
+    private Predicate activeFolderGrantExists(
+            Root<FileEntity> root,
+            CriteriaQuery<?> query,
+            CriteriaBuilder cb,
+            UUID actorUserId) {
+        Subquery<UUID> subquery = query.subquery(UUID.class);
+        Root<FolderGrantEntity> grant = subquery.from(FolderGrantEntity.class);
+        subquery.select(grant.get("folder").get("id"));
+        subquery.where(
+                cb.equal(grant.get("folder").get("id"), root.get("folder").get("id")),
+                cb.equal(grant.get("granteeUser").get("id"), actorUserId),
+                cb.equal(grant.get("permission"), Permission.FOLDER_VIEW),
+                cb.isNull(grant.get("revokedAt")),
+                cb.isNull(grant.get("folder").get("deletedAt")));
+
+        return cb.exists(subquery);
     }
 
     private Predicate tagAssignmentExists(

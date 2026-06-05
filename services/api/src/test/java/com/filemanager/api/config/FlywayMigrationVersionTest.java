@@ -32,6 +32,23 @@ class FlywayMigrationVersionTest {
                         .isEqualTo(1));
     }
 
+    @Test
+    void sharingConstraintMigration_RejectsInertGrantPermissionsAndSplitsFolderUniqueness() throws Exception {
+        String migration = Files.readString(migrationDirectory().resolve("V7__Harden_Sharing_Constraints.sql"));
+
+        assertThat(migration).contains(
+                "CHECK (permission IN ('FILE_VIEW', 'FILE_MODIFY', 'FILE_DELETE'))",
+                "CHECK (permission IN ('FOLDER_VIEW', 'FOLDER_CREATE', 'FOLDER_RENAME', 'FOLDER_DELETE', 'FOLDER_UPLOAD_FILE'))",
+                "ux_folders_owner_user_active_root_name",
+                "WHERE parent_folder_id IS NULL AND deleted_at IS NULL",
+                "ux_folders_parent_active_child_name",
+                "WHERE parent_folder_id IS NOT NULL AND deleted_at IS NULL",
+                "file_grants_no_self_grant",
+                "folder_grants_no_self_grant",
+                "CHECK (grantee_user_id <> created_by_user_id)");
+        assertThat(migration).doesNotContain("FILE_SHARE", "FOLDER_MANAGE_PERMISSIONS");
+    }
+
     private List<String> migrationVersions() throws Exception {
         Path migrationDirectory = migrationDirectory();
 
