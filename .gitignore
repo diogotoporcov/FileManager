@@ -59,3 +59,5 @@ env/
 .mypy_cache/
 .coverage
 htmlcov/
+
+TODO.md
