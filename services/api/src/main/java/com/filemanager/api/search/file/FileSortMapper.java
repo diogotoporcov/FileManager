@@ -37,6 +37,7 @@ public class FileSortMapper {
 
     public Sort toSort(SortSpec sortSpec) {
         Sort.Direction direction = sortSpec.direction();
+
         return Sort.by(direction, entityProperty(sortSpec.field()))
                 .and(Sort.by(direction, "id"));
     }

@@ -82,6 +82,7 @@ class TagServiceTest {
                 transactionTemplate);
         org.mockito.Mockito.lenient().when(transactionTemplate.execute(any())).thenAnswer(invocation -> {
             TransactionCallback<?> callback = invocation.getArgument(0);
+
             return callback.doInTransaction(org.mockito.Mockito.mock(TransactionStatus.class));
         });
     }
@@ -93,6 +94,7 @@ class TagServiceTest {
         when(tagRepository.saveAndFlush(any(TagEntity.class))).thenAnswer(invocation -> {
             TagEntity tag = invocation.getArgument(0);
             tag.setId(UUID.randomUUID());
+
             return tag;
         });
 
@@ -320,6 +322,7 @@ class TagServiceTest {
         CreateTagRequest request = new CreateTagRequest();
         request.setName(name);
         request.setScopeType(TagScopeType.OWNER);
+
         return request;
     }
 
@@ -328,6 +331,7 @@ class TagServiceTest {
         request.setName(name);
         request.setScopeType(TagScopeType.FOLDER);
         request.setScopeFolderId(folderId);
+
         return request;
     }
 

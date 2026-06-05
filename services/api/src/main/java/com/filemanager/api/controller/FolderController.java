@@ -118,6 +118,7 @@ public class FolderController {
             @Parameter(description = "ID of the parent folder") @PathVariable UUID folderId,
             @Valid @RequestBody CreateFolderRequest request) {
         request.setParentFolderId(folderId);
+
         return folderService.createFolder(request, currentUserService.getCurrentUserId());
     }
 
@@ -129,6 +130,7 @@ public class FolderController {
             @Parameter(description = "ID of the folder") @PathVariable UUID folderId,
             @Valid @ParameterObject FileSearchQuery query) {
         query.setFolderId(folderId);
+
         return fileService.searchFiles(query, currentUserService.getCurrentUserId());
     }
 

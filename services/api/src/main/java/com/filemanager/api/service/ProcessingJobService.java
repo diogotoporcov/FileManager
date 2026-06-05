@@ -341,6 +341,7 @@ public class ProcessingJobService {
         if (job.getJobType() != expectedType) {
             throw new IllegalArgumentException("Job type mismatch: expected " + expectedType);
         }
+
         return job;
     }
 
@@ -508,6 +509,7 @@ public class ProcessingJobService {
         if (value == null || value.isBlank()) {
             return null;
         }
+
         return value.trim();
     }
 
@@ -525,6 +527,7 @@ public class ProcessingJobService {
         for (int i = 0; i < embedding.size(); i++) {
             normalized[i] = (float) (embedding.get(i) / norm);
         }
+
         return normalized;
     }
 

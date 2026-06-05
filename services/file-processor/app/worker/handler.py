@@ -33,6 +33,7 @@ class WorkerMessageHandler:
 
         except Exception as exc:
             logger.error(f"Poison message detected: {exc}")
+
             return await self._handle_poison_message(msg, exc)
 
         # Execute processing flow with retry logic.
@@ -58,10 +59,12 @@ class WorkerMessageHandler:
                 category=FailureCategory.POISON,
                 attempts=0,
             )
+
             return True
 
         except Exception as dlq_error:
             logger.critical(f"CRITICAL: Failed to publish poison message to DLQ: {dlq_error}")
+
             return False
 
     async def _process_with_retries(self, msg: KafkaMessageLike, event: FileProcessingRequestedEvent) -> bool:
@@ -81,6 +84,7 @@ class WorkerMessageHandler:
             try:
                 await self.flow.run(event)
                 metrics.EVENTS_PROCESSED.labels(status="success").inc()
+
                 return True
 
             except NonRetryableProcessingError as exc:
@@ -122,10 +126,12 @@ class WorkerMessageHandler:
 
         try:
             await self.flow.report_failure(event, str(last_error))
+
             return True
 
         except Exception as report_error:
             logger.error(f"Failed to report failure to API: {report_error}. Sending to DLQ.")
+
             return await self._publish_to_dlq(msg, event, last_error, report_error, attempts)
 
     async def _publish_to_dlq(
@@ -146,8 +152,10 @@ class WorkerMessageHandler:
                 processing_job_id=str(event.processing_job_id),
                 job_type=event.job_type,
             )
+
             return True
 
         except Exception as dlq_error:
             logger.critical(f"CRITICAL: Failed to publish to DLQ: {dlq_error}")
+
             return False

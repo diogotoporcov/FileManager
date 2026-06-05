@@ -96,6 +96,7 @@ public class FileController {
     @GetMapping
     public CursorPageResponse<FileResponse> listFiles(@Valid @ParameterObject FileSearchQuery query) {
         UUID actorUserId = currentUserService.getCurrentUserId();
+
         return fileService.searchFiles(query, actorUserId);
     }
 
@@ -108,6 +109,7 @@ public class FileController {
     public FileResponse getFileMetadata(@Parameter(description = "ID of the file") @PathVariable UUID fileId) {
         UUID actorUserId = currentUserService.getCurrentUserId();
         FileEntity entity = fileService.getFileMetadata(fileId, actorUserId);
+
         return fileResponseMapper.toResponse(entity);
     }
 

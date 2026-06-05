@@ -36,9 +36,11 @@ public class IdentityResolutionService {
                     if (!canAutoLinkExistingUser(identity)) {
                         throw new IllegalStateException("Automatic linking to an existing user is not enabled for this identity provider");
                     }
+
                     if (!Boolean.TRUE.equals(identity.emailVerified())) {
                         throw new IllegalStateException("Cannot link identity to existing user with unverified email");
                     }
+
                     return createIdentity(user, identity.provider(), identity.subject());
                 })
                 .orElseGet(() -> {
@@ -48,6 +50,7 @@ public class IdentityResolutionService {
                             .lastName(identity.lastName())
                             .build();
                     User savedUser = userRepository.save(newUser);
+
                     return createIdentity(savedUser, identity.provider(), identity.subject());
                 });
     }
@@ -64,6 +67,7 @@ public class IdentityResolutionService {
                 .providerSubject(subject)
                 .build();
         userIdentityRepository.save(identity);
+
         return user;
     }
 }

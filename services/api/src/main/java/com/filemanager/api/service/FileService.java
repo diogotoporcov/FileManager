@@ -204,6 +204,7 @@ public class FileService {
         }
 
         accessControlService.assertCanAccessFolder(actorUserId, folderId, Permission.FOLDER_UPLOAD_FILE);
+
         return folderRepository.findByIdAndDeletedAtIsNull(folderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Folder not found: " + folderId));
     }
@@ -227,6 +228,7 @@ public class FileService {
 
     public FileEntity getFileMetadata(UUID fileId, UUID actorUserId) {
         accessControlService.assertCanAccessFile(actorUserId, fileId, Permission.FILE_VIEW);
+
         return fileRepository.findByIdAndDeletedAtIsNull(fileId)
                 .orElseThrow(() -> new ResourceNotFoundException("File not found: " + fileId));
     }
@@ -236,6 +238,7 @@ public class FileService {
         FileEntity file = fileRepository.findByIdAndDeletedAtIsNull(fileId)
                 .orElseThrow(() -> new ResourceNotFoundException("File not found: " + fileId));
         applicationMetricsPort.recordFileDownload();
+
         return objectStoragePort.getObject(file.getStoragePath());
     }
 

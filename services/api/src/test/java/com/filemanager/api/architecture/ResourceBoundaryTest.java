@@ -57,6 +57,7 @@ class ResourceBoundaryTest {
         if (returnType instanceof ParameterizedType parameterizedType) {
             return parameterizedType.getRawType().equals(List.class);
         }
+
         return method.getReturnType().equals(List.class);
     }
 
@@ -76,6 +77,7 @@ class ResourceBoundaryTest {
             if (!source.contains("List<") || !source.contains("findAllBy")) {
                 return Stream.empty();
             }
+
             return source.lines()
                     .filter(line -> line.contains("List<") && line.contains("findAllBy"))
                     .filter(line -> !line.contains(Pageable.class.getSimpleName()))
@@ -91,6 +93,7 @@ class ResourceBoundaryTest {
         if (Files.exists(moduleRelative)) {
             return moduleRelative;
         }
+
         return workingDirectory.resolve("services/api/src/main/java/com/filemanager/api");
     }
 }

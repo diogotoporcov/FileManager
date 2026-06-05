@@ -104,6 +104,7 @@ class AudioFingerprintProcessor(Processor):
             fingerprint = await asyncio.to_thread(self._fingerprint, audio_path)
 
             logger.info("Computed audio fingerprint for file %s", event.file_id)
+
             return {
                 "durationMs": round(metadata.duration_seconds * 1000),
                 "codec": metadata.codec,
@@ -181,10 +182,13 @@ class AudioFingerprintProcessor(Processor):
 
             if duration is None:
                 raise NonRetryableProcessingError("Audio duration is unavailable")
+
             if codec is None:
                 raise NonRetryableProcessingError("Audio codec is unavailable")
+
             if sample_rate is None:
                 raise NonRetryableProcessingError("Audio sample rate is unavailable")
+
             if channels is None:
                 raise NonRetryableProcessingError("Audio channel count is unavailable")
 
@@ -221,6 +225,7 @@ class AudioFingerprintProcessor(Processor):
 
         try:
             completed = self._run_subprocess(json_args)
+
             return self._parse_fingerprint_json(completed.stdout)
 
         except NonRetryableProcessingError as exc:
@@ -228,6 +233,7 @@ class AudioFingerprintProcessor(Processor):
                 raise
 
             completed = self._run_subprocess(legacy_args)
+
             return self._parse_fingerprint_text(completed.stdout)
 
     def _parse_fingerprint_json(self, stdout: bytes) -> AudioFingerprint:
@@ -238,6 +244,7 @@ class AudioFingerprintProcessor(Processor):
 
             if fingerprint is None:
                 raise NonRetryableProcessingError("Audio fingerprint output is empty")
+
             if duration_seconds is None or duration_seconds <= 0:
                 raise NonRetryableProcessingError("Audio fingerprint duration is invalid")
 
@@ -262,6 +269,7 @@ class AudioFingerprintProcessor(Processor):
 
             if fingerprint is None:
                 raise NonRetryableProcessingError("Audio fingerprint output is empty")
+
             if duration_seconds is None or duration_seconds <= 0:
                 raise NonRetryableProcessingError("Audio fingerprint duration is invalid")
 
@@ -312,6 +320,7 @@ def _parse_float(value: Any) -> float | None:
         return None
 
     parsed = float(value)
+
     return parsed if math.isfinite(parsed) else None
 
 
@@ -320,6 +329,7 @@ def _parse_int(value: Any) -> int | None:
         return None
 
     parsed = int(value)
+
     return parsed if parsed >= 0 else None
 
 
@@ -371,4 +381,5 @@ def _safe_media_suffix(mime_type: str | None) -> str:
         "video/3gpp": ".3gp",
         "video/3gpp2": ".3g2",
     }
+
     return suffixes.get(normalized, ".media")

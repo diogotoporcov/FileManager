@@ -11,12 +11,15 @@ public record BoundedPageRequest(int size, String cursor) {
 
     public static BoundedPageRequest of(Integer requestedSize, String cursor) {
         int effectiveSize = requestedSize == null ? DEFAULT_SIZE : requestedSize;
+
         if (effectiveSize < 1) {
             throw new IllegalArgumentException("Page size must be positive");
         }
+
         if (effectiveSize > MAX_SIZE) {
             throw new IllegalArgumentException("Page size must not exceed " + MAX_SIZE);
         }
+
         return new BoundedPageRequest(effectiveSize, cursor);
     }
 
@@ -35,6 +38,7 @@ public record BoundedPageRequest(int size, String cursor) {
             if (parts.length != 2) {
                 throw new IllegalArgumentException("Invalid cursor");
             }
+
             return new SeekCursor(OffsetDateTime.parse(parts[0]), UUID.fromString(parts[1]));
         } catch (RuntimeException ex) {
             throw new IllegalArgumentException("Invalid cursor", ex);
@@ -46,6 +50,7 @@ public record BoundedPageRequest(int size, String cursor) {
             return null;
         }
         String raw = createdAt + "|" + id;
+
         return Base64.getUrlEncoder().withoutPadding().encodeToString(raw.getBytes(StandardCharsets.UTF_8));
     }
 

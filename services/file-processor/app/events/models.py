@@ -29,4 +29,5 @@ class FileProcessingRequestedEvent(BaseModel):
     def validate_owner(self) -> Self:
         if not self.owner_user_id:
             raise ValueError("owner_user_id must be present.")
+
         return self

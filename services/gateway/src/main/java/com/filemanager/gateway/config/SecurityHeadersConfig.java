@@ -15,8 +15,10 @@ public class SecurityHeadersConfig {
                 exchange.getResponse().getHeaders().set("X-Content-Type-Options", "nosniff");
                 exchange.getResponse().getHeaders().set("X-Frame-Options", "DENY");
                 exchange.getResponse().getHeaders().set("Referrer-Policy", "no-referrer");
+
                 return Mono.empty();
             });
+
             return chain.filter(exchange);
         };
     }

@@ -557,6 +557,7 @@ class ProcessingJobServiceTest {
         job.setFile(file);
         job.setJobType(jobType);
         job.setStatus(ProcessingJob.JobStatus.PENDING);
+
         return job;
     }
 

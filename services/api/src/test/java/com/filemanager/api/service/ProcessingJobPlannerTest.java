@@ -399,12 +399,14 @@ class ProcessingJobPlannerTest {
     private static ProcessingJobPlanner plannerWithProcessableVideoMimeTypes(Set<String> processableVideoMimeTypes) {
         AppProperties appProperties = new AppProperties();
         appProperties.setProcessableVideoMimeTypes(processableVideoMimeTypes);
+
         return plannerWith(appProperties);
     }
 
     private static ProcessingJobPlanner plannerWithProcessableAudioMimeTypes(Set<String> processableAudioMimeTypes) {
         AppProperties appProperties = new AppProperties();
         appProperties.setProcessableAudioMimeTypes(processableAudioMimeTypes);
+
         return plannerWith(appProperties);
     }
 

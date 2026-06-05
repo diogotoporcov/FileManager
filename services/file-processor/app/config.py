@@ -126,6 +126,7 @@ class Settings(BaseSettings):
             topics = [topic.strip() for topic in v.split(",")]
             if not topics or any(not topic for topic in topics):
                 raise ValueError("worker_topics must contain one or more non-blank topics")
+
             return tuple(topics)
 
         return v

@@ -32,6 +32,7 @@ public class InternalProcessingController {
             @PathVariable UUID jobId,
             @RequestBody @Valid ChecksumResultRequest request) {
         processingJobService.handleChecksumResult(jobId, request.getFileId(), request.getSha256());
+
         return ResponseEntity.ok().build();
     }
 
@@ -40,6 +41,7 @@ public class InternalProcessingController {
             @PathVariable UUID jobId,
             @RequestBody @Valid PhashResultRequest request) {
         processingJobService.handlePhashResult(jobId, request.getFileId(), request.getPhash());
+
         return ResponseEntity.ok().build();
     }
 
@@ -54,6 +56,7 @@ public class InternalProcessingController {
                 request.getModelVersion(),
                 request.getDimension(),
                 request.getEmbedding());
+
         return ResponseEntity.ok().build();
     }
 
@@ -62,6 +65,7 @@ public class InternalProcessingController {
             @PathVariable UUID jobId,
             @RequestBody @Valid VideoAnalysisResultRequest request) {
         processingJobService.handleVideoAnalysisResult(jobId, request);
+
         return ResponseEntity.ok().build();
     }
 
@@ -70,6 +74,7 @@ public class InternalProcessingController {
             @PathVariable UUID jobId,
             @RequestBody @Valid AudioAnalysisResultRequest request) {
         processingJobService.handleAudioAnalysisResult(jobId, request);
+
         return ResponseEntity.ok().build();
     }
 
@@ -78,6 +83,7 @@ public class InternalProcessingController {
             @PathVariable UUID jobId,
             @RequestBody @Valid ProcessingFailureRequest request) {
         processingJobService.handleProcessingFailure(jobId, request.getFileId(), request.getErrorMessage());
+
         return ResponseEntity.ok().build();
     }
 }

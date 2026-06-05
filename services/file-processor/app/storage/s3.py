@@ -29,6 +29,7 @@ class S3ObjectStorageReader(StorageObjectReader):
     async def read_content(self, reference: StorageObjectReference) -> AsyncIterator[bytes]:
         def get_body() -> StreamingBody:
             response = self.s3_client.get_object(Bucket=self.bucket_name, Key=reference.path)
+
             return response["Body"]
 
         body = await asyncio.to_thread(get_body)

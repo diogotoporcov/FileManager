@@ -47,6 +47,7 @@ class ChecksumProcessor(Processor):
 
         digest = sha256_hash.hexdigest()
         logger.info(f"Computed SHA-256 for file {event.file_id}: {digest}")
+
         return {"sha256": digest}
 
 
@@ -103,6 +104,7 @@ class PHashProcessor(Processor):
                         raise NonRetryableProcessingError(f"Invalid pHash format produced: {phash_str}")
 
                     logger.info(f"Computed pHash for image {event.file_id}: {phash_str}")
+
                     return {"phash": phash_str}
 
                 except Image.DecompressionBombWarning as exc:

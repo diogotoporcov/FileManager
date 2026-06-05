@@ -68,6 +68,7 @@ public class FolderService {
     @Transactional(readOnly = true)
     public FolderResponse getFolder(UUID folderId, UUID actorUserId) {
         FolderEntity folder = findAccessibleFolder(folderId, actorUserId, Permission.FOLDER_VIEW);
+
         return folderResponseMapper.toResponse(folder);
     }
 
@@ -82,6 +83,7 @@ public class FolderService {
         }
 
         folder.setName(name);
+
         return folderResponseMapper.toResponse(folderRepository.save(folder));
     }
 
@@ -91,6 +93,7 @@ public class FolderService {
         if (folderRepository.existsByParentFolderAndDeletedAtIsNull(folder)) {
             throw new ConflictException("Folder is not empty");
         }
+
         if (fileRepository.existsByFolderAndDeletedAtIsNull(folder)) {
             throw new ConflictException("Folder is not empty");
         }
@@ -107,6 +110,7 @@ public class FolderService {
         List<FolderEntity> folders = tagId == null
                 ? folderRepository.findByOwnerUserAndParentFolderIsNullAndDeletedAtIsNullOrderByNameAsc(ownerUser)
                 : folderRepository.findTaggedRootFoldersByOwnerUser(ownerUser, tagId);
+
         return folders
                 .stream()
                 .map(folderResponseMapper::toSummary)
@@ -124,12 +128,14 @@ public class FolderService {
                 .stream()
                 .map(folderResponseMapper::toSummary)
                 .toList();
+
         return FolderChildrenResponse.builder().folders(folders).build();
     }
 
     @Transactional(readOnly = true)
     public FolderEntity findAccessibleFolder(UUID folderId, UUID actorUserId, Permission permission) {
         accessControlService.assertCanAccessFolder(actorUserId, folderId, permission);
+
         return folderRepository.findByIdAndDeletedAtIsNull(folderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Folder not found: " + folderId));
     }
@@ -140,18 +146,23 @@ public class FolderService {
         }
 
         String name = rawName.trim();
+
         if (name.isBlank()) {
             throw new IllegalArgumentException("Folder name must not be blank");
         }
+
         if (name.length() > MAX_FOLDER_NAME_LENGTH) {
             throw new IllegalArgumentException("Folder name must not exceed " + MAX_FOLDER_NAME_LENGTH + " characters");
         }
+
         if (name.contains("/") || name.contains("\\")) {
             throw new IllegalArgumentException("Folder name must not contain path separators");
         }
+
         if (name.chars().anyMatch(Character::isISOControl)) {
             throw new IllegalArgumentException("Folder name must not contain control characters");
         }
+
         return name;
     }
 

@@ -71,6 +71,7 @@ class KafkaEventPublisherAdapterTest {
         when(recordMetadata.topic()).thenReturn(topic);
         when(recordMetadata.partition()).thenReturn(partition);
         when(recordMetadata.offset()).thenReturn(offset);
+
         return sendResult;
     }
 }

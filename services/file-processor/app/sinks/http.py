@@ -35,6 +35,7 @@ class HttpProcessingResultSink(ProcessingResultSink):
     async def _post(self, url: str, payload: Mapping[str, JsonValue]) -> httpx.Response:
         response = await self._get_client().post(url, json=payload, headers=self.headers)
         response.raise_for_status()
+
         return response
 
     async def report_checksum_success(self, job_id: UUID, file_id: UUID, sha256: str) -> None:

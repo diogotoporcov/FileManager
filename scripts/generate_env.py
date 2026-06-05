@@ -56,33 +56,39 @@ class LengthSecretGenerator(BaseSecretGenerator):
 class HexGenerator(LengthSecretGenerator):
     def generate(self, **kwargs: SecretOptionValue) -> str:
         length = self._get_length(kwargs)
+
         return secrets.token_hex((length + 1) // 2)[:length]
 
 class UrlsafeGenerator(LengthSecretGenerator):
     def generate(self, **kwargs: SecretOptionValue) -> str:
         length = self._get_length(kwargs)
+
         return secrets.token_urlsafe(length)[:length]
 
 class AlphanumericGenerator(LengthSecretGenerator):
     def generate(self, **kwargs: SecretOptionValue) -> str:
         length = self._get_length(kwargs)
         alphabet = string.ascii_letters + string.digits
+
         return "".join(secrets.choice(alphabet) for _ in range(length))
 
 class LettersGenerator(LengthSecretGenerator):
     def generate(self, **kwargs: SecretOptionValue) -> str:
         length = self._get_length(kwargs)
+
         return "".join(secrets.choice(string.ascii_letters) for _ in range(length))
 
 class NumericGenerator(LengthSecretGenerator):
     def generate(self, **kwargs: SecretOptionValue) -> str:
         length = self._get_length(kwargs)
+
         return "".join(secrets.choice(string.digits) for _ in range(length))
 
 class PasswordGenerator(LengthSecretGenerator):
     def generate(self, **kwargs: SecretOptionValue) -> str:
         length = self._get_length(kwargs)
         alphabet = string.ascii_letters + string.digits + "!@#$%^&*()-_=+[]{}|;:,.<>?"
+
         return "".join(secrets.choice(alphabet) for _ in range(length))
 
 class UuidGenerator(BaseSecretGenerator):
@@ -262,10 +268,12 @@ def main() -> int:
     
     try:
         process_env_file(args.source, args.target, args.force)
+
         return 0
 
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
+
         return 1
 
 if __name__ == "__main__":

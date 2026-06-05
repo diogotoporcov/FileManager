@@ -14,6 +14,7 @@ public final class ProcessableImageMimeTypes {
         }
 
         String normalized = mimeType.split(";", 2)[0].trim().toLowerCase(Locale.ROOT);
+
         return processableMimeTypes.stream()
                 .map(candidate -> candidate.split(";", 2)[0].trim().toLowerCase(Locale.ROOT))
                 .anyMatch(normalized::equals);

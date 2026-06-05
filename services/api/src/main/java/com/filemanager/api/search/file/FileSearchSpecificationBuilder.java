@@ -66,6 +66,7 @@ public class FileSearchSpecificationBuilder {
                 cb.equal(assignment.get("file").get("id"), root.get("id")),
                 cb.equal(assignment.get("tag").get("id"), tagId),
                 cb.isNull(assignment.get("tag").get("deletedAt")));
+
         return cb.exists(subquery);
     }
 
@@ -73,9 +74,11 @@ public class FileSearchSpecificationBuilder {
         if (!range.hasBounds()) {
             return;
         }
+
         if (range.from() != null) {
             predicates.add(cb.greaterThanOrEqualTo(path, range.from()));
         }
+
         if (range.to() != null) {
             predicates.add(cb.lessThan(path, range.to()));
         }
@@ -85,9 +88,11 @@ public class FileSearchSpecificationBuilder {
         if (!range.hasBounds()) {
             return;
         }
+
         if (range.min() != null) {
             predicates.add(cb.greaterThanOrEqualTo(path, range.min()));
         }
+
         if (range.max() != null) {
             predicates.add(cb.lessThanOrEqualTo(path, range.max()));
         }
@@ -119,6 +124,7 @@ public class FileSearchSpecificationBuilder {
         Predicate idPastCursor = descending
                 ? cb.lessThan(idPath, cursorId)
                 : cb.greaterThan(idPath, cursorId);
+
         return cb.or(valuePastCursor, cb.and(cb.equal(sortPath, cursorValue), idPastCursor));
     }
 }

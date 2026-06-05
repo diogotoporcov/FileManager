@@ -97,6 +97,7 @@ def make_client(fake_server: FakeInferenceServerClient) -> ClientFixture:
 
     def create_server(url: str) -> FakeInferenceServerClient:
         created_urls.append(url)
+
         return fake_server
 
     client = TritonImageEmbeddingClient(
@@ -107,6 +108,7 @@ def make_client(fake_server: FakeInferenceServerClient) -> ClientFixture:
         output_tensor_name="image_embeds",
     )
     client._grpcclient = FakeGrpcClientModule(create_server)
+
     return ClientFixture(client=client, created_urls=created_urls)
 
 

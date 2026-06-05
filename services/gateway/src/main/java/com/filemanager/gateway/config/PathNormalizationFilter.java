@@ -19,9 +19,10 @@ public class PathNormalizationFilter implements WebFilter {
     public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
         String rawPath = exchange.getRequest().getURI().getRawPath();
         String path = exchange.getRequest().getURI().getPath();
-        
+
         if (isTraversal(rawPath) || isTraversal(path)) {
             exchange.getResponse().setStatusCode(HttpStatus.NOT_FOUND);
+
             return exchange.getResponse().setComplete();
         }
 

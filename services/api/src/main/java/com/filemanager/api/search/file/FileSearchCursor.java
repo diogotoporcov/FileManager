@@ -16,12 +16,15 @@ public record FileSearchCursor(String sortField, Sort.Direction direction, Strin
         if (sortField == null || sortField.isBlank()) {
             throw new SearchValidationException("Cursor sort field is required");
         }
+
         if (direction == null) {
             throw new SearchValidationException("Cursor sort direction is required");
         }
+
         if (value == null || value.isBlank()) {
             throw new SearchValidationException("Cursor value is required");
         }
+
         if (id == null) {
             throw new SearchValidationException("Cursor id is required");
         }
@@ -48,6 +51,7 @@ public record FileSearchCursor(String sortField, Sort.Direction direction, Strin
 
         try {
             OffsetDateTime.parse(parts[0]);
+
             return new FileSearchCursor("createdAt", Sort.Direction.DESC, parts[0], UUID.fromString(parts[1]));
         } catch (RuntimeException ex) {
             throw new SearchValidationException("Invalid cursor", ex);
@@ -73,6 +77,7 @@ public record FileSearchCursor(String sortField, Sort.Direction direction, Strin
                 sort.direction().name().toLowerCase(),
                 encodeBase64(value),
                 entity.getId().toString());
+
         return encodeBase64(raw);
     }
 

@@ -94,12 +94,14 @@ class InternalApiTokenFilterTest {
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         new InternalApiTokenFilter(properties).doFilter(request, response, new MockFilterChain());
+
         return response;
     }
 
     private Set<ConstraintViolation<InternalApiProperties>> validateApiToken(Validator validator, String token) {
         InternalApiProperties properties = new InternalApiProperties();
         properties.setApiToken(token);
+
         return validator.validate(properties);
     }
 }

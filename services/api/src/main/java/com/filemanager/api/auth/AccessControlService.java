@@ -71,9 +71,11 @@ public class AccessControlService {
         if (actorUserId == null) {
             throw new AccessDeniedException("Actor user ID is required.");
         }
+
         if (ownerUserId == null) {
             throw new IllegalArgumentException("ownerUserId must be provided.");
         }
+
         if (!Objects.equals(ownerUserId, actorUserId)) {
             throw new AccessDeniedException(deniedMessage);
         }

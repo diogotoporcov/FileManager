@@ -48,6 +48,7 @@ class FlywayMigrationVersionTest {
     private Path migrationDirectory() throws URISyntaxException {
         URL resource = getClass().getClassLoader().getResource("db/migration");
         assertThat(resource).isNotNull();
+
         return Path.of(resource.toURI());
     }
 }

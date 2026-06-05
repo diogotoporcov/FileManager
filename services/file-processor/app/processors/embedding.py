@@ -62,6 +62,7 @@ class ImageEmbeddingProcessor(Processor):
             return False
         if not settings.worker_image_embedding_enabled:
             return False
+
         return is_processable_image_mime_type(event.mime_type, self.processable_image_mime_types)
 
     async def process(self, event: FileProcessingRequestedEvent) -> ProcessorResult:
@@ -83,6 +84,7 @@ class ImageEmbeddingProcessor(Processor):
 
         embedding = self._normalize_model_output(model_output)
         logger.info("Computed image embedding for file %s using model %s", event.file_id, self.model_name)
+
         return {
             "modelName": self.model_name,
             "modelVersion": self.model_version,
@@ -124,6 +126,7 @@ class ImageEmbeddingProcessor(Processor):
                                 self.max_source_pixels,
                                 self.direct_decode_max_pixels,
                             )
+
                             return preprocess_clip_image(prepared, self.input_size)
 
                 except Image.DecompressionBombWarning as exc:
@@ -165,6 +168,7 @@ class ImageEmbeddingProcessor(Processor):
             raise NonRetryableProcessingError("Image embedding output norm must be finite and non-zero")
 
         normalized = np.asarray(output / norm, dtype=np.float32)
+
         return [float(value) for value in normalized.tolist()]
 
 

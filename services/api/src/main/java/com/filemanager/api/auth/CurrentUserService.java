@@ -22,6 +22,7 @@ public class CurrentUserService {
         if (authentication == null || !(authentication.getPrincipal() instanceof Jwt jwt)) {
             throw new AuthenticationCredentialsNotFoundException("No authenticated JWT principal found");
         }
+
         return identityResolutionService.resolveUser(jwt);
     }
 

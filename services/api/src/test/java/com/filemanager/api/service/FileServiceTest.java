@@ -102,6 +102,7 @@ class FileServiceTest {
         when(fileRepository.save(any(FileEntity.class))).thenAnswer(invocation -> {
             FileEntity file = invocation.getArgument(0);
             file.setId(UUID.randomUUID());
+
             return file;
         });
         when(objectStoragePort.putObject(any())).thenReturn(StoreObjectResponse.builder()
@@ -139,6 +140,7 @@ class FileServiceTest {
         when(fileRepository.save(any(FileEntity.class))).thenAnswer(invocation -> {
             FileEntity file = invocation.getArgument(0);
             file.setId(UUID.randomUUID());
+
             return file;
         });
         when(objectStoragePort.putObject(any())).thenReturn(StoreObjectResponse.builder().etag("etag").build());

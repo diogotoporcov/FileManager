@@ -44,6 +44,7 @@ class ProcessingFlow:
             await self._report_result(event, processor, result)
 
             logger.info(f"Finished processing flow for job: {event.processing_job_id}. Produced: {list(result.keys())}")
+
             return result
 
         finally:
@@ -232,10 +233,13 @@ class ProcessingFlow:
 
         if not isinstance(duration_ms, int) or duration_ms <= 0:
             raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid video duration")
+
         if not isinstance(sampled_frame_count, int) or sampled_frame_count <= 0:
             raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid sampled frame count")
+
         if not isinstance(sampling_strategy, str) or not sampling_strategy.strip():
             raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid sampling strategy")
+
         if not isinstance(frames, list) or len(frames) != sampled_frame_count:
             raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid video frame list")
 
@@ -247,8 +251,10 @@ class ProcessingFlow:
         if has_embedding:
             if not isinstance(model_name, str) or not model_name.strip():
                 raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid embedding model name")
+
             if not isinstance(model_version, str) or not model_version.strip():
                 raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid embedding model version")
+
             if not isinstance(dimension, int) or dimension <= 0:
                 raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid embedding dimension")
 
@@ -263,8 +269,10 @@ class ProcessingFlow:
 
             if not isinstance(timestamp_ms, int) or timestamp_ms < 0:
                 raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid video frame timestamp")
+
             if not isinstance(frame_index, int) or frame_index < 0:
                 raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid video frame index")
+
             if phash is None and embedding is None:
                 raise NonRetryableProcessingError(f"Processor {processor_name} produced video frame without signals")
 
@@ -279,6 +287,7 @@ class ProcessingFlow:
             if embedding is not None:
                 if not has_embedding or not isinstance(embedding, list) or len(embedding) != dimension:
                     raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid video frame embedding")
+
                 if not all(isinstance(value, (int, float)) and math.isfinite(float(value)) for value in embedding):
                     raise NonRetryableProcessingError(f"Processor {processor_name} produced non-finite video embedding values")
                 normalized_frame["embedding"] = [float(value) for value in embedding]
@@ -299,6 +308,7 @@ class ProcessingFlow:
             payload["modelName"] = model_name
             payload["modelVersion"] = model_version
             payload["dimension"] = dimension
+
         return payload
 
     @staticmethod
@@ -331,18 +341,25 @@ class ProcessingFlow:
 
         if not isinstance(duration_ms, int) or duration_ms <= 0:
             raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid audio duration")
+
         if not isinstance(codec, str) or not codec.strip():
             raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid audio codec")
+
         if not isinstance(sample_rate, int) or sample_rate <= 0:
             raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid audio sample rate")
+
         if not isinstance(channels, int) or channels <= 0:
             raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid audio channel count")
+
         if not isinstance(fingerprint, str) or not fingerprint.strip():
             raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid audio fingerprint")
+
         if not isinstance(fingerprint_algorithm, str) or not fingerprint_algorithm.strip():
             raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid fingerprint algorithm")
+
         if not isinstance(fingerprint_version, str) or not fingerprint_version.strip():
             raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid fingerprint version")
+
         if not isinstance(fingerprint_duration_seconds, int) or fingerprint_duration_seconds <= 0:
             raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid fingerprint duration")
 
@@ -370,6 +387,7 @@ class ProcessingFlow:
             return None
         if not isinstance(value, int) or value <= 0:
             raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid {field_name}")
+
         return value
 
     @staticmethod
@@ -378,6 +396,7 @@ class ProcessingFlow:
             return None
         if not isinstance(value, int) or value < 0:
             raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid {field_name}")
+
         return value
 
     @staticmethod
@@ -385,6 +404,7 @@ class ProcessingFlow:
         if value is None:
             return None
         text = str(value).strip()
+
         return text or None
 
     async def report_failure(self, event: FileProcessingRequestedEvent, error_message: str) -> None:

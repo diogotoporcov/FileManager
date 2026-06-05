@@ -18,6 +18,7 @@ public class ProcessingTopicResolver {
     public String resolve(FileProcessingRequestedEvent event) {
         Objects.requireNonNull(event, "event must not be null");
         ProcessingJob.JobType jobType = parseJobType(event.jobType());
+
         return resolve(jobType, event.mimeType());
     }
 
@@ -25,6 +26,7 @@ public class ProcessingTopicResolver {
         Objects.requireNonNull(jobType, "jobType must not be null");
 
         AppProperties.Kafka.Topics topics = appProperties.getKafka().getTopics();
+
         return switch (jobType) {
             case CHECKSUM -> topics.getFileProcessingChecksum();
             case PHASH, EMBEDDING -> resolveImageTopic(mimeType, topics);
@@ -44,6 +46,7 @@ public class ProcessingTopicResolver {
         if (ProcessableVideoMimeTypes.contains(appProperties.getProcessableVideoMimeTypes(), mimeType)) {
             return topics.getFileProcessingVideo();
         }
+
         if (ProcessableAudioMimeTypes.contains(appProperties.getProcessableAudioMimeTypes(), mimeType)) {
             return topics.getFileProcessingAudio();
         }

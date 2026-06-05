@@ -27,6 +27,7 @@ public class PhashJobStrategy implements JobStrategy {
         if (ProcessableImageMimeTypes.contains(appProperties.getProcessableImageMimeTypes(), mimeType)) {
             return Optional.of(ProcessingJob.JobType.PHASH);
         }
+
         return Optional.empty();
     }
 }

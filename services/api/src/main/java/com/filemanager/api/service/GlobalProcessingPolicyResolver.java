@@ -13,6 +13,7 @@ public class GlobalProcessingPolicyResolver implements ProcessingPolicyResolver 
     @Override
     public boolean isEnabled(ProcessingCapability capability, ProcessingPolicyContext context) {
         AppProperties.Processing processing = appProperties.getProcessing();
+
         return switch (capability) {
             case CHECKSUM -> processing.getChecksum().isEnabled();
             case IMAGE_PHASH -> processing.getImage().isPhashEnabled();

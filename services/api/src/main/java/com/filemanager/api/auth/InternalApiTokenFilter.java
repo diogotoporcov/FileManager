@@ -34,6 +34,7 @@ public class InternalApiTokenFilter extends OncePerRequestFilter {
 
         if (authHeader == null || !authHeader.startsWith(BEARER_PREFIX)) {
             rejectUnauthorized(response);
+
             return;
         }
 
@@ -43,6 +44,7 @@ public class InternalApiTokenFilter extends OncePerRequestFilter {
         if (token.isBlank() || configuredToken == null || configuredToken.isBlank()
                 || !MessageDigest.isEqual(token.getBytes(StandardCharsets.UTF_8), configuredToken.getBytes(StandardCharsets.UTF_8))) {
             rejectUnauthorized(response);
+
             return;
         }
 

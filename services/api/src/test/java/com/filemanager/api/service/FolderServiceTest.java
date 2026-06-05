@@ -67,6 +67,7 @@ class FolderServiceTest {
         when(folderRepository.save(any(FolderEntity.class))).thenAnswer(invocation -> {
             FolderEntity folder = invocation.getArgument(0);
             folder.setId(UUID.randomUUID());
+
             return folder;
         });
 

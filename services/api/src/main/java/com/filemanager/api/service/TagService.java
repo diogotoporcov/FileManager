@@ -67,6 +67,7 @@ public class TagService {
         try {
             return executeInTransaction(() -> {
                 TagEntity unsaved = buildTag(request, actorUserId, tagName);
+
                 return tagResponseMapper.toResponse(tagRepository.saveAndFlush(unsaved));
             });
         } catch (DataIntegrityViolationException ex) {
@@ -103,6 +104,7 @@ public class TagService {
             accessControlService.assertCanAccessFolder(actorUserId, scopeFolderId, Permission.FOLDER_VIEW);
             folderRepository.findByIdAndDeletedAtIsNull(scopeFolderId)
                     .orElseThrow(() -> new ResourceNotFoundException("Folder not found: " + scopeFolderId));
+
             return tagRepository.listFolderTags(scopeFolderId, normalizedQuery, PageRequest.of(0, limit))
                     .stream()
                     .map(tagResponseMapper::toResponse)
@@ -111,6 +113,7 @@ public class TagService {
 
         accessControlService.assertCanViewOwner(actorUserId, actorUserId);
         findUser(actorUserId);
+
         return tagRepository.listOwnerUserTags(actorUserId, normalizedQuery, PageRequest.of(0, limit))
                 .stream()
                 .map(tagResponseMapper::toResponse)
@@ -120,6 +123,7 @@ public class TagService {
     @Transactional(readOnly = true)
     public List<TagResponse> listFileTags(UUID fileId, UUID actorUserId) {
         accessControlService.assertCanAccessFile(actorUserId, fileId, Permission.FILE_VIEW);
+
         return fileTagRepository.findActiveTagsByFileId(fileId)
                 .stream()
                 .map(tagResponseMapper::toResponse)
@@ -162,6 +166,7 @@ public class TagService {
     @Transactional(readOnly = true)
     public List<TagResponse> listFolderTags(UUID folderId, UUID actorUserId) {
         accessControlService.assertCanAccessFolder(actorUserId, folderId, Permission.FOLDER_VIEW);
+
         return folderTagRepository.findActiveTagsByFolderId(folderId)
                 .stream()
                 .map(tagResponseMapper::toResponse)
@@ -197,6 +202,7 @@ public class TagService {
         if (folderTagRepository.existsById(assignmentId)) {
             folderTagRepository.deleteById(assignmentId);
         }
+
         return listFolderTags(folderId, actorUserId);
     }
 
@@ -210,12 +216,14 @@ public class TagService {
         assertCanViewTag(actorUserId, tag);
         if (tag.getScopeType() == TagScopeType.OWNER) {
             assertTagOwnedBy(tag, actorUserId, "Tag owner context must match file search context");
+
             return;
         }
 
         if (folderId == null) {
             throw new AccessDeniedException("Folder-scoped tag requires an explicit matching folder search context.");
         }
+
         if (!folderId.equals(tag.getScopeFolder().getId())) {
             throw new AccessDeniedException("Folder-scoped tag cannot be used outside its folder scope.");
         }
@@ -230,12 +238,14 @@ public class TagService {
         assertCanViewTag(actorUserId, tag);
         if (tag.getScopeType() == TagScopeType.OWNER) {
             assertTagOwnedBy(tag, actorUserId, "Tag owner context must match folder listing context");
+
             return;
         }
 
         if (parentFolderId == null) {
             throw new AccessDeniedException("Folder-scoped tag cannot be used for root folder listing.");
         }
+
         if (!parentFolderId.equals(tag.getScopeFolder().getId())) {
             throw new AccessDeniedException("Folder-scoped tag cannot be used outside its folder scope.");
         }
@@ -267,6 +277,7 @@ public class TagService {
 
         FolderEntity folder = folderRepository.findByIdAndDeletedAtIsNull(request.getScopeFolderId())
                 .orElseThrow(() -> new ResourceNotFoundException("Folder not found: " + request.getScopeFolderId()));
+
         return TagEntity.builder()
                 .displayName(tagName.displayName())
                 .normalizedName(tagName.normalizedName())
@@ -284,6 +295,7 @@ public class TagService {
             }
 
             accessControlService.assertCanUploadToOwner(actorUserId, actorUserId);
+
             return;
         }
 
@@ -292,6 +304,7 @@ public class TagService {
                 throw new IllegalArgumentException("FOLDER-scoped tags require scopeFolderId");
             }
             accessControlService.assertCanAccessFolder(actorUserId, request.getScopeFolderId(), Permission.FOLDER_UPLOAD_FILE);
+
             return;
         }
 
@@ -323,6 +336,7 @@ public class TagService {
         assertCanViewTag(actorUserId, tag);
         if (tag.getScopeType() == TagScopeType.OWNER) {
             assertTagOwnedBy(tag, fileOwnerUserId(file), "Tag cannot be applied across owner contexts.");
+
             return;
         }
 
@@ -336,6 +350,7 @@ public class TagService {
         assertCanViewTag(actorUserId, tag);
         if (tag.getScopeType() == TagScopeType.OWNER) {
             assertTagOwnedBy(tag, folderOwnerUserId(folder), "Tag cannot be applied across owner contexts.");
+
             return;
         }
 
@@ -349,6 +364,7 @@ public class TagService {
     private void assertCanViewTag(UUID actorUserId, TagEntity tag) {
         if (tag.getScopeType() == TagScopeType.FOLDER) {
             accessControlService.assertCanAccessFolder(actorUserId, tag.getScopeFolder().getId(), Permission.FOLDER_VIEW);
+
             return;
         }
 
@@ -376,6 +392,7 @@ public class TagService {
 
         String displayName = rawName.trim().replaceAll(" +", " ");
         String normalizedName = displayName.toLowerCase(Locale.ROOT);
+
         if (normalizedName.isBlank()) {
             throw new IllegalArgumentException("Tag name must not be blank");
         }
@@ -383,6 +400,7 @@ public class TagService {
         if (displayName.length() > MAX_TAG_NAME_LENGTH) {
             throw new IllegalArgumentException("Tag name must not exceed " + MAX_TAG_NAME_LENGTH + " characters");
         }
+
         return new NormalizedTagName(displayName, normalizedName);
     }
 

@@ -48,7 +48,7 @@ def test_internal_api_token_validation(monkeypatch):
     
     # Missing internal_api_token
     monkeypatch.delenv("INTERNAL_API_TOKEN", raising=False)
-    # We need to make sure we don't accidentally get it from any other source
+    # Prevent fallback to an environment-provided token.
     with pytest.raises(ValidationError):
         # noinspection PyArgumentList
         Settings()

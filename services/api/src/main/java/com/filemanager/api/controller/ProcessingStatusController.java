@@ -43,6 +43,7 @@ public class ProcessingStatusController {
             @Parameter(description = "Maximum jobs to return") @org.springframework.web.bind.annotation.RequestParam(required = false) Integer size,
             @Parameter(description = "Cursor returned by the previous page") @org.springframework.web.bind.annotation.RequestParam(required = false) String cursor) {
         UUID actorUserId = currentUserService.getCurrentUserId();
+
         return fileProcessingStatusService.getProcessingJobs(actorUserId, fileId, BoundedPageRequest.of(size, cursor));
     }
 
@@ -51,6 +52,7 @@ public class ProcessingStatusController {
     @GetMapping("/{fileId}/processing-status")
     public FileProcessingStatusResponse getFileProcessingStatus(@Parameter(description = "ID of the file") @PathVariable UUID fileId) {
         UUID actorUserId = currentUserService.getCurrentUserId();
+
         return fileProcessingStatusService.getFileProcessingStatus(actorUserId, fileId);
     }
 }

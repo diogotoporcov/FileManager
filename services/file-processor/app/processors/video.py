@@ -260,6 +260,7 @@ class VideoAnalysisProcessor(Processor):
                 frame_buffer.seek(0)
                 with Image.open(frame_buffer) as image:
                     image.load()
+
                     return image.convert("RGB")
 
         except UnidentifiedImageError as exc:
@@ -346,6 +347,7 @@ class VideoAnalysisProcessor(Processor):
             raise NonRetryableProcessingError("Video frame embedding output norm must be finite and non-zero")
 
         normalized = np.asarray(output / norm, dtype=np.float32)
+
         return [float(value) for value in normalized.tolist()]
 
     def _sampling_strategy(self) -> str:
@@ -392,6 +394,7 @@ def sample_timestamps(
         return [start for _ in range(sample_count)]
 
     interval = (end - start) / (sample_count - 1)
+
     return [start + (interval * index) for index in range(sample_count)]
 
 
@@ -400,6 +403,7 @@ def _parse_float(value: Any) -> float | None:
         return None
 
     parsed = float(value)
+
     return parsed if math.isfinite(parsed) else None
 
 
@@ -408,6 +412,7 @@ def _parse_int(value: Any) -> int | None:
         return None
 
     parsed = int(value)
+
     return parsed if parsed >= 0 else None
 
 
@@ -416,4 +421,5 @@ def _parse_str(value: Any) -> str | None:
         return None
 
     parsed = str(value).strip()
+
     return parsed or None

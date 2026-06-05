@@ -41,6 +41,7 @@ public class FileSearchCriteriaMapper {
         if (query.getSize() != null && query.getLimit() != null && !query.getSize().equals(query.getLimit())) {
             throw new SearchValidationException("Specify either size or limit, not both");
         }
+
         return query.getLimit() != null ? query.getLimit() : query.getSize();
     }
 
@@ -60,6 +61,7 @@ public class FileSearchCriteriaMapper {
         if (rawMimeTypes == null || rawMimeTypes.isEmpty()) {
             return List.of();
         }
+
         if (rawMimeTypes.size() > MAX_MIME_TYPES) {
             throw new SearchValidationException("Too many MIME type filters");
         }

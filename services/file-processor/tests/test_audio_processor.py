@@ -236,6 +236,7 @@ def test_audio_fingerprint_falls_back_to_legacy_fpcalc_output(monkeypatch):
         calls.append(args)
         if "-json" in args:
             raise subprocess.CalledProcessError(1, args, output=b"", stderr=b"unsupported option")
+
         return subprocess.CompletedProcess(args, 0, stdout=b"FILE=audio.wav\nDURATION=12\nFINGERPRINT=AQABC\n", stderr=b"")
 
     monkeypatch.setattr(subprocess, "run", fake_run)

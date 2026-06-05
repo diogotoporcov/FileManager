@@ -38,6 +38,7 @@ class FakeEmbeddingClient(ImageEmbeddingInferenceClient):
     async def embed_image(self, pixel_values: np.ndarray) -> np.ndarray:
         self.calls += 1
         assert pixel_values.shape == (1, 3, 32, 32)
+
         return np.ones((1, self.dimension), dtype=np.float32)
 
 
@@ -346,4 +347,5 @@ def png_bytes() -> bytes:
     image = Image.new("RGB", (64, 64), color="red")
     buffer = io.BytesIO()
     image.save(buffer, format="PNG")
+
     return buffer.getvalue()
