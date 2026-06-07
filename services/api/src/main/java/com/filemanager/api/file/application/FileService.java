@@ -3,6 +3,8 @@ package com.filemanager.api.file.application;
 import com.filemanager.api.auth.application.AccessControlService;
 import com.filemanager.api.auth.domain.Permission;
 import com.filemanager.api.config.AppProperties;
+import com.filemanager.api.config.FileTransferProperties;
+import com.filemanager.api.exception.FileTransferDisabledException;
 import com.filemanager.api.exception.ResourceNotFoundException;
 import com.filemanager.api.file.web.FileResponse;
 import com.filemanager.api.file.web.FileResponseMapper;
@@ -24,11 +26,17 @@ import com.filemanager.api.processing.application.policy.ProcessingPolicyContext
 import com.filemanager.api.processing.domain.ProcessingJob;
 import com.filemanager.api.processing.messaging.FileProcessingRequestedEvent;
 import com.filemanager.api.processing.persistence.ProcessingJobRepository;
+import com.filemanager.api.storage.exception.StorageException;
+import com.filemanager.api.storage.port.CreatePresignedDownloadUrlRequest;
+import com.filemanager.api.storage.port.CreatePresignedDownloadUrlResponse;
+import com.filemanager.api.storage.port.GetObjectRequest;
+import com.filemanager.api.storage.port.GetObjectResponse;
 import com.filemanager.api.storage.port.ObjectStoragePort;
 import com.filemanager.api.storage.port.StoreObjectRequest;
 import com.filemanager.api.storage.port.StoreObjectResponse;
 import com.filemanager.api.tag.application.TagService;
 import com.filemanager.api.web.CursorPageResponse;
+import java.io.IOException;
 import java.io.InputStream;
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -57,6 +65,7 @@ public class FileService {
     private final AccessControlService accessControlService;
     private final FileManagerMetrics fileManagerMetrics;
     private final AppProperties appProperties;
+    private final FileTransferProperties fileTransferProperties;
     private final FileSearchCriteriaMapper fileSearchCriteriaMapper;
     private final FileSearchSpecificationBuilder fileSearchSpecificationBuilder;
     private final FileSortMapper fileSortMapper;
@@ -81,6 +90,11 @@ public class FileService {
             InputStream content,
             UUID folderId,
             UUID actorUserId) {
+        if (size < 0) {
+            throw new IllegalArgumentException("File size must not be negative");
+        }
+
+        String normalizedFileName = FileTransferPolicy.normalizeUploadFilename(fileName);
         User ownerUser = findUser(actorUserId);
         FolderEntity folder = resolveUploadFolder(folderId, actorUserId);
         if (folderId == null) {
@@ -88,7 +102,7 @@ public class FileService {
         }
         enforceUserQuota(ownerUser, size);
 
-        String effectiveContentType = (contentType == null || contentType.isBlank()) ? "application/octet-stream" : contentType;
+        String effectiveContentType = FileTransferPolicy.safeContentType(contentType);
         String storagePath = UUID.randomUUID().toString();
 
         StoreObjectResponse response = objectStoragePort.putObject(StoreObjectRequest.builder()
@@ -100,7 +114,7 @@ public class FileService {
 
         try {
             FileEntity fileEntity = FileEntity.builder()
-                    .name(fileName)
+                    .name(normalizedFileName)
                     .storagePath(storagePath)
                     .etag(response.getEtag())
                     .mimeType(effectiveContentType)
@@ -235,13 +249,79 @@ public class FileService {
                 .orElseThrow(() -> new ResourceNotFoundException("File not found: " + fileId));
     }
 
-    public InputStream downloadFile(UUID fileId, UUID actorUserId) {
+    public FileDownload openDownload(UUID fileId, UUID actorUserId, String rangeHeader) {
         accessControlService.assertCanAccessFile(actorUserId, fileId, Permission.FILE_VIEW);
         FileEntity file = fileRepository.findByIdAndDeletedAtIsNull(fileId)
                 .orElseThrow(() -> new ResourceNotFoundException("File not found: " + fileId));
+        long completeSize = file.getSize();
+        FileDownloadRange range = FileDownloadRange.parse(rangeHeader, completeSize);
+        GetObjectRequest objectRequest = GetObjectRequest.builder()
+                .storagePath(file.getStoragePath())
+                .rangeStart(range == null ? null : range.getStart())
+                .rangeEnd(range == null ? null : range.getEnd())
+                .build();
+        GetObjectResponse objectResponse = objectStoragePort.getObject(objectRequest);
+        long contentLength = range == null ? completeSize : range.getEnd() - range.getStart() + 1;
+        validateObjectContentLength(fileId, objectResponse, contentLength);
         fileManagerMetrics.recordFileDownload();
 
-        return objectStoragePort.getObject(file.getStoragePath());
+        return FileDownload.builder()
+                .name(file.getName())
+                .mimeType(file.getMimeType())
+                .completeSize(completeSize)
+                .contentLength(contentLength)
+                .rangeStart(range == null ? null : range.getStart())
+                .rangeEnd(range == null ? null : range.getEnd())
+                .etag(objectResponse.getEtag() == null ? file.getEtag() : objectResponse.getEtag())
+                .content(objectResponse.getContent())
+                .build();
+    }
+
+    private void validateObjectContentLength(UUID fileId, GetObjectResponse objectResponse, long expectedContentLength) {
+        if (objectResponse.getContentLength() < 0 || objectResponse.getContentLength() == expectedContentLength) {
+            return;
+        }
+
+        closeQuietly(objectResponse.getContent());
+        log.warn("Storage object content length mismatch for file {}", fileId);
+        throw new StorageException("Storage object content length does not match file metadata.");
+    }
+
+    private void closeQuietly(InputStream content) {
+        if (content == null) {
+            return;
+        }
+
+        try {
+            content.close();
+        } catch (IOException ex) {
+            log.debug("Failed to close mismatched storage stream", ex);
+        }
+    }
+
+    public PresignedDownloadUrl createPresignedDownloadUrl(UUID fileId, UUID actorUserId) {
+        if (!fileTransferProperties.getPresignedDownload().isEnabled()) {
+            throw new FileTransferDisabledException("Presigned downloads are disabled.");
+        }
+
+        accessControlService.assertCanAccessFile(actorUserId, fileId, Permission.FILE_VIEW);
+        FileEntity file = fileRepository.findByIdAndDeletedAtIsNull(fileId)
+                .orElseThrow(() -> new ResourceNotFoundException("File not found: " + fileId));
+        var presignedDownload = fileTransferProperties.getPresignedDownload();
+        CreatePresignedDownloadUrlResponse response = objectStoragePort.createPresignedDownloadUrl(
+                CreatePresignedDownloadUrlRequest.builder()
+                        .storagePath(file.getStoragePath())
+                        .ttl(presignedDownload.getTtl())
+                        .responseContentDisposition(FileTransferPolicy.attachmentContentDisposition(file.getName()))
+                        .responseContentType(FileTransferPolicy.safeContentType(file.getMimeType()))
+                        .build());
+
+        return PresignedDownloadUrl.builder()
+                .url(response.getUrl())
+                .expiresAt(response.getExpiresAt())
+                .expiresInSeconds(presignedDownload.getTtl().toSeconds())
+                .method("GET")
+                .build();
     }
 
     @Transactional

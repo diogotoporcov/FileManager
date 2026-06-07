@@ -1,6 +1,10 @@
 spring:
   application:
     name: filemanager-api
+  servlet:
+    multipart:
+      max-file-size: ${MAX_UPLOAD_FILE_SIZE:512MB}
+      max-request-size: ${MAX_UPLOAD_REQUEST_SIZE:512MB}
   datasource:
     url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:filemanager}
     username: ${POSTGRES_USER:}
@@ -72,6 +76,11 @@ app:
     max-candidates: ${EMBEDDING_MAX_CANDIDATES:5000}
   quota:
     user-bytes: ${USER_STORAGE_QUOTA_BYTES:16106127360}
+
+file-transfer:
+  presigned-download:
+    enabled: ${FILE_TRANSFER_PRESIGNED_DOWNLOAD_ENABLED:true}
+    ttl: ${FILE_TRANSFER_PRESIGNED_DOWNLOAD_TTL:5m}
 
 filemanager:
   internal:
