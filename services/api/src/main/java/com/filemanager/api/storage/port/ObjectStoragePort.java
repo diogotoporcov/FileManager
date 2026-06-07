@@ -1,9 +1,8 @@
 package com.filemanager.api.storage.port;
 
-import java.io.InputStream;
-
 public interface ObjectStoragePort {
     StoreObjectResponse putObject(StoreObjectRequest request);
-    InputStream getObject(String storagePath);
+    GetObjectResponse getObject(GetObjectRequest request);
+    CreatePresignedDownloadUrlResponse createPresignedDownloadUrl(CreatePresignedDownloadUrlRequest request);
     void deleteObject(String storagePath);
 }

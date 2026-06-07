@@ -1,7 +1,9 @@
 package com.filemanager.api.exception;
 
 import com.filemanager.api.file.application.search.SearchValidationException;
+import com.filemanager.api.file.application.InvalidDownloadRangeException;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -10,6 +12,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import com.filemanager.api.storage.exception.StorageException;
+import com.filemanager.api.storage.exception.StorageObjectNotFoundException;
 
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -39,6 +42,19 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ConflictException.class)
     public ResponseEntity<?> handleConflict(ConflictException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(Map.of("error", ex.getMessage()));
+    }
+
+    @ExceptionHandler(FileTransferDisabledException.class)
+    public ResponseEntity<?> handleTransferDisabled(FileTransferDisabledException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(Map.of("error", ex.getMessage()));
+    }
+
+    @ExceptionHandler(InvalidDownloadRangeException.class)
+    public ResponseEntity<?> handleInvalidDownloadRange(InvalidDownloadRangeException ex) {
+        return ResponseEntity.status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
+                .header(HttpHeaders.CONTENT_RANGE, "bytes */" + ex.getCompleteSize())
                 .body(Map.of("error", ex.getMessage()));
     }
 
@@ -76,6 +92,14 @@ public class GlobalExceptionHandler {
 
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(Map.of("error", "A storage error occurred while processing your request."));
+    }
+
+    @ExceptionHandler(StorageObjectNotFoundException.class)
+    public ResponseEntity<?> handleStorageObjectNotFound(StorageObjectNotFoundException ex) {
+        log.warn("Storage object referenced by file metadata was not found", ex);
+
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(Map.of("error", "File content was not found."));
     }
 
     @ExceptionHandler(Exception.class)

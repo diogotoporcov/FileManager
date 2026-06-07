@@ -1,6 +1,9 @@
 package com.filemanager.api.file.web;
 
 import com.filemanager.api.auth.application.CurrentUserService;
+import com.filemanager.api.file.application.FileDownload;
+import com.filemanager.api.file.application.FileTransferPolicy;
+import com.filemanager.api.file.application.PresignedDownloadUrl;
 import com.filemanager.api.file.web.search.FileSearchQuery;
 import com.filemanager.api.file.application.FileService;
 import com.filemanager.api.file.domain.FileEntity;
@@ -13,13 +16,11 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
+import java.io.InputStream;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springdoc.core.annotations.ParameterObject;
-import org.springframework.core.io.InputStreamResource;
-import org.springframework.core.io.Resource;
-import org.springframework.http.ContentDisposition;
+import org.springframework.http.CacheControl;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -28,11 +29,13 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 @RestController
 @RequestMapping("/files")
@@ -114,19 +117,56 @@ public class FileController {
             @ApiResponse(responseCode = "200", description = "File content stream"),
             @ApiResponse(responseCode = "404", description = "File not found", content = @Content)
     })
-    @GetMapping(value = "/{fileId}/download", produces = MediaType.APPLICATION_OCTET_STREAM_VALUE)
-    public ResponseEntity<Resource> downloadFile(@Parameter(description = "ID of the file") @PathVariable UUID fileId) {
+    @GetMapping("/{fileId}/download")
+    public ResponseEntity<StreamingResponseBody> downloadFile(
+            @Parameter(description = "ID of the file") @PathVariable UUID fileId,
+            @RequestHeader(value = HttpHeaders.RANGE, required = false) String rangeHeader) {
         UUID actorUserId = currentUserService.getCurrentUserId();
-        FileEntity entity = fileService.getFileMetadata(fileId, actorUserId);
-        Resource resource = new InputStreamResource(fileService.downloadFile(fileId, actorUserId));
+        FileDownload download = fileService.openDownload(fileId, actorUserId, rangeHeader);
+        StreamingResponseBody body = outputStream -> {
+            try (InputStream content = download.getContent()) {
+                content.transferTo(outputStream);
+            }
+        };
+        ResponseEntity.BodyBuilder responseBuilder = ResponseEntity
+                .status(download.isPartialContent() ? HttpStatus.PARTIAL_CONTENT : HttpStatus.OK)
+                .contentType(MediaType.parseMediaType(FileTransferPolicy.safeContentType(download.getMimeType())))
+                .contentLength(download.getContentLength())
+                .header(HttpHeaders.CONTENT_DISPOSITION, FileTransferPolicy.attachmentContentDisposition(download.getName()))
+                .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                .cacheControl(CacheControl.noStore());
 
-        return ResponseEntity.ok()
-                .contentType(MediaType.parseMediaType(entity.getMimeType()))
-                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
-                        .filename(safeDownloadFilename(entity.getName()), StandardCharsets.UTF_8)
-                        .build()
-                        .toString())
-                .body(resource);
+        String safeEtag = FileTransferPolicy.safeEtag(download.getEtag());
+        if (safeEtag != null) {
+            responseBuilder.header(HttpHeaders.ETAG, safeEtag);
+        }
+
+        if (download.isPartialContent()) {
+            responseBuilder.header(HttpHeaders.CONTENT_RANGE, "bytes "
+                    + download.getRangeStart() + "-" + download.getRangeEnd() + "/" + download.getCompleteSize());
+        }
+
+        return responseBuilder.body(body);
+    }
+
+    @Operation(summary = "Create presigned download URL", description = "Creates a short-lived permission-checked GET URL.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Presigned download URL created"),
+            @ApiResponse(responseCode = "400", description = "Presigned downloads are disabled", content = @Content),
+            @ApiResponse(responseCode = "404", description = "File not found", content = @Content)
+    })
+    @PostMapping("/{fileId}/download-url")
+    public PresignedDownloadUrlResponse createPresignedDownloadUrl(
+            @Parameter(description = "ID of the file") @PathVariable UUID fileId) {
+        UUID actorUserId = currentUserService.getCurrentUserId();
+        PresignedDownloadUrl downloadUrl = fileService.createPresignedDownloadUrl(fileId, actorUserId);
+
+        return PresignedDownloadUrlResponse.builder()
+                .url(downloadUrl.getUrl())
+                .method(downloadUrl.getMethod())
+                .expiresAt(downloadUrl.getExpiresAt())
+                .expiresInSeconds(downloadUrl.getExpiresInSeconds())
+                .build();
     }
 
     private void validateUpload(MultipartFile file) {
@@ -137,18 +177,6 @@ public class FileController {
         if (file.getOriginalFilename() == null || file.getOriginalFilename().isBlank()) {
             throw new IllegalArgumentException("Filename is missing");
         }
-    }
-
-    private String safeDownloadFilename(String filename) {
-        if (filename == null || filename.isBlank()) {
-            return "download";
-        }
-
-        if (filename.contains("\r") || filename.contains("\n")) {
-            throw new IllegalArgumentException("Invalid filename");
-        }
-
-        return filename;
     }
 
     @Operation(summary = "Delete file", description = "Deletes a specific file.")

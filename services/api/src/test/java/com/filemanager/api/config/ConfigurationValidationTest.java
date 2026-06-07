@@ -13,6 +13,7 @@ import com.filemanager.api.storage.config.MinioProperties;
 
 import java.util.Map;
 import java.util.Set;
+import java.time.Duration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -153,6 +154,47 @@ class ConfigurationValidationTest {
         assertThat(properties.getProcessing().getVideo().isFrameEmbeddingEnabled()).isFalse();
         assertThat(properties.getProcessing().getVideo().isAudioAnalysisEnabled()).isFalse();
         assertThat(properties.getProcessing().getAudio().isFingerprintEnabled()).isFalse();
+    }
+
+    @Test
+    void fileTransferProperties_Valid() {
+        FileTransferProperties properties = new FileTransferProperties();
+        properties.getPresignedDownload().setEnabled(true);
+        properties.getPresignedDownload().setTtl(Duration.ofMinutes(5));
+
+        Set<ConstraintViolation<FileTransferProperties>> violations = validator.validate(properties);
+
+        assertThat(violations).isEmpty();
+    }
+
+    @Test
+    void fileTransferProperties_InvalidTtl_Fail() {
+        FileTransferProperties properties = new FileTransferProperties();
+        properties.getPresignedDownload().setTtl(Duration.ZERO);
+
+        Set<ConstraintViolation<FileTransferProperties>> violations = validator.validate(properties);
+
+        assertThat(violations).hasSize(1);
+
+        properties.getPresignedDownload().setTtl(Duration.ofHours(2));
+        violations = validator.validate(properties);
+
+        assertThat(violations).hasSize(1);
+    }
+
+    @Test
+    void fileTransferProperties_PresignedDownloadBindsCorrectly() {
+        MapConfigurationPropertySource source = new MapConfigurationPropertySource(Map.of(
+                "file-transfer.presigned-download.enabled", "false",
+                "file-transfer.presigned-download.ttl", "10m"
+        ));
+
+        FileTransferProperties properties = new Binder(source)
+                .bind("file-transfer", Bindable.of(FileTransferProperties.class))
+                .get();
+
+        assertThat(properties.getPresignedDownload().isEnabled()).isFalse();
+        assertThat(properties.getPresignedDownload().getTtl()).isEqualTo(Duration.ofMinutes(10));
     }
 
     @Test
