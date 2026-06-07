@@ -1,10 +1,9 @@
 -- PostgreSQL extensions.
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS vector;
 
 -- Identity tables.
 CREATE TABLE users (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
     email VARCHAR(255) NOT NULL UNIQUE,
     first_name VARCHAR(255),
     last_name VARCHAR(255),
@@ -13,7 +12,7 @@ CREATE TABLE users (
 );
 
 CREATE TABLE user_identities (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
     user_id UUID NOT NULL REFERENCES users(id),
     provider VARCHAR(255) NOT NULL,
     provider_subject VARCHAR(255) NOT NULL,
@@ -23,7 +22,7 @@ CREATE TABLE user_identities (
 
 -- Folder hierarchy and lookup indexes.
 CREATE TABLE folders (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
     name VARCHAR(255) NOT NULL,
     parent_folder_id UUID REFERENCES folders(id),
     owner_user_id UUID NOT NULL REFERENCES users(id),
@@ -66,7 +65,7 @@ CREATE INDEX idx_folder_closure_ancestor_descendant
 
 -- File metadata and storage references.
 CREATE TABLE files (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
     name VARCHAR(255) NOT NULL,
     storage_path VARCHAR(1024) NOT NULL UNIQUE,
     etag VARCHAR(255),
@@ -92,7 +91,7 @@ CREATE INDEX idx_files_created_by_user
 
 -- File fingerprinting and embedding data.
 CREATE TABLE file_fingerprints (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
     file_id UUID NOT NULL REFERENCES files(id),
     algorithm VARCHAR(50) NOT NULL CHECK (algorithm IN ('SHA256')),
     hash_value VARCHAR(255) NOT NULL,
@@ -104,7 +103,7 @@ CREATE INDEX idx_fingerprints_value ON file_fingerprints(hash_value);
 CREATE INDEX idx_fingerprints_file_algo ON file_fingerprints(file_id, algorithm);
 
 CREATE TABLE image_fingerprints (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
     file_id UUID NOT NULL REFERENCES files(id) UNIQUE,
     phash VARCHAR(255) NOT NULL CHECK (phash ~ '^[0-9a-fA-F]{16}$'),
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -113,7 +112,7 @@ CREATE TABLE image_fingerprints (
 CREATE INDEX idx_image_fingerprints_phash ON image_fingerprints(phash);
 
 CREATE TABLE file_embeddings (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
     file_id UUID NOT NULL REFERENCES files(id),
     model_name VARCHAR(255) NOT NULL,
     model_version VARCHAR(255) NOT NULL,
@@ -127,7 +126,7 @@ CREATE INDEX idx_embeddings_file_model ON file_embeddings(file_id, model_name, m
 
 -- Background processing.
 CREATE TABLE processing_jobs (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
     file_id UUID NOT NULL REFERENCES files(id),
     job_type VARCHAR(255) NOT NULL CHECK (job_type IN ('CHECKSUM', 'PHASH', 'EMBEDDING', 'VIDEO_ANALYSIS', 'AUDIO_ANALYSIS')),
     status VARCHAR(50) NOT NULL CHECK (status IN ('PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED')),
@@ -142,7 +141,7 @@ CREATE INDEX idx_processing_jobs_status ON processing_jobs(status);
 
 -- Tags.
 CREATE TABLE tags (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
     display_name VARCHAR(100) NOT NULL,
     normalized_name VARCHAR(100) NOT NULL,
     scope_type VARCHAR(20) NOT NULL CHECK (scope_type IN ('OWNER', 'FOLDER')),
@@ -206,7 +205,7 @@ CREATE INDEX idx_folder_tags_folder_tag
 
 -- Direct sharing and permission grants.
 CREATE TABLE file_grants (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
     file_id UUID NOT NULL REFERENCES files(id),
     grantee_user_id UUID NOT NULL REFERENCES users(id),
     permission VARCHAR(255) NOT NULL,
@@ -228,7 +227,7 @@ CREATE INDEX idx_file_grants_grantee_active
     ON file_grants(grantee_user_id, revoked_at);
 
 CREATE TABLE folder_grants (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
     folder_id UUID NOT NULL REFERENCES folders(id),
     grantee_user_id UUID NOT NULL REFERENCES users(id),
     permission VARCHAR(255) NOT NULL,
@@ -253,7 +252,7 @@ CREATE INDEX idx_folder_grants_grantee_active
 
 -- Fingerprinting and embeddings.
 CREATE TABLE video_fingerprints (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
     file_id UUID NOT NULL REFERENCES files(id) UNIQUE,
     duration_ms BIGINT NOT NULL CHECK (duration_ms > 0),
     width INTEGER CHECK (width > 0),
@@ -269,7 +268,7 @@ CREATE TABLE video_fingerprints (
 CREATE INDEX idx_video_fingerprints_file ON video_fingerprints(file_id);
 
 CREATE TABLE video_frame_fingerprints (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
     file_id UUID NOT NULL REFERENCES files(id),
     timestamp_ms BIGINT NOT NULL CHECK (timestamp_ms >= 0),
     frame_index INTEGER NOT NULL CHECK (frame_index >= 0),
@@ -282,7 +281,7 @@ CREATE INDEX idx_video_frame_fingerprints_file ON video_frame_fingerprints(file_
 CREATE INDEX idx_video_frame_fingerprints_phash ON video_frame_fingerprints(phash);
 
 CREATE TABLE video_frame_embeddings (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
     file_id UUID NOT NULL REFERENCES files(id),
     timestamp_ms BIGINT NOT NULL CHECK (timestamp_ms >= 0),
     frame_index INTEGER NOT NULL CHECK (frame_index >= 0),
@@ -298,7 +297,7 @@ CREATE INDEX idx_video_frame_embeddings_file_model
     ON video_frame_embeddings(file_id, model_name, model_version);
 
 CREATE TABLE audio_fingerprints (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
     file_id UUID NOT NULL REFERENCES files(id) UNIQUE,
     duration_ms BIGINT NOT NULL CHECK (duration_ms > 0),
     codec VARCHAR(255) NOT NULL CHECK (length(trim(codec)) > 0),
