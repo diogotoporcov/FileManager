@@ -60,7 +60,12 @@ public class SharingController {
             @Valid @RequestBody CreateFolderGrantRequest request) {
         UUID actorUserId = currentUserService.getCurrentUserId();
 
-        return sharingService.createFolderGrants(folderId, request.getGranteeUserId(), request.getPermissions(), actorUserId)
+        return sharingService.createFolderGrants(
+                        folderId,
+                        request.getGranteeUserId(),
+                        request.getPermissions(),
+                        request.getScope(),
+                        actorUserId)
                 .stream()
                 .map(grantResponseMapper::toResponse)
                 .toList();

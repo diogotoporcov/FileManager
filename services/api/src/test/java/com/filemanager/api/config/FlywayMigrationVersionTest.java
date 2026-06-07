@@ -33,8 +33,8 @@ class FlywayMigrationVersionTest {
     }
 
     @Test
-    void sharingConstraintMigration_RejectsInertGrantPermissionsAndSplitsFolderUniqueness() throws Exception {
-        String migration = Files.readString(migrationDirectory().resolve("V7__Harden_Sharing_Constraints.sql"));
+    void consolidatedMigration_RejectsInertGrantPermissionsAndSplitsFolderUniqueness() throws Exception {
+        String migration = Files.readString(migrationDirectory().resolve("V1__Initial_Schema.sql"));
 
         assertThat(migration).contains(
                 "CHECK (permission IN ('FILE_VIEW', 'FILE_MODIFY', 'FILE_DELETE'))",
@@ -47,6 +47,39 @@ class FlywayMigrationVersionTest {
                 "folder_grants_no_self_grant",
                 "CHECK (grantee_user_id <> created_by_user_id)");
         assertThat(migration).doesNotContain("FILE_SHARE", "FOLDER_MANAGE_PERMISSIONS");
+    }
+
+    @Test
+    void consolidatedMigration_AddsScopeAndKeepsActiveUniquenessScopeFree() throws Exception {
+        String migration = Files.readString(migrationDirectory().resolve("V1__Initial_Schema.sql"));
+
+        assertThat(migration).contains(
+                "scope VARCHAR(20) NOT NULL DEFAULT 'DIRECT'",
+                "CONSTRAINT chk_folder_grants_scope",
+                "CHECK (scope IN ('DIRECT', 'RECURSIVE'))",
+                "CREATE UNIQUE INDEX ux_folder_grants_active_permission",
+                "ON folder_grants(folder_id, grantee_user_id, permission)",
+                "WHERE revoked_at IS NULL");
+        assertThat(migration).doesNotContain(
+                "ON folder_grants(folder_id, grantee_user_id, permission, scope)",
+                "ON folder_grants(folder_id, grantee_user_id, scope, permission)");
+    }
+
+    @Test
+    void consolidatedMigration_CreatesClosureTableConstraintsAndIndexesWithoutBackfill() throws Exception {
+        String migration = Files.readString(migrationDirectory().resolve("V1__Initial_Schema.sql"));
+
+        assertThat(migration).contains(
+                "CREATE TABLE folder_closure",
+                "ancestor_folder_id UUID NOT NULL REFERENCES folders(id)",
+                "descendant_folder_id UUID NOT NULL REFERENCES folders(id)",
+                "PRIMARY KEY (ancestor_folder_id, descendant_folder_id)",
+                "CONSTRAINT chk_folder_closure_depth CHECK (depth >= 0)",
+                "CREATE INDEX idx_folder_closure_descendant",
+                "CREATE INDEX idx_folder_closure_ancestor",
+                "CREATE INDEX idx_folder_closure_descendant_ancestor",
+                "CREATE INDEX idx_folder_closure_ancestor_descendant");
+        assertThat(migration).doesNotContain("WITH RECURSIVE", "closure_rows");
     }
 
     private List<String> migrationVersions() throws Exception {

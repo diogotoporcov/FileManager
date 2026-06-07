@@ -47,6 +47,11 @@ public class FolderGrantEntity {
     @Column(nullable = false)
     private Permission permission;
 
+    @Builder.Default
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private FolderGrantScope scope = FolderGrantScope.DIRECT;
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "created_by_user_id", nullable = false)
     private User createdByUser;
