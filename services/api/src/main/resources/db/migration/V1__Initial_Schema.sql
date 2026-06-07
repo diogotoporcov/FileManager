@@ -1,6 +1,8 @@
+-- PostgreSQL extensions.
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS vector;
 
+-- Identity tables.
 CREATE TABLE users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     email VARCHAR(255) NOT NULL UNIQUE,
@@ -19,6 +21,7 @@ CREATE TABLE user_identities (
     UNIQUE(provider, provider_subject)
 );
 
+-- Folder hierarchy and lookup indexes.
 CREATE TABLE folders (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name VARCHAR(255) NOT NULL,
@@ -61,6 +64,7 @@ CREATE INDEX idx_folder_closure_descendant_ancestor
 CREATE INDEX idx_folder_closure_ancestor_descendant
     ON folder_closure(ancestor_folder_id, descendant_folder_id);
 
+-- File metadata and storage references.
 CREATE TABLE files (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name VARCHAR(255) NOT NULL,
@@ -86,6 +90,7 @@ CREATE INDEX idx_files_folder_active_created
 CREATE INDEX idx_files_created_by_user
     ON files(created_by_user_id);
 
+-- File fingerprinting and embedding data.
 CREATE TABLE file_fingerprints (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     file_id UUID NOT NULL REFERENCES files(id),
@@ -120,6 +125,7 @@ CREATE TABLE file_embeddings (
 
 CREATE INDEX idx_embeddings_file_model ON file_embeddings(file_id, model_name, model_version);
 
+-- Background processing.
 CREATE TABLE processing_jobs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     file_id UUID NOT NULL REFERENCES files(id),
@@ -134,6 +140,7 @@ CREATE TABLE processing_jobs (
 CREATE INDEX idx_processing_jobs_file ON processing_jobs(file_id);
 CREATE INDEX idx_processing_jobs_status ON processing_jobs(status);
 
+-- Tags.
 CREATE TABLE tags (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     display_name VARCHAR(100) NOT NULL,
@@ -197,6 +204,7 @@ CREATE INDEX idx_folder_tags_tag_folder
 CREATE INDEX idx_folder_tags_folder_tag
     ON folder_tags(folder_id, tag_id);
 
+-- Direct sharing and permission grants.
 CREATE TABLE file_grants (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     file_id UUID NOT NULL REFERENCES files(id),
@@ -243,6 +251,7 @@ CREATE INDEX idx_folder_grants_folder_grantee_active
 CREATE INDEX idx_folder_grants_grantee_active
     ON folder_grants(grantee_user_id, revoked_at);
 
+-- Fingerprinting and embeddings.
 CREATE TABLE video_fingerprints (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     file_id UUID NOT NULL REFERENCES files(id) UNIQUE,
