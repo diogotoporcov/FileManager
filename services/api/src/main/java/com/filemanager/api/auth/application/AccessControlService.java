@@ -60,7 +60,8 @@ public class AccessControlService {
 
         return switch (permission) {
             case FILE_VIEW -> hasActiveFileGrant(file, actorUserId, Permission.FILE_VIEW)
-                    || hasActiveContainingFolderGrant(file, actorUserId, Permission.FOLDER_VIEW);
+                    || hasActiveContainingFolderGrant(file, actorUserId, Permission.FOLDER_VIEW)
+                    || hasActiveRecursiveContainingFolderGrant(file, actorUserId, Permission.FOLDER_VIEW);
             case FILE_MODIFY -> hasActiveFileGrant(file, actorUserId, Permission.FILE_MODIFY);
             case FILE_DELETE -> hasActiveFileGrant(file, actorUserId, Permission.FILE_DELETE);
             case FILE_SHARE -> false;
@@ -120,11 +121,23 @@ public class AccessControlService {
         return file.getFolder() != null
                 && file.getFolder().getId() != null
                 && file.getFolder().getDeletedAt() == null
-                && folderGrantRepository.hasActiveGrant(file.getFolder().getId(), actorUserId, permission);
+                && folderGrantRepository.hasActiveDirectGrant(file.getFolder().getId(), actorUserId, permission);
+    }
+
+    private boolean hasActiveRecursiveContainingFolderGrant(FileEntity file, UUID actorUserId, Permission permission) {
+        return file.getFolder() != null
+                && file.getFolder().getId() != null
+                && file.getFolder().getDeletedAt() == null
+                && folderGrantRepository.hasActiveRecursiveGrantOnFolderOrAncestor(
+                        file.getFolder().getId(),
+                        actorUserId,
+                        permission);
     }
 
     private boolean hasActiveFolderGrant(FolderEntity folder, UUID actorUserId, Permission permission) {
-        return folder.getId() != null && folderGrantRepository.hasActiveGrant(folder.getId(), actorUserId, permission);
+        return folder.getId() != null
+                && (folderGrantRepository.hasActiveDirectGrant(folder.getId(), actorUserId, permission)
+                || folderGrantRepository.hasActiveRecursiveGrantOnFolderOrAncestor(folder.getId(), actorUserId, permission));
     }
 
     private boolean isDirectParentFolderOwnedBy(FolderEntity folder, UUID actorUserId) {

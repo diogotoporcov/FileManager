@@ -11,6 +11,7 @@ import com.filemanager.api.identity.domain.User;
 import com.filemanager.api.identity.persistence.UserRepository;
 import com.filemanager.api.sharing.domain.FileGrantEntity;
 import com.filemanager.api.sharing.domain.FolderGrantEntity;
+import com.filemanager.api.sharing.domain.FolderGrantScope;
 import com.filemanager.api.sharing.persistence.FileGrantRepository;
 import com.filemanager.api.sharing.persistence.FolderGrantRepository;
 import java.util.List;
@@ -101,6 +102,44 @@ class SharingServiceTest {
     }
 
     @Test
+    void folderGrantDefaultsToDirectWhenScopeIsNull() {
+        FolderEntity folder = FolderEntity.builder().id(folderId).ownerUser(owner).build();
+        when(folderRepository.findByIdAndDeletedAtIsNull(folderId)).thenReturn(Optional.of(folder));
+        when(userRepository.findById(ownerId)).thenReturn(Optional.of(owner));
+        when(userRepository.findById(granteeId)).thenReturn(Optional.of(grantee));
+        when(folderGrantRepository.save(any(FolderGrantEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        sharingService.createFolderGrants(
+                folderId,
+                granteeId,
+                List.of(Permission.FOLDER_VIEW),
+                null,
+                ownerId);
+
+        ArgumentCaptor<FolderGrantEntity> captor = ArgumentCaptor.forClass(FolderGrantEntity.class);
+        verify(folderGrantRepository).save(captor.capture());
+        assertEquals(FolderGrantScope.DIRECT, captor.getValue().getScope());
+    }
+
+    @Test
+    void ownerCreatesRecursiveFolderGrant() {
+        FolderEntity folder = FolderEntity.builder().id(folderId).ownerUser(owner).build();
+        when(folderRepository.findByIdAndDeletedAtIsNull(folderId)).thenReturn(Optional.of(folder));
+        when(userRepository.findById(ownerId)).thenReturn(Optional.of(owner));
+        when(userRepository.findById(granteeId)).thenReturn(Optional.of(grantee));
+        when(folderGrantRepository.save(any(FolderGrantEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var grants = sharingService.createFolderGrants(
+                folderId,
+                granteeId,
+                List.of(Permission.FOLDER_VIEW),
+                FolderGrantScope.RECURSIVE,
+                ownerId);
+
+        assertEquals(FolderGrantScope.RECURSIVE, grants.getFirst().getScope());
+    }
+
+    @Test
     void nonOwnerCannotCreateFileGrant() {
         FileEntity file = FileEntity.builder().id(fileId).ownerUser(user(UUID.randomUUID())).build();
         when(fileRepository.findByIdAndDeletedAtIsNull(fileId)).thenReturn(Optional.of(file));
@@ -125,6 +164,23 @@ class SharingServiceTest {
     }
 
     @Test
+    void nonOwnerCannotCreateRecursiveFolderGrant() {
+        FolderEntity folder = FolderEntity.builder().id(folderId).ownerUser(user(UUID.randomUUID())).build();
+        when(folderRepository.findByIdAndDeletedAtIsNull(folderId)).thenReturn(Optional.of(folder));
+        when(userRepository.findById(ownerId)).thenReturn(Optional.of(owner));
+        when(userRepository.findById(granteeId)).thenReturn(Optional.of(grantee));
+
+        assertThrows(AccessDeniedException.class,
+                () -> sharingService.createFolderGrants(
+                        folderId,
+                        granteeId,
+                        List.of(Permission.FOLDER_VIEW),
+                        FolderGrantScope.RECURSIVE,
+                        ownerId));
+        verify(folderGrantRepository, never()).save(any());
+    }
+
+    @Test
     void duplicateActiveFileGrantReturnsExistingGrant() {
         FileEntity file = FileEntity.builder().id(fileId).ownerUser(owner).build();
         FileGrantEntity existing = FileGrantEntity.builder().id(UUID.randomUUID()).file(file).granteeUser(grantee).permission(Permission.FILE_VIEW).build();
@@ -138,6 +194,68 @@ class SharingServiceTest {
 
         assertSame(existing, grants.getFirst());
         verify(fileGrantRepository, never()).save(any());
+    }
+
+    @Test
+    void duplicateActiveFolderGrantUpdatesDirectScopeToRecursive() {
+        FolderEntity folder = FolderEntity.builder().id(folderId).ownerUser(owner).build();
+        FolderGrantEntity existing = FolderGrantEntity.builder()
+                .id(UUID.randomUUID())
+                .folder(folder)
+                .granteeUser(grantee)
+                .permission(Permission.FOLDER_VIEW)
+                .scope(FolderGrantScope.DIRECT)
+                .build();
+        when(folderRepository.findByIdAndDeletedAtIsNull(folderId)).thenReturn(Optional.of(folder));
+        when(userRepository.findById(ownerId)).thenReturn(Optional.of(owner));
+        when(userRepository.findById(granteeId)).thenReturn(Optional.of(grantee));
+        when(folderGrantRepository.findByFolderIdAndGranteeUserIdAndPermissionAndRevokedAtIsNull(
+                folderId,
+                granteeId,
+                Permission.FOLDER_VIEW)).thenReturn(Optional.of(existing));
+        when(folderGrantRepository.save(existing)).thenReturn(existing);
+
+        var grants = sharingService.createFolderGrants(
+                folderId,
+                granteeId,
+                List.of(Permission.FOLDER_VIEW),
+                FolderGrantScope.RECURSIVE,
+                ownerId);
+
+        assertSame(existing, grants.getFirst());
+        assertEquals(FolderGrantScope.RECURSIVE, existing.getScope());
+        verify(folderGrantRepository).save(existing);
+    }
+
+    @Test
+    void duplicateActiveFolderGrantUpdatesRecursiveScopeToDirect() {
+        FolderEntity folder = FolderEntity.builder().id(folderId).ownerUser(owner).build();
+        FolderGrantEntity existing = FolderGrantEntity.builder()
+                .id(UUID.randomUUID())
+                .folder(folder)
+                .granteeUser(grantee)
+                .permission(Permission.FOLDER_VIEW)
+                .scope(FolderGrantScope.RECURSIVE)
+                .build();
+        when(folderRepository.findByIdAndDeletedAtIsNull(folderId)).thenReturn(Optional.of(folder));
+        when(userRepository.findById(ownerId)).thenReturn(Optional.of(owner));
+        when(userRepository.findById(granteeId)).thenReturn(Optional.of(grantee));
+        when(folderGrantRepository.findByFolderIdAndGranteeUserIdAndPermissionAndRevokedAtIsNull(
+                folderId,
+                granteeId,
+                Permission.FOLDER_VIEW)).thenReturn(Optional.of(existing));
+        when(folderGrantRepository.save(existing)).thenReturn(existing);
+
+        var grants = sharingService.createFolderGrants(
+                folderId,
+                granteeId,
+                List.of(Permission.FOLDER_VIEW),
+                FolderGrantScope.DIRECT,
+                ownerId);
+
+        assertSame(existing, grants.getFirst());
+        assertEquals(FolderGrantScope.DIRECT, existing.getScope());
+        verify(folderGrantRepository).save(existing);
     }
 
     @Test

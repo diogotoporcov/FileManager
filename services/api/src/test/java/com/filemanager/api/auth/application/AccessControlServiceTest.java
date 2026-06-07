@@ -121,7 +121,7 @@ class AccessControlServiceTest {
     void folderViewGrantAllowsFolderViewOnly() {
         FolderEntity folder = FolderEntity.builder().id(folderId).ownerUser(user(UUID.randomUUID())).build();
         when(folderRepository.findByIdAndDeletedAtIsNull(folderId)).thenReturn(Optional.of(folder));
-        when(folderGrantRepository.hasActiveGrant(folderId, actorUserId, Permission.FOLDER_VIEW)).thenReturn(true);
+        when(folderGrantRepository.hasActiveDirectGrant(folderId, actorUserId, Permission.FOLDER_VIEW)).thenReturn(true);
 
         assertDoesNotThrow(() -> accessControlService.assertCanAccessFolder(actorUserId, folderId, Permission.FOLDER_VIEW));
         assertFalse(accessControlService.hasFolderPermission(actorUserId, folder, Permission.FOLDER_UPLOAD_FILE));
@@ -130,7 +130,7 @@ class AccessControlServiceTest {
     @Test
     void folderUploadGrantAllowsFolderUpload() {
         FolderEntity folder = FolderEntity.builder().id(folderId).ownerUser(user(UUID.randomUUID())).build();
-        when(folderGrantRepository.hasActiveGrant(folderId, actorUserId, Permission.FOLDER_UPLOAD_FILE)).thenReturn(true);
+        when(folderGrantRepository.hasActiveDirectGrant(folderId, actorUserId, Permission.FOLDER_UPLOAD_FILE)).thenReturn(true);
 
         assertTrue(accessControlService.hasFolderPermission(actorUserId, folder, Permission.FOLDER_UPLOAD_FILE));
     }
@@ -149,7 +149,7 @@ class AccessControlServiceTest {
     void folderViewGrantAllowsDirectFileView() {
         FolderEntity folder = FolderEntity.builder().id(folderId).ownerUser(user(UUID.randomUUID())).build();
         FileEntity file = FileEntity.builder().id(fileId).folder(folder).ownerUser(user(UUID.randomUUID())).build();
-        when(folderGrantRepository.hasActiveGrant(folderId, actorUserId, Permission.FOLDER_VIEW)).thenReturn(true);
+        when(folderGrantRepository.hasActiveDirectGrant(folderId, actorUserId, Permission.FOLDER_VIEW)).thenReturn(true);
 
         assertTrue(accessControlService.hasFilePermission(actorUserId, file, Permission.FILE_VIEW));
         assertFalse(accessControlService.hasFilePermission(actorUserId, file, Permission.FILE_DELETE));
@@ -199,6 +199,64 @@ class AccessControlServiceTest {
     }
 
     @Test
+    void recursiveFolderViewGrantAuthorizesDescendantFolders() {
+        FolderEntity parent = FolderEntity.builder().id(UUID.randomUUID()).ownerUser(user(UUID.randomUUID())).build();
+        FolderEntity child = FolderEntity.builder()
+                .id(folderId)
+                .parentFolder(parent)
+                .ownerUser(user(UUID.randomUUID()))
+                .build();
+        when(folderGrantRepository.hasActiveRecursiveGrantOnFolderOrAncestor(folderId, actorUserId, Permission.FOLDER_VIEW))
+                .thenReturn(true);
+
+        assertTrue(accessControlService.hasFolderPermission(actorUserId, child, Permission.FOLDER_VIEW));
+    }
+
+    @Test
+    void recursiveFolderViewGrantAuthorizesFilesInDescendantFolders() {
+        FolderEntity parent = FolderEntity.builder().id(UUID.randomUUID()).ownerUser(user(UUID.randomUUID())).build();
+        FolderEntity child = FolderEntity.builder().id(folderId).parentFolder(parent).ownerUser(user(UUID.randomUUID())).build();
+        FileEntity file = FileEntity.builder().id(fileId).folder(child).ownerUser(user(UUID.randomUUID())).build();
+        when(folderGrantRepository.hasActiveRecursiveGrantOnFolderOrAncestor(folderId, actorUserId, Permission.FOLDER_VIEW))
+                .thenReturn(true);
+
+        assertTrue(accessControlService.hasFilePermission(actorUserId, file, Permission.FILE_VIEW));
+    }
+
+    @Test
+    void recursiveFolderUploadGrantAuthorizesDescendantUpload() {
+        FolderEntity parent = FolderEntity.builder().id(UUID.randomUUID()).ownerUser(user(UUID.randomUUID())).build();
+        FolderEntity child = FolderEntity.builder().id(folderId).parentFolder(parent).ownerUser(user(UUID.randomUUID())).build();
+        when(folderGrantRepository.hasActiveRecursiveGrantOnFolderOrAncestor(folderId, actorUserId, Permission.FOLDER_UPLOAD_FILE))
+                .thenReturn(true);
+
+        assertTrue(accessControlService.hasFolderPermission(actorUserId, child, Permission.FOLDER_UPLOAD_FILE));
+    }
+
+    @Test
+    void recursiveFolderCreateGrantAuthorizesDescendantFolderCreation() {
+        FolderEntity parent = FolderEntity.builder().id(UUID.randomUUID()).ownerUser(user(UUID.randomUUID())).build();
+        FolderEntity child = FolderEntity.builder().id(folderId).parentFolder(parent).ownerUser(user(UUID.randomUUID())).build();
+        when(folderGrantRepository.hasActiveRecursiveGrantOnFolderOrAncestor(folderId, actorUserId, Permission.FOLDER_CREATE))
+                .thenReturn(true);
+
+        assertTrue(accessControlService.hasFolderPermission(actorUserId, child, Permission.FOLDER_CREATE));
+    }
+
+    @Test
+    void recursiveRenameAndDeleteGrantsAuthorizeDescendantFolderManagement() {
+        FolderEntity parent = FolderEntity.builder().id(UUID.randomUUID()).ownerUser(user(UUID.randomUUID())).build();
+        FolderEntity child = FolderEntity.builder().id(folderId).parentFolder(parent).ownerUser(user(UUID.randomUUID())).build();
+        when(folderGrantRepository.hasActiveRecursiveGrantOnFolderOrAncestor(folderId, actorUserId, Permission.FOLDER_RENAME))
+                .thenReturn(true);
+        when(folderGrantRepository.hasActiveRecursiveGrantOnFolderOrAncestor(folderId, actorUserId, Permission.FOLDER_DELETE))
+                .thenReturn(true);
+
+        assertTrue(accessControlService.hasFolderPermission(actorUserId, child, Permission.FOLDER_RENAME));
+        assertTrue(accessControlService.hasFolderPermission(actorUserId, child, Permission.FOLDER_DELETE));
+    }
+
+    @Test
     void guestCannotManageAnotherGuestsChildFolderThroughParentViewGrant() {
         FolderEntity parent = FolderEntity.builder().id(UUID.randomUUID()).ownerUser(user(UUID.randomUUID())).build();
         FolderEntity child = FolderEntity.builder()
@@ -206,7 +264,6 @@ class AccessControlServiceTest {
                 .parentFolder(parent)
                 .ownerUser(user(UUID.randomUUID()))
                 .build();
-        when(folderGrantRepository.hasActiveGrant(folderId, actorUserId, Permission.FOLDER_DELETE)).thenReturn(false);
 
         assertFalse(accessControlService.hasFolderPermission(actorUserId, child, Permission.FOLDER_DELETE));
     }
@@ -224,7 +281,6 @@ class AccessControlServiceTest {
         UUID parentId = UUID.randomUUID();
         FolderEntity parent = FolderEntity.builder().id(parentId).ownerUser(user(UUID.randomUUID())).build();
         FolderEntity child = FolderEntity.builder().id(folderId).parentFolder(parent).ownerUser(user(UUID.randomUUID())).build();
-        when(folderGrantRepository.hasActiveGrant(folderId, actorUserId, Permission.FOLDER_VIEW)).thenReturn(false);
 
         assertFalse(accessControlService.hasFolderPermission(actorUserId, child, Permission.FOLDER_VIEW));
     }
@@ -236,7 +292,6 @@ class AccessControlServiceTest {
         FolderEntity child = FolderEntity.builder().id(folderId).parentFolder(parent).ownerUser(user(UUID.randomUUID())).build();
         FileEntity file = FileEntity.builder().id(fileId).folder(child).ownerUser(user(UUID.randomUUID())).build();
         when(fileGrantRepository.hasActiveGrant(fileId, actorUserId, Permission.FILE_VIEW)).thenReturn(false);
-        when(folderGrantRepository.hasActiveGrant(folderId, actorUserId, Permission.FOLDER_VIEW)).thenReturn(false);
 
         assertFalse(accessControlService.hasFilePermission(actorUserId, file, Permission.FILE_VIEW));
     }

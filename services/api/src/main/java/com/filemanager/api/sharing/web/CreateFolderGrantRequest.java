@@ -1,6 +1,7 @@
 package com.filemanager.api.sharing.web;
 
 import com.filemanager.api.auth.domain.Permission;
+import com.filemanager.api.sharing.domain.FolderGrantScope;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import java.util.List;
@@ -16,4 +17,10 @@ public class CreateFolderGrantRequest {
 
     @NotEmpty
     private List<Permission> permissions;
+
+    private FolderGrantScope scope;
+
+    public FolderGrantScope getScope() {
+        return scope == null ? FolderGrantScope.DIRECT : scope;
+    }
 }

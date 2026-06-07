@@ -1,6 +1,8 @@
+-- PostgreSQL extensions.
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS vector;
 
+-- Identity tables.
 CREATE TABLE users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     email VARCHAR(255) NOT NULL UNIQUE,
@@ -19,6 +21,50 @@ CREATE TABLE user_identities (
     UNIQUE(provider, provider_subject)
 );
 
+-- Folder hierarchy and lookup indexes.
+CREATE TABLE folders (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(255) NOT NULL,
+    parent_folder_id UUID REFERENCES folders(id),
+    owner_user_id UUID NOT NULL REFERENCES users(id),
+    created_by_user_id UUID NOT NULL REFERENCES users(id),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP WITH TIME ZONE
+);
+
+CREATE INDEX idx_folders_owner_user_parent_active_name
+    ON folders(owner_user_id, parent_folder_id, deleted_at, name);
+
+CREATE UNIQUE INDEX ux_folders_owner_user_active_root_name
+    ON folders(owner_user_id, lower(name))
+    WHERE parent_folder_id IS NULL AND deleted_at IS NULL;
+
+CREATE UNIQUE INDEX ux_folders_parent_active_child_name
+    ON folders(parent_folder_id, lower(name))
+    WHERE parent_folder_id IS NOT NULL AND deleted_at IS NULL;
+
+CREATE TABLE folder_closure (
+    ancestor_folder_id UUID NOT NULL REFERENCES folders(id),
+    descendant_folder_id UUID NOT NULL REFERENCES folders(id),
+    depth INTEGER NOT NULL,
+    PRIMARY KEY (ancestor_folder_id, descendant_folder_id),
+    CONSTRAINT chk_folder_closure_depth CHECK (depth >= 0)
+);
+
+CREATE INDEX idx_folder_closure_descendant
+    ON folder_closure(descendant_folder_id);
+
+CREATE INDEX idx_folder_closure_ancestor
+    ON folder_closure(ancestor_folder_id);
+
+CREATE INDEX idx_folder_closure_descendant_ancestor
+    ON folder_closure(descendant_folder_id, ancestor_folder_id);
+
+CREATE INDEX idx_folder_closure_ancestor_descendant
+    ON folder_closure(ancestor_folder_id, descendant_folder_id);
+
+-- File metadata and storage references.
 CREATE TABLE files (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name VARCHAR(255) NOT NULL,
@@ -27,6 +73,8 @@ CREATE TABLE files (
     mime_type VARCHAR(255) NOT NULL,
     size BIGINT NOT NULL,
     owner_user_id UUID NOT NULL REFERENCES users(id),
+    folder_id UUID REFERENCES folders(id),
+    created_by_user_id UUID NOT NULL REFERENCES users(id),
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     deleted_at TIMESTAMP WITH TIME ZONE
@@ -36,6 +84,13 @@ CREATE INDEX idx_files_owner_user_active_created
     ON files(owner_user_id, created_at DESC, id DESC)
     WHERE deleted_at IS NULL;
 
+CREATE INDEX idx_files_folder_active_created
+    ON files(folder_id, deleted_at, created_at DESC, id DESC);
+
+CREATE INDEX idx_files_created_by_user
+    ON files(created_by_user_id);
+
+-- File fingerprinting and embedding data.
 CREATE TABLE file_fingerprints (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     file_id UUID NOT NULL REFERENCES files(id),
@@ -70,10 +125,11 @@ CREATE TABLE file_embeddings (
 
 CREATE INDEX idx_embeddings_file_model ON file_embeddings(file_id, model_name, model_version);
 
+-- Background processing.
 CREATE TABLE processing_jobs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     file_id UUID NOT NULL REFERENCES files(id),
-    job_type VARCHAR(255) NOT NULL CHECK (job_type IN ('CHECKSUM', 'PHASH', 'EMBEDDING')),
+    job_type VARCHAR(255) NOT NULL CHECK (job_type IN ('CHECKSUM', 'PHASH', 'EMBEDDING', 'VIDEO_ANALYSIS', 'AUDIO_ANALYSIS')),
     status VARCHAR(50) NOT NULL CHECK (status IN ('PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED')),
     external_job_id VARCHAR(255),
     error_message TEXT,
@@ -83,3 +139,180 @@ CREATE TABLE processing_jobs (
 
 CREATE INDEX idx_processing_jobs_file ON processing_jobs(file_id);
 CREATE INDEX idx_processing_jobs_status ON processing_jobs(status);
+
+-- Tags.
+CREATE TABLE tags (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    display_name VARCHAR(100) NOT NULL,
+    normalized_name VARCHAR(100) NOT NULL,
+    scope_type VARCHAR(20) NOT NULL CHECK (scope_type IN ('OWNER', 'FOLDER')),
+    scope_folder_id UUID REFERENCES folders(id),
+    owner_user_id UUID NOT NULL REFERENCES users(id),
+    created_by_user_id UUID NOT NULL REFERENCES users(id),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP WITH TIME ZONE,
+    CONSTRAINT tag_scope_folder_check CHECK (
+        (scope_type = 'OWNER' AND scope_folder_id IS NULL) OR
+        (scope_type = 'FOLDER' AND scope_folder_id IS NOT NULL)
+    )
+);
+
+CREATE UNIQUE INDEX ux_tags_owner_user_active_normalized
+    ON tags(owner_user_id, scope_type, normalized_name)
+    WHERE deleted_at IS NULL AND scope_type = 'OWNER';
+
+CREATE UNIQUE INDEX ux_tags_scope_folder_active_normalized
+    ON tags(scope_folder_id, normalized_name)
+    WHERE deleted_at IS NULL AND scope_type = 'FOLDER';
+
+CREATE INDEX idx_tags_owner_user_scope_normalized
+    ON tags(owner_user_id, scope_type, normalized_name);
+
+CREATE INDEX idx_tags_scope_folder_normalized
+    ON tags(scope_folder_id, normalized_name)
+    WHERE scope_folder_id IS NOT NULL;
+
+CREATE INDEX idx_tags_created_by_user
+    ON tags(created_by_user_id);
+
+CREATE TABLE file_tags (
+    file_id UUID NOT NULL REFERENCES files(id),
+    tag_id UUID NOT NULL REFERENCES tags(id),
+    tagged_by_user_id UUID NOT NULL REFERENCES users(id),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (file_id, tag_id)
+);
+
+CREATE INDEX idx_file_tags_tag_file
+    ON file_tags(tag_id, file_id);
+
+CREATE INDEX idx_file_tags_file_tag
+    ON file_tags(file_id, tag_id);
+
+CREATE TABLE folder_tags (
+    folder_id UUID NOT NULL REFERENCES folders(id),
+    tag_id UUID NOT NULL REFERENCES tags(id),
+    tagged_by_user_id UUID NOT NULL REFERENCES users(id),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (folder_id, tag_id)
+);
+
+CREATE INDEX idx_folder_tags_tag_folder
+    ON folder_tags(tag_id, folder_id);
+
+CREATE INDEX idx_folder_tags_folder_tag
+    ON folder_tags(folder_id, tag_id);
+
+-- Direct sharing and permission grants.
+CREATE TABLE file_grants (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    file_id UUID NOT NULL REFERENCES files(id),
+    grantee_user_id UUID NOT NULL REFERENCES users(id),
+    permission VARCHAR(255) NOT NULL,
+    created_by_user_id UUID NOT NULL REFERENCES users(id),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    revoked_at TIMESTAMP WITH TIME ZONE,
+    CONSTRAINT chk_file_grants_permission CHECK (permission IN ('FILE_VIEW', 'FILE_MODIFY', 'FILE_DELETE')),
+    CONSTRAINT file_grants_no_self_grant CHECK (grantee_user_id <> created_by_user_id)
+);
+
+CREATE UNIQUE INDEX ux_file_grants_active_permission
+    ON file_grants(file_id, grantee_user_id, permission)
+    WHERE revoked_at IS NULL;
+
+CREATE INDEX idx_file_grants_file_grantee_active
+    ON file_grants(file_id, grantee_user_id, revoked_at);
+
+CREATE INDEX idx_file_grants_grantee_active
+    ON file_grants(grantee_user_id, revoked_at);
+
+CREATE TABLE folder_grants (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    folder_id UUID NOT NULL REFERENCES folders(id),
+    grantee_user_id UUID NOT NULL REFERENCES users(id),
+    permission VARCHAR(255) NOT NULL,
+    scope VARCHAR(20) NOT NULL DEFAULT 'DIRECT',
+    created_by_user_id UUID NOT NULL REFERENCES users(id),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    revoked_at TIMESTAMP WITH TIME ZONE,
+    CONSTRAINT chk_folder_grants_permission CHECK (permission IN ('FOLDER_VIEW', 'FOLDER_CREATE', 'FOLDER_RENAME', 'FOLDER_DELETE', 'FOLDER_UPLOAD_FILE')),
+    CONSTRAINT chk_folder_grants_scope CHECK (scope IN ('DIRECT', 'RECURSIVE')),
+    CONSTRAINT folder_grants_no_self_grant CHECK (grantee_user_id <> created_by_user_id)
+);
+
+CREATE UNIQUE INDEX ux_folder_grants_active_permission
+    ON folder_grants(folder_id, grantee_user_id, permission)
+    WHERE revoked_at IS NULL;
+
+CREATE INDEX idx_folder_grants_folder_grantee_active
+    ON folder_grants(folder_id, grantee_user_id, revoked_at);
+
+CREATE INDEX idx_folder_grants_grantee_active
+    ON folder_grants(grantee_user_id, revoked_at);
+
+-- Fingerprinting and embeddings.
+CREATE TABLE video_fingerprints (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    file_id UUID NOT NULL REFERENCES files(id) UNIQUE,
+    duration_ms BIGINT NOT NULL CHECK (duration_ms > 0),
+    width INTEGER CHECK (width > 0),
+    height INTEGER CHECK (height > 0),
+    frame_count BIGINT CHECK (frame_count >= 0),
+    codec VARCHAR(255),
+    sampled_frame_count INTEGER NOT NULL CHECK (sampled_frame_count > 0),
+    sampling_strategy VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_video_fingerprints_file ON video_fingerprints(file_id);
+
+CREATE TABLE video_frame_fingerprints (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    file_id UUID NOT NULL REFERENCES files(id),
+    timestamp_ms BIGINT NOT NULL CHECK (timestamp_ms >= 0),
+    frame_index INTEGER NOT NULL CHECK (frame_index >= 0),
+    phash VARCHAR(255) NOT NULL CHECK (phash ~ '^[0-9a-fA-F]{16}$'),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(file_id, frame_index)
+);
+
+CREATE INDEX idx_video_frame_fingerprints_file ON video_frame_fingerprints(file_id);
+CREATE INDEX idx_video_frame_fingerprints_phash ON video_frame_fingerprints(phash);
+
+CREATE TABLE video_frame_embeddings (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    file_id UUID NOT NULL REFERENCES files(id),
+    timestamp_ms BIGINT NOT NULL CHECK (timestamp_ms >= 0),
+    frame_index INTEGER NOT NULL CHECK (frame_index >= 0),
+    model_name VARCHAR(255) NOT NULL,
+    model_version VARCHAR(255) NOT NULL,
+    dimension INTEGER NOT NULL CHECK (dimension = 768),
+    embedding vector(768) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(file_id, frame_index, model_name, model_version)
+);
+
+CREATE INDEX idx_video_frame_embeddings_file_model
+    ON video_frame_embeddings(file_id, model_name, model_version);
+
+CREATE TABLE audio_fingerprints (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    file_id UUID NOT NULL REFERENCES files(id) UNIQUE,
+    duration_ms BIGINT NOT NULL CHECK (duration_ms > 0),
+    codec VARCHAR(255) NOT NULL CHECK (length(trim(codec)) > 0),
+    sample_rate INTEGER NOT NULL CHECK (sample_rate > 0),
+    channels INTEGER NOT NULL CHECK (channels > 0),
+    bit_rate BIGINT CHECK (bit_rate > 0),
+    audio_stream_index INTEGER CHECK (audio_stream_index >= 0),
+    container_format VARCHAR(255),
+    fingerprint VARCHAR(32768) NOT NULL CHECK (length(trim(fingerprint)) > 0),
+    fingerprint_algorithm VARCHAR(64) NOT NULL CHECK (length(trim(fingerprint_algorithm)) > 0),
+    fingerprint_version VARCHAR(128) NOT NULL CHECK (length(trim(fingerprint_version)) > 0),
+    fingerprint_duration_seconds INTEGER NOT NULL CHECK (fingerprint_duration_seconds > 0),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_audio_fingerprints_file ON audio_fingerprints(file_id);

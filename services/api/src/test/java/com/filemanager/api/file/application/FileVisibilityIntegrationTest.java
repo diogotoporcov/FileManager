@@ -6,13 +6,17 @@ import com.filemanager.api.file.domain.FileEntity;
 import com.filemanager.api.file.persistence.FileRepository;
 import com.filemanager.api.file.web.FileResponse;
 import com.filemanager.api.file.web.search.FileSearchQuery;
+import com.filemanager.api.folder.domain.FolderClosureEntity;
+import com.filemanager.api.folder.domain.FolderClosureId;
 import com.filemanager.api.folder.domain.FolderEntity;
+import com.filemanager.api.folder.persistence.FolderClosureRepository;
 import com.filemanager.api.folder.persistence.FolderRepository;
 import com.filemanager.api.identity.domain.User;
 import com.filemanager.api.identity.persistence.UserRepository;
 import com.filemanager.api.processing.messaging.FileProcessingRequestedEvent;
 import com.filemanager.api.sharing.domain.FileGrantEntity;
 import com.filemanager.api.sharing.domain.FolderGrantEntity;
+import com.filemanager.api.sharing.domain.FolderGrantScope;
 import com.filemanager.api.sharing.persistence.FileGrantRepository;
 import com.filemanager.api.sharing.persistence.FolderGrantRepository;
 import com.filemanager.api.tag.domain.FileTagEntity;
@@ -22,6 +26,7 @@ import com.filemanager.api.tag.domain.TagScopeType;
 import com.filemanager.api.tag.persistence.FileTagRepository;
 import com.filemanager.api.tag.persistence.TagRepository;
 import io.minio.MinioClient;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -47,6 +52,8 @@ class FileVisibilityIntegrationTest {
     private FileRepository fileRepository;
     @Autowired
     private FolderRepository folderRepository;
+    @Autowired
+    private FolderClosureRepository folderClosureRepository;
     @Autowired
     private FileGrantRepository fileGrantRepository;
     @Autowired
@@ -134,6 +141,107 @@ class FileVisibilityIntegrationTest {
         assertThat(page.isHasMore()).isTrue();
     }
 
+    @Test
+    void fileInChildFolderIsVisibleThroughRecursiveFolderGrantOnAncestor() {
+        User actor = saveUser("actor@example.com");
+        User owner = saveUser("owner@example.com");
+        FolderEntity parent = saveFolder("photos", owner, null);
+        FolderEntity child = saveFolder("wedding", owner, parent);
+        FileEntity visible = saveFile("child-visible.txt", owner, child);
+        saveFolderGrant(parent, actor, owner, Permission.FOLDER_VIEW, FolderGrantScope.RECURSIVE);
+
+        List<String> names = searchNames(actor, query("name,asc", null));
+
+        assertThat(names).containsExactly(visible.getName());
+    }
+
+    @Test
+    void fileInGrandchildFolderIsVisibleThroughRecursiveFolderGrantOnAncestor() {
+        User actor = saveUser("actor@example.com");
+        User owner = saveUser("owner@example.com");
+        FolderEntity parent = saveFolder("photos", owner, null);
+        FolderEntity child = saveFolder("wedding", owner, parent);
+        FolderEntity grandchild = saveFolder("raw", owner, child);
+        FileEntity visible = saveFile("grandchild-visible.txt", owner, grandchild);
+        saveFolderGrant(parent, actor, owner, Permission.FOLDER_VIEW, FolderGrantScope.RECURSIVE);
+
+        List<String> names = searchNames(actor, query("name,asc", null));
+
+        assertThat(names).containsExactly(visible.getName());
+    }
+
+    @Test
+    void directFolderGrantOnAncestorDoesNotExposeGrandchildFiles() {
+        User actor = saveUser("actor@example.com");
+        User owner = saveUser("owner@example.com");
+        FolderEntity parent = saveFolder("photos", owner, null);
+        FolderEntity child = saveFolder("wedding", owner, parent);
+        FolderEntity grandchild = saveFolder("raw", owner, child);
+        saveFile("hidden.txt", owner, grandchild);
+        saveFolderGrant(parent, actor, owner, Permission.FOLDER_VIEW, FolderGrantScope.DIRECT);
+
+        List<String> names = searchNames(actor, query("name,asc", null));
+
+        assertThat(names).isEmpty();
+    }
+
+    @Test
+    void tagFilterDoesNotLeakFilesOutsideRecursiveGrantScope() {
+        User actor = saveUser("actor@example.com");
+        User owner = saveUser("owner@example.com");
+        FolderEntity sharedParent = saveFolder("shared", owner, null);
+        FolderEntity sharedChild = saveFolder("shared-child", owner, sharedParent);
+        FolderEntity unsharedParent = saveFolder("unshared", owner, null);
+        FileEntity visible = saveFile("visible-tagged.txt", owner, sharedChild);
+        FileEntity hidden = saveFile("hidden-tagged.txt", owner, unsharedParent);
+        TagEntity tag = saveOwnerTag("wedding", actor);
+        saveFileTag(visible, tag, actor);
+        saveFileTag(hidden, tag, actor);
+        saveFolderGrant(sharedParent, actor, owner, Permission.FOLDER_VIEW, FolderGrantScope.RECURSIVE);
+        FileSearchQuery query = query("name,asc", null);
+        query.setTagId(tag.getId());
+
+        List<String> names = searchNames(actor, query);
+
+        assertThat(names).containsExactly(visible.getName());
+    }
+
+    @Test
+    void limitAndSortApplyAfterRecursiveVisibility() {
+        User actor = saveUser("actor@example.com");
+        User owner = saveUser("owner@example.com");
+        FolderEntity parent = saveFolder("shared", owner, null);
+        FolderEntity child = saveFolder("child", owner, parent);
+        saveFile("a-private.txt", owner, null);
+        saveFile("b-private.txt", owner, null);
+        saveFile("c-visible.txt", owner, child);
+        saveFile("d-visible.txt", owner, child);
+        saveFile("e-visible.txt", owner, child);
+        saveFolderGrant(parent, actor, owner, Permission.FOLDER_VIEW, FolderGrantScope.RECURSIVE);
+        FileSearchQuery query = query("name,asc", 2);
+
+        var page = fileService.searchFiles(query, actor.getId());
+
+        assertThat(page.getItems()).extracting("name").containsExactly("c-visible.txt", "d-visible.txt");
+        assertThat(page.isHasMore()).isTrue();
+    }
+
+    @Test
+    void revokedRecursiveFolderGrantRemovesSearchVisibility() {
+        User actor = saveUser("actor@example.com");
+        User owner = saveUser("owner@example.com");
+        FolderEntity parent = saveFolder("shared", owner, null);
+        FolderEntity child = saveFolder("child", owner, parent);
+        saveFile("revoked-hidden.txt", owner, child);
+        FolderGrantEntity grant = saveFolderGrant(parent, actor, owner, Permission.FOLDER_VIEW, FolderGrantScope.RECURSIVE);
+        grant.setRevokedAt(OffsetDateTime.now());
+        folderGrantRepository.saveAndFlush(grant);
+
+        List<String> names = searchNames(actor, query("name,asc", null));
+
+        assertThat(names).isEmpty();
+    }
+
     private List<String> searchNames(User actor, FileSearchQuery query) {
         return fileService.searchFiles(query, actor.getId()).getItems().stream()
                 .map(FileResponse::getName)
@@ -153,12 +261,38 @@ class FileVisibilityIntegrationTest {
     }
 
     private FolderEntity saveFolder(String name, User owner, FolderEntity parent) {
-        return folderRepository.saveAndFlush(FolderEntity.builder()
+        FolderEntity folder = folderRepository.saveAndFlush(FolderEntity.builder()
                 .name(name)
                 .ownerUser(owner)
                 .createdByUser(owner)
                 .parentFolder(parent)
                 .build());
+        saveClosureRows(folder, parent);
+
+        return folder;
+    }
+
+    private void saveClosureRows(FolderEntity folder, FolderEntity parent) {
+        folderClosureRepository.saveAndFlush(FolderClosureEntity.builder()
+                .id(new FolderClosureId(folder.getId(), folder.getId()))
+                .ancestorFolder(folder)
+                .descendantFolder(folder)
+                .depth(0)
+                .build());
+
+        if (parent == null) {
+            return;
+        }
+
+        List<FolderClosureEntity> parentClosureRows = folderClosureRepository.findByDescendantFolderOrderByDepthAsc(parent);
+        folderClosureRepository.saveAllAndFlush(parentClosureRows.stream()
+                .map(parentClosure -> FolderClosureEntity.builder()
+                        .id(new FolderClosureId(parentClosure.getAncestorFolder().getId(), folder.getId()))
+                        .ancestorFolder(parentClosure.getAncestorFolder())
+                        .descendantFolder(folder)
+                        .depth(parentClosure.getDepth() + 1)
+                        .build())
+                .toList());
     }
 
     private FileEntity saveFile(String name, User owner, FolderEntity folder) {
@@ -183,11 +317,21 @@ class FileVisibilityIntegrationTest {
     }
 
     private void saveFolderGrant(FolderEntity folder, User grantee, User createdBy, Permission permission) {
-        folderGrantRepository.saveAndFlush(FolderGrantEntity.builder()
+        saveFolderGrant(folder, grantee, createdBy, permission, FolderGrantScope.DIRECT);
+    }
+
+    private FolderGrantEntity saveFolderGrant(
+            FolderEntity folder,
+            User grantee,
+            User createdBy,
+            Permission permission,
+            FolderGrantScope scope) {
+        return folderGrantRepository.saveAndFlush(FolderGrantEntity.builder()
                 .folder(folder)
                 .granteeUser(grantee)
                 .createdByUser(createdBy)
                 .permission(permission)
+                .scope(scope)
                 .build());
     }
 

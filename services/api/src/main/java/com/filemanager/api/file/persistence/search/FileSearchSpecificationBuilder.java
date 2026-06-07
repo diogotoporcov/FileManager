@@ -7,9 +7,11 @@ import com.filemanager.api.file.application.search.FileSearchCursor;
 import com.filemanager.api.file.application.search.LongRange;
 import com.filemanager.api.file.application.search.SearchValidationException;
 import com.filemanager.api.file.domain.FileEntity;
+import com.filemanager.api.folder.domain.FolderClosureEntity;
 import com.filemanager.api.folder.domain.FolderEntity;
 import com.filemanager.api.sharing.domain.FileGrantEntity;
 import com.filemanager.api.sharing.domain.FolderGrantEntity;
+import com.filemanager.api.sharing.domain.FolderGrantScope;
 import com.filemanager.api.tag.domain.FileTagEntity;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.CriteriaQuery;
@@ -73,7 +75,8 @@ public class FileSearchSpecificationBuilder {
                 ownedByActor,
                 containingFolderOwnedByActor,
                 activeFileGrantExists(root, query, cb, actorUserId),
-                activeFolderGrantExists(root, query, cb, actorUserId));
+                activeDirectFolderGrantExists(root, query, cb, actorUserId),
+                activeRecursiveFolderGrantExists(root, query, cb, actorUserId));
     }
 
     private Predicate containingFolderOwnedByActor(
@@ -109,7 +112,7 @@ public class FileSearchSpecificationBuilder {
         return cb.exists(subquery);
     }
 
-    private Predicate activeFolderGrantExists(
+    private Predicate activeDirectFolderGrantExists(
             Root<FileEntity> root,
             CriteriaQuery<?> query,
             CriteriaBuilder cb,
@@ -121,6 +124,29 @@ public class FileSearchSpecificationBuilder {
                 cb.equal(grant.get("folder").get("id"), root.get("folder").get("id")),
                 cb.equal(grant.get("granteeUser").get("id"), actorUserId),
                 cb.equal(grant.get("permission"), Permission.FOLDER_VIEW),
+                cb.equal(grant.get("scope"), FolderGrantScope.DIRECT),
+                cb.isNull(grant.get("revokedAt")),
+                cb.isNull(grant.get("folder").get("deletedAt")));
+
+        return cb.exists(subquery);
+    }
+
+    private Predicate activeRecursiveFolderGrantExists(
+            Root<FileEntity> root,
+            CriteriaQuery<?> query,
+            CriteriaBuilder cb,
+            UUID actorUserId) {
+        Subquery<UUID> subquery = query.subquery(UUID.class);
+        Root<FolderGrantEntity> grant = subquery.from(FolderGrantEntity.class);
+        Root<FolderClosureEntity> closure = subquery.from(FolderClosureEntity.class);
+        subquery.select(grant.get("folder").get("id"));
+        subquery.where(
+                cb.equal(closure.get("ancestorFolder"), grant.get("folder")),
+                cb.equal(closure.get("descendantFolder").get("id"), root.get("folder").get("id")),
+                cb.isNull(closure.get("descendantFolder").get("deletedAt")),
+                cb.equal(grant.get("granteeUser").get("id"), actorUserId),
+                cb.equal(grant.get("permission"), Permission.FOLDER_VIEW),
+                cb.equal(grant.get("scope"), FolderGrantScope.RECURSIVE),
                 cb.isNull(grant.get("revokedAt")),
                 cb.isNull(grant.get("folder").get("deletedAt")));
 

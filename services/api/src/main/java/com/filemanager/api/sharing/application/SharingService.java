@@ -11,6 +11,7 @@ import com.filemanager.api.identity.domain.User;
 import com.filemanager.api.identity.persistence.UserRepository;
 import com.filemanager.api.sharing.domain.FileGrantEntity;
 import com.filemanager.api.sharing.domain.FolderGrantEntity;
+import com.filemanager.api.sharing.domain.FolderGrantScope;
 import com.filemanager.api.sharing.persistence.FileGrantRepository;
 import com.filemanager.api.sharing.persistence.FolderGrantRepository;
 import java.time.OffsetDateTime;
@@ -85,22 +86,35 @@ public class SharingService {
 
     @Transactional
     public List<FolderGrantEntity> createFolderGrants(UUID folderId, UUID granteeUserId, List<Permission> permissions, UUID actorUserId) {
+        return createFolderGrants(folderId, granteeUserId, permissions, FolderGrantScope.DIRECT, actorUserId);
+    }
+
+    @Transactional
+    public List<FolderGrantEntity> createFolderGrants(
+            UUID folderId,
+            UUID granteeUserId,
+            List<Permission> permissions,
+            FolderGrantScope scope,
+            UUID actorUserId) {
         FolderEntity folder = findActiveFolder(folderId);
         User actor = findUser(actorUserId);
         User grantee = findUser(granteeUserId);
         assertOwnsFolder(actorUserId, folder);
         rejectSelfGrant(actorUserId, granteeUserId);
         List<Permission> normalizedPermissions = normalizePermissions(permissions, FOLDER_GRANT_PERMISSIONS, "folder");
+        FolderGrantScope normalizedScope = normalizeFolderGrantScope(scope);
 
         return normalizedPermissions.stream()
                 .map(permission -> folderGrantRepository.findByFolderIdAndGranteeUserIdAndPermissionAndRevokedAtIsNull(
                                 folderId,
                                 granteeUserId,
                                 permission)
+                        .map(existingGrant -> updateFolderGrantScope(existingGrant, normalizedScope))
                         .orElseGet(() -> folderGrantRepository.save(FolderGrantEntity.builder()
                                 .folder(folder)
                                 .granteeUser(grantee)
                                 .permission(permission)
+                                .scope(normalizedScope)
                                 .createdByUser(actor)
                                 .build())))
                 .toList();
@@ -140,6 +154,21 @@ public class SharingService {
                 })
                 .distinct()
                 .toList();
+    }
+
+    private FolderGrantScope normalizeFolderGrantScope(FolderGrantScope scope) {
+        return scope == null ? FolderGrantScope.DIRECT : scope;
+    }
+
+    private FolderGrantEntity updateFolderGrantScope(FolderGrantEntity grant, FolderGrantScope requestedScope) {
+        FolderGrantScope currentScope = normalizeFolderGrantScope(grant.getScope());
+        if (currentScope == requestedScope) {
+            return grant;
+        }
+
+        grant.setScope(requestedScope);
+
+        return folderGrantRepository.save(grant);
     }
 
     private FileEntity findActiveFile(UUID fileId) {

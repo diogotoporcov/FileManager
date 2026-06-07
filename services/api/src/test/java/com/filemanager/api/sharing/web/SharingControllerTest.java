@@ -12,6 +12,7 @@ import com.filemanager.api.identity.domain.User;
 import com.filemanager.api.sharing.application.SharingService;
 import com.filemanager.api.sharing.domain.FileGrantEntity;
 import com.filemanager.api.sharing.domain.FolderGrantEntity;
+import com.filemanager.api.sharing.domain.FolderGrantScope;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -63,7 +64,12 @@ class SharingControllerTest {
                 .createdByUser(user(actorId))
                 .permission(Permission.FOLDER_VIEW)
                 .build();
-        when(sharingService.createFolderGrants(eq(folderId), eq(granteeId), any(), eq(actorId))).thenReturn(List.of(grant));
+        when(sharingService.createFolderGrants(
+                eq(folderId),
+                eq(granteeId),
+                any(),
+                eq(FolderGrantScope.DIRECT),
+                eq(actorId))).thenReturn(List.of(grant));
 
         mockMvc.perform(post("/folders/{folderId}/grants", folderId)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -72,7 +78,55 @@ class SharingControllerTest {
                                 "permissions", List.of("FOLDER_VIEW")))))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$[0].resourceType").value("FOLDER"))
-                .andExpect(jsonPath("$[0].permission").value("FOLDER_VIEW"));
+                .andExpect(jsonPath("$[0].permission").value("FOLDER_VIEW"))
+                .andExpect(jsonPath("$[0].scope").value("DIRECT"));
+    }
+
+    @Test
+    void postFolderGrantAcceptsRecursiveScope() throws Exception {
+        UUID folderId = UUID.randomUUID();
+        UUID granteeId = UUID.randomUUID();
+        FolderGrantEntity grant = FolderGrantEntity.builder()
+                .id(UUID.randomUUID())
+                .folder(FolderEntity.builder().id(folderId).build())
+                .granteeUser(user(granteeId))
+                .createdByUser(user(actorId))
+                .permission(Permission.FOLDER_VIEW)
+                .scope(FolderGrantScope.RECURSIVE)
+                .build();
+        when(sharingService.createFolderGrants(
+                eq(folderId),
+                eq(granteeId),
+                any(),
+                eq(FolderGrantScope.RECURSIVE),
+                eq(actorId))).thenReturn(List.of(grant));
+
+        mockMvc.perform(post("/folders/{folderId}/grants", folderId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsBytes(Map.of(
+                                "granteeUserId", granteeId,
+                                "permissions", List.of("FOLDER_VIEW"),
+                                "scope", "RECURSIVE"))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$[0].scope").value("RECURSIVE"));
+    }
+
+    @Test
+    void postFolderGrantRejectsInvalidScope() throws Exception {
+        UUID folderId = UUID.randomUUID();
+        UUID granteeId = UUID.randomUUID();
+
+        mockMvc.perform(post("/folders/{folderId}/grants", folderId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "granteeUserId": "%s",
+                                  "permissions": ["FOLDER_VIEW"],
+                                  "scope": "INVALID"
+                                }
+                                """.formatted(granteeId)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Invalid request body"));
     }
 
     @Test
@@ -89,7 +143,8 @@ class SharingControllerTest {
 
         mockMvc.perform(get("/folders/{folderId}/grants", folderId))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].permission").value("FOLDER_UPLOAD_FILE"));
+                .andExpect(jsonPath("$[0].permission").value("FOLDER_UPLOAD_FILE"))
+                .andExpect(jsonPath("$[0].scope").value("DIRECT"));
     }
 
     @Test
@@ -188,7 +243,12 @@ class SharingControllerTest {
     void folderManagePermissionReceivesBadRequest() throws Exception {
         UUID folderId = UUID.randomUUID();
         UUID granteeId = UUID.randomUUID();
-        when(sharingService.createFolderGrants(eq(folderId), eq(granteeId), any(), eq(actorId)))
+        when(sharingService.createFolderGrants(
+                eq(folderId),
+                eq(granteeId),
+                any(),
+                eq(FolderGrantScope.DIRECT),
+                eq(actorId)))
                 .thenThrow(new IllegalArgumentException("Permission FOLDER_MANAGE_PERMISSIONS is not valid for folder grants."));
 
         mockMvc.perform(post("/folders/{folderId}/grants", folderId)
@@ -202,7 +262,12 @@ class SharingControllerTest {
     @Test
     void selfGrantReceivesBadRequest() throws Exception {
         UUID folderId = UUID.randomUUID();
-        when(sharingService.createFolderGrants(eq(folderId), eq(actorId), any(), eq(actorId)))
+        when(sharingService.createFolderGrants(
+                eq(folderId),
+                eq(actorId),
+                any(),
+                eq(FolderGrantScope.DIRECT),
+                eq(actorId)))
                 .thenThrow(new IllegalArgumentException("Resource owners already have access and cannot grant resources to themselves."));
 
         mockMvc.perform(post("/folders/{folderId}/grants", folderId)
@@ -217,7 +282,12 @@ class SharingControllerTest {
     void missingGranteeReceivesNotFound() throws Exception {
         UUID folderId = UUID.randomUUID();
         UUID granteeId = UUID.randomUUID();
-        when(sharingService.createFolderGrants(eq(folderId), eq(granteeId), any(), eq(actorId)))
+        when(sharingService.createFolderGrants(
+                eq(folderId),
+                eq(granteeId),
+                any(),
+                eq(FolderGrantScope.DIRECT),
+                eq(actorId)))
                 .thenThrow(new ResourceNotFoundException("User not found: " + granteeId));
 
         mockMvc.perform(post("/folders/{folderId}/grants", folderId)

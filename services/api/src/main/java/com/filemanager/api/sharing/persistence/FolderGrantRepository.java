@@ -26,8 +26,26 @@ public interface FolderGrantRepository extends JpaRepository<FolderGrantEntity, 
             where grant.folder.id = :folderId
               and grant.granteeUser.id = :granteeUserId
               and grant.permission = :permission
+              and grant.scope = com.filemanager.api.sharing.domain.FolderGrantScope.DIRECT
               and grant.revokedAt is null
               and grant.folder.deletedAt is null
             """)
-    boolean hasActiveGrant(UUID folderId, UUID granteeUserId, Permission permission);
+    boolean hasActiveDirectGrant(UUID folderId, UUID granteeUserId, Permission permission);
+
+    @Query("""
+            select count(grant) > 0
+            from FolderGrantEntity grant, FolderClosureEntity closure
+            where closure.ancestorFolder = grant.folder
+              and closure.descendantFolder.id = :folderId
+              and closure.descendantFolder.deletedAt is null
+              and grant.granteeUser.id = :granteeUserId
+              and grant.permission = :permission
+              and grant.scope = com.filemanager.api.sharing.domain.FolderGrantScope.RECURSIVE
+              and grant.revokedAt is null
+              and grant.folder.deletedAt is null
+            """)
+    boolean hasActiveRecursiveGrantOnFolderOrAncestor(
+            UUID folderId,
+            UUID granteeUserId,
+            Permission permission);
 }

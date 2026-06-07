@@ -26,6 +26,7 @@ public class GrantResponseMapper {
                 .resourceId(grant.getFolder().getId())
                 .granteeUserId(grant.getGranteeUser().getId())
                 .permission(grant.getPermission())
+                .scope(grant.getScope())
                 .createdByUserId(grant.getCreatedByUser().getId())
                 .createdAt(grant.getCreatedAt())
                 .revokedAt(grant.getRevokedAt())

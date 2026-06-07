@@ -7,7 +7,10 @@ import com.filemanager.api.file.persistence.FileRepository;
 import com.filemanager.api.folder.web.CreateFolderRequest;
 import com.filemanager.api.folder.web.FolderResponseMapper;
 import com.filemanager.api.folder.web.UpdateFolderRequest;
+import com.filemanager.api.folder.domain.FolderClosureEntity;
+import com.filemanager.api.folder.domain.FolderClosureId;
 import com.filemanager.api.folder.domain.FolderEntity;
+import com.filemanager.api.folder.persistence.FolderClosureRepository;
 import com.filemanager.api.folder.persistence.FolderRepository;
 import com.filemanager.api.identity.domain.User;
 import com.filemanager.api.identity.persistence.UserRepository;
@@ -33,6 +36,8 @@ class FolderServiceTest {
     @Mock
     private FolderRepository folderRepository;
     @Mock
+    private FolderClosureRepository folderClosureRepository;
+    @Mock
     private FileRepository fileRepository;
     @Mock
     private UserRepository userRepository;
@@ -51,6 +56,7 @@ class FolderServiceTest {
         actorUser = User.builder().id(actorUserId).email("actor@example.com").build();
         folderService = new FolderService(
                 folderRepository,
+                folderClosureRepository,
                 fileRepository,
                 userRepository,
                 accessControlService,
@@ -92,6 +98,8 @@ class FolderServiceTest {
         when(userRepository.findById(actorUserId)).thenReturn(Optional.of(actorUser));
         when(folderRepository.findByIdAndDeletedAtIsNull(parentId)).thenReturn(Optional.of(parent));
         when(folderRepository.save(any(FolderEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(folderClosureRepository.findByDescendantFolderOrderByDepthAsc(parent))
+                .thenReturn(List.of(parentClosureRow(parent)));
 
         folderService.createFolder(request, actorUserId);
 
@@ -172,6 +180,8 @@ class FolderServiceTest {
         when(folderRepository.findByIdAndDeletedAtIsNull(parentId)).thenReturn(Optional.of(parent));
         when(folderRepository.existsByNameIgnoreCaseAndParentFolderAndDeletedAtIsNull("Uploads", parent)).thenReturn(false);
         when(folderRepository.save(any(FolderEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(folderClosureRepository.findByDescendantFolderOrderByDepthAsc(parent))
+                .thenReturn(List.of(parentClosureRow(parent)));
 
         folderService.createFolder(request, actorUserId);
 
@@ -271,5 +281,14 @@ class FolderServiceTest {
 
     private User user(UUID id) {
         return User.builder().id(id).email(id + "@example.com").build();
+    }
+
+    private FolderClosureEntity parentClosureRow(FolderEntity parent) {
+        return FolderClosureEntity.builder()
+                .id(new FolderClosureId(parent.getId(), parent.getId()))
+                .ancestorFolder(parent)
+                .descendantFolder(parent)
+                .depth(0)
+                .build();
     }
 }

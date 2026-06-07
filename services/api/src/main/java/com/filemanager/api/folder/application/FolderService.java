@@ -11,7 +11,10 @@ import com.filemanager.api.folder.web.FolderResponse;
 import com.filemanager.api.folder.web.FolderResponseMapper;
 import com.filemanager.api.folder.web.FolderSummaryResponse;
 import com.filemanager.api.folder.web.UpdateFolderRequest;
+import com.filemanager.api.folder.domain.FolderClosureEntity;
+import com.filemanager.api.folder.domain.FolderClosureId;
 import com.filemanager.api.folder.domain.FolderEntity;
+import com.filemanager.api.folder.persistence.FolderClosureRepository;
 import com.filemanager.api.folder.persistence.FolderRepository;
 import com.filemanager.api.identity.domain.User;
 import com.filemanager.api.identity.persistence.UserRepository;
@@ -30,6 +33,7 @@ public class FolderService {
     private static final int MAX_FOLDER_NAME_LENGTH = 255;
 
     private final FolderRepository folderRepository;
+    private final FolderClosureRepository folderClosureRepository;
     private final FileRepository fileRepository;
     private final UserRepository userRepository;
     private final AccessControlService accessControlService;
@@ -60,7 +64,10 @@ public class FolderService {
                 .createdByUser(ownerUser)
                 .build();
 
-        return folderResponseMapper.toResponse(folderRepository.save(folder));
+        FolderEntity savedFolder = folderRepository.save(folder);
+        createClosureRows(savedFolder, parentFolder);
+
+        return folderResponseMapper.toResponse(savedFolder);
     }
 
     @Transactional(readOnly = true)
@@ -180,5 +187,29 @@ public class FolderService {
         if (exists) {
             throw new ConflictException("An active sibling folder with this name already exists");
         }
+    }
+
+    private void createClosureRows(FolderEntity folder, FolderEntity parentFolder) {
+        folderClosureRepository.save(FolderClosureEntity.builder()
+                .id(new FolderClosureId(folder.getId(), folder.getId()))
+                .ancestorFolder(folder)
+                .descendantFolder(folder)
+                .depth(0)
+                .build());
+
+        if (parentFolder == null) {
+            return;
+        }
+
+        List<FolderClosureEntity> parentClosureRows = folderClosureRepository.findByDescendantFolderOrderByDepthAsc(parentFolder);
+        List<FolderClosureEntity> ancestorRows = parentClosureRows.stream()
+                .map(parentClosure -> FolderClosureEntity.builder()
+                        .id(new FolderClosureId(parentClosure.getAncestorFolder().getId(), folder.getId()))
+                        .ancestorFolder(parentClosure.getAncestorFolder())
+                        .descendantFolder(folder)
+                        .depth(parentClosure.getDepth() + 1)
+                        .build())
+                .toList();
+        folderClosureRepository.saveAll(ancestorRows);
     }
 }
