@@ -12,6 +12,7 @@ import com.filemanager.api.processing.domain.result.AudioFingerprint;
 import com.filemanager.api.processing.domain.result.FileEmbedding;
 import com.filemanager.api.processing.domain.result.FileFingerprint;
 import com.filemanager.api.processing.domain.result.ImageFingerprint;
+import com.filemanager.api.processing.domain.result.VideoEmbedding;
 import com.filemanager.api.processing.domain.result.VideoFingerprint;
 import com.filemanager.api.processing.domain.result.VideoFrameEmbedding;
 import com.filemanager.api.processing.domain.result.VideoFrameFingerprint;
@@ -20,6 +21,7 @@ import com.filemanager.api.processing.persistence.result.AudioFingerprintReposit
 import com.filemanager.api.processing.persistence.result.FileEmbeddingRepository;
 import com.filemanager.api.processing.persistence.result.FileFingerprintRepository;
 import com.filemanager.api.processing.persistence.result.ImageFingerprintRepository;
+import com.filemanager.api.processing.persistence.result.VideoEmbeddingRepository;
 import com.filemanager.api.processing.persistence.result.VideoFingerprintRepository;
 import com.filemanager.api.processing.persistence.result.VideoFrameEmbeddingRepository;
 import com.filemanager.api.processing.persistence.result.VideoFrameFingerprintRepository;
@@ -37,6 +39,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 @Slf4j
 public class ProcessingJobService {
+    private static final String VIDEO_EMBEDDING_POOLING_STRATEGY = "mean";
 
     private final ProcessingJobRepository processingJobRepository;
     private final FileRepository fileRepository;
@@ -44,6 +47,7 @@ public class ProcessingJobService {
     private final ImageFingerprintRepository imageFingerprintRepository;
     private final FileEmbeddingRepository fileEmbeddingRepository;
     private final AudioFingerprintRepository audioFingerprintRepository;
+    private final VideoEmbeddingRepository videoEmbeddingRepository;
     private final VideoFingerprintRepository videoFingerprintRepository;
     private final VideoFrameFingerprintRepository videoFrameFingerprintRepository;
     private final VideoFrameEmbeddingRepository videoFrameEmbeddingRepository;
@@ -439,6 +443,7 @@ public class ProcessingJobService {
     private void replaceVideoFrameSignals(FileEntity file, VideoAnalysisResultRequest request) {
         videoFrameFingerprintRepository.deleteByFileId(file.getId());
         videoFrameEmbeddingRepository.deleteByFileId(file.getId());
+        videoEmbeddingRepository.deleteByFileId(file.getId());
 
         List<VideoFrameFingerprint> fingerprints = request.getFrames().stream()
                 .filter(frame -> frame.getPhash() != null && !frame.getPhash().isBlank())
@@ -467,7 +472,63 @@ public class ProcessingJobService {
                 .toList();
         if (!embeddings.isEmpty()) {
             videoFrameEmbeddingRepository.saveAll(embeddings);
+            updateVideoEmbedding(file, embeddings);
         }
+    }
+
+    private void updateVideoEmbedding(FileEntity file, List<VideoFrameEmbedding> frameEmbeddings) {
+        VideoFrameEmbedding first = frameEmbeddings.getFirst();
+        if (frameEmbeddings.stream().anyMatch(frame -> !sameEmbeddingModel(first, frame))) {
+            throw new IllegalArgumentException("Video frame embeddings must use one model, version, and dimension");
+        }
+
+        float[] pooledEmbedding = meanPoolAndNormalize(frameEmbeddings, first.getDimension());
+        videoEmbeddingRepository.findByFileId(file.getId())
+                .ifPresentOrElse(
+                        existing -> {
+                            existing.setModelName(first.getModelName());
+                            existing.setModelVersion(first.getModelVersion());
+                            existing.setDimension(first.getDimension());
+                            existing.setEmbedding(pooledEmbedding);
+                            existing.setPoolingStrategy(VIDEO_EMBEDDING_POOLING_STRATEGY);
+                            existing.setSourceFrameCount(frameEmbeddings.size());
+                            videoEmbeddingRepository.save(existing);
+                        },
+                        () -> videoEmbeddingRepository.save(VideoEmbedding.builder()
+                                .file(file)
+                                .modelName(first.getModelName())
+                                .modelVersion(first.getModelVersion())
+                                .dimension(first.getDimension())
+                                .embedding(pooledEmbedding)
+                                .poolingStrategy(VIDEO_EMBEDDING_POOLING_STRATEGY)
+                                .sourceFrameCount(frameEmbeddings.size())
+                                .build())
+                );
+    }
+
+    private boolean sameEmbeddingModel(VideoFrameEmbedding expected, VideoFrameEmbedding actual) {
+        return Objects.equals(expected.getModelName(), actual.getModelName())
+                && Objects.equals(expected.getModelVersion(), actual.getModelVersion())
+                && Objects.equals(expected.getDimension(), actual.getDimension());
+    }
+
+    private float[] meanPoolAndNormalize(List<VideoFrameEmbedding> frameEmbeddings, int dimension) {
+        double[] pooled = new double[dimension];
+        for (VideoFrameEmbedding frameEmbedding : frameEmbeddings) {
+            float[] embedding = frameEmbedding.getEmbedding();
+            if (embedding == null || embedding.length != dimension) {
+                throw new IllegalArgumentException("Video frame embedding length must match dimension");
+            }
+            for (int i = 0; i < dimension; i++) {
+                pooled[i] += embedding[i];
+            }
+        }
+
+        for (int i = 0; i < dimension; i++) {
+            pooled[i] /= frameEmbeddings.size();
+        }
+
+        return normalizeVector(pooled);
     }
 
     private void updateAudioFingerprint(FileEntity file, AudioAnalysisResultRequest request) {
@@ -517,14 +578,40 @@ public class ProcessingJobService {
         for (Double value : embedding) {
             squaredNorm += value * value;
         }
+        return normalizeVector(embedding, squaredNorm);
+    }
+
+    private float[] normalizeVector(double[] values) {
+        double squaredNorm = 0.0;
+        for (double value : values) {
+            squaredNorm += value * value;
+        }
+        return normalizeVector(values, squaredNorm);
+    }
+
+    private float[] normalizeVector(List<Double> values, double squaredNorm) {
         double norm = Math.sqrt(squaredNorm);
         if (!Double.isFinite(norm) || norm == 0.0) {
             throw new IllegalArgumentException("Embedding norm must be finite and non-zero");
         }
 
-        float[] normalized = new float[embedding.size()];
-        for (int i = 0; i < embedding.size(); i++) {
-            normalized[i] = (float) (embedding.get(i) / norm);
+        float[] normalized = new float[values.size()];
+        for (int i = 0; i < values.size(); i++) {
+            normalized[i] = (float) (values.get(i) / norm);
+        }
+
+        return normalized;
+    }
+
+    private float[] normalizeVector(double[] values, double squaredNorm) {
+        double norm = Math.sqrt(squaredNorm);
+        if (!Double.isFinite(norm) || norm == 0.0) {
+            throw new IllegalArgumentException("Embedding norm must be finite and non-zero");
+        }
+
+        float[] normalized = new float[values.length];
+        for (int i = 0; i < values.length; i++) {
+            normalized[i] = (float) (values[i] / norm);
         }
 
         return normalized;

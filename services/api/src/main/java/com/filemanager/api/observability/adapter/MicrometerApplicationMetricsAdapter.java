@@ -37,4 +37,39 @@ public class MicrometerApplicationMetricsAdapter implements ApplicationMetricsPo
     public void recordJobFailed(String jobType) {
         registry.counter("filemanager.processing.jobs.failed", "job_type", jobType).increment();
     }
+
+    @Override
+    public void recordDuplicateSearchRequested() {
+        registry.counter("filemanager.duplicate.search.requested").increment();
+    }
+
+    @Override
+    public void recordDuplicateSearchMethodCompleted(String method) {
+        registry.counter("filemanager.duplicate.search.method.completed", "method", method).increment();
+    }
+
+    @Override
+    public void recordDuplicateSearchMethodNotReady(String method) {
+        registry.counter("filemanager.duplicate.search.method.not_ready", "method", method).increment();
+    }
+
+    @Override
+    public void recordDuplicateSearchMethodDisabled(String method) {
+        registry.counter("filemanager.duplicate.search.method.disabled", "method", method).increment();
+    }
+
+    @Override
+    public void recordDuplicateMatchesReturned(String method, int count) {
+        registry.summary("filemanager.duplicate.search.matches_returned", "method", method).record(count);
+    }
+
+    @Override
+    public void recordDuplicateGroupsRequested() {
+        registry.counter("filemanager.duplicate.groups.requested").increment();
+    }
+
+    @Override
+    public void recordDuplicateGroupsReturned(String method, int count) {
+        registry.summary("filemanager.duplicate.groups.returned", "method", method).record(count);
+    }
 }

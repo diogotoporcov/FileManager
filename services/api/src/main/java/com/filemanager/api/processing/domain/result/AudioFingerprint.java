@@ -9,6 +9,8 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OneToOne;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import lombok.AllArgsConstructor;
@@ -20,12 +22,17 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 import com.filemanager.api.file.domain.FileEntity;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.OffsetDateTime;
+import java.util.HexFormat;
 import java.util.UUID;
 
 @Entity
 @Table(name = "audio_fingerprints", indexes = {
-    @Index(name = "idx_audio_fingerprints_file", columnList = "file_id")
+    @Index(name = "idx_audio_fingerprints_file", columnList = "file_id"),
+    @Index(name = "idx_audio_fingerprints_hash", columnList = "fingerprint_hash")
 }, uniqueConstraints = {
     @UniqueConstraint(name = "uk_audio_fingerprints_file", columnNames = {"file_id"})
 })
@@ -71,6 +78,9 @@ public class AudioFingerprint {
     @Column(nullable = false, length = MAX_FINGERPRINT_LENGTH)
     private String fingerprint;
 
+    @Column(name = "fingerprint_hash", nullable = false, length = 64)
+    private String fingerprintHash;
+
     @Column(name = "fingerprint_algorithm", nullable = false, length = MAX_FINGERPRINT_ALGORITHM_LENGTH)
     private String fingerprintAlgorithm;
 
@@ -87,4 +97,20 @@ public class AudioFingerprint {
     @UpdateTimestamp
     @Column(name = "updated_at")
     private OffsetDateTime updatedAt;
+
+    @PrePersist
+    @PreUpdate
+    void updateFingerprintHash() {
+        if (fingerprint == null) {
+            fingerprintHash = null;
+            return;
+        }
+
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            fingerprintHash = HexFormat.of().formatHex(digest.digest(fingerprint.trim().getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException ex) {
+            throw new IllegalStateException("SHA-256 digest is unavailable", ex);
+        }
+    }
 }

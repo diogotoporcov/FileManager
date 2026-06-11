@@ -13,6 +13,7 @@ import com.filemanager.api.processing.domain.result.AudioFingerprint;
 import com.filemanager.api.processing.domain.result.FileEmbedding;
 import com.filemanager.api.processing.domain.result.FileFingerprint;
 import com.filemanager.api.processing.domain.result.ImageFingerprint;
+import com.filemanager.api.processing.domain.result.VideoEmbedding;
 import com.filemanager.api.processing.domain.result.VideoFingerprint;
 import com.filemanager.api.processing.domain.result.VideoFrameEmbedding;
 import com.filemanager.api.processing.domain.result.VideoFrameFingerprint;
@@ -21,6 +22,7 @@ import com.filemanager.api.processing.persistence.result.AudioFingerprintReposit
 import com.filemanager.api.processing.persistence.result.FileEmbeddingRepository;
 import com.filemanager.api.processing.persistence.result.FileFingerprintRepository;
 import com.filemanager.api.processing.persistence.result.ImageFingerprintRepository;
+import com.filemanager.api.processing.persistence.result.VideoEmbeddingRepository;
 import com.filemanager.api.processing.persistence.result.VideoFingerprintRepository;
 import com.filemanager.api.processing.persistence.result.VideoFrameEmbeddingRepository;
 import com.filemanager.api.processing.persistence.result.VideoFrameFingerprintRepository;
@@ -59,6 +61,8 @@ class ProcessingJobServiceTest {
     @Mock
     private AudioFingerprintRepository audioFingerprintRepository;
     @Mock
+    private VideoEmbeddingRepository videoEmbeddingRepository;
+    @Mock
     private VideoFingerprintRepository videoFingerprintRepository;
     @Mock
     private VideoFrameFingerprintRepository videoFrameFingerprintRepository;
@@ -74,6 +78,9 @@ class ProcessingJobServiceTest {
 
     @Captor
     private ArgumentCaptor<List<VideoFrameEmbedding>> frameEmbeddingsCaptor;
+
+    @Captor
+    private ArgumentCaptor<VideoEmbedding> videoEmbeddingCaptor;
 
     @InjectMocks
     private ProcessingJobService processingJobService;
@@ -214,6 +221,7 @@ class ProcessingJobServiceTest {
         when(processingJobRepository.findById(jobId)).thenReturn(Optional.of(job));
         when(fileRepository.findByIdAndDeletedAtIsNull(fileId)).thenReturn(Optional.of(file));
         when(videoFingerprintRepository.findByFileId(fileId)).thenReturn(Optional.empty());
+        when(videoEmbeddingRepository.findByFileId(fileId)).thenReturn(Optional.empty());
 
         processingJobService.handleVideoAnalysisResult(jobId, request);
 
@@ -226,14 +234,20 @@ class ProcessingJobServiceTest {
 
         verify(videoFrameFingerprintRepository).deleteByFileId(fileId);
         verify(videoFrameEmbeddingRepository).deleteByFileId(fileId);
+        verify(videoEmbeddingRepository).deleteByFileId(fileId);
         verify(videoFrameFingerprintRepository).saveAll(frameFingerprintsCaptor.capture());
         verify(videoFrameEmbeddingRepository).saveAll(frameEmbeddingsCaptor.capture());
+        verify(videoEmbeddingRepository).save(videoEmbeddingCaptor.capture());
 
         assertThat(frameFingerprintsCaptor.getValue()).hasSize(2);
         assertThat(frameFingerprintsCaptor.getValue().getFirst().getPhash()).isEqualTo("fedcba9876543210");
         assertThat(frameEmbeddingsCaptor.getValue()).hasSize(2);
         assertThat(frameEmbeddingsCaptor.getValue().getFirst().getEmbedding())
                 .hasSize(EmbeddingDimensions.IMAGE_EMBEDDING_DIMENSION);
+        assertThat(videoEmbeddingCaptor.getValue().getFile()).isEqualTo(file);
+        assertThat(videoEmbeddingCaptor.getValue().getEmbedding()).hasSize(EmbeddingDimensions.IMAGE_EMBEDDING_DIMENSION);
+        assertThat(videoEmbeddingCaptor.getValue().getPoolingStrategy()).isEqualTo("mean");
+        assertThat(videoEmbeddingCaptor.getValue().getSourceFrameCount()).isEqualTo(2);
         assertThat(job.getStatus()).isEqualTo(ProcessingJob.JobStatus.COMPLETED);
         verify(fileManagerMetrics).recordJobCompleted("VIDEO_ANALYSIS");
     }
@@ -259,7 +273,9 @@ class ProcessingJobServiceTest {
         verify(videoFrameFingerprintRepository).saveAll(frameFingerprintsCaptor.capture());
         assertThat(frameFingerprintsCaptor.getValue()).hasSize(2);
         verify(videoFrameEmbeddingRepository).deleteByFileId(fileId);
+        verify(videoEmbeddingRepository).deleteByFileId(fileId);
         verify(videoFrameEmbeddingRepository, never()).saveAll(any());
+        verify(videoEmbeddingRepository, never()).save(any());
         assertThat(job.getStatus()).isEqualTo(ProcessingJob.JobStatus.COMPLETED);
     }
 
@@ -275,14 +291,48 @@ class ProcessingJobServiceTest {
         when(processingJobRepository.findById(jobId)).thenReturn(Optional.of(job));
         when(fileRepository.findByIdAndDeletedAtIsNull(fileId)).thenReturn(Optional.of(file));
         when(videoFingerprintRepository.findByFileId(fileId)).thenReturn(Optional.empty());
+        when(videoEmbeddingRepository.findByFileId(fileId)).thenReturn(Optional.empty());
 
         processingJobService.handleVideoAnalysisResult(jobId, request);
 
         verify(videoFrameEmbeddingRepository).saveAll(frameEmbeddingsCaptor.capture());
         assertThat(frameEmbeddingsCaptor.getValue()).hasSize(2);
+        verify(videoEmbeddingRepository).save(videoEmbeddingCaptor.capture());
+        assertThat(videoEmbeddingCaptor.getValue().getSourceFrameCount()).isEqualTo(2);
         verify(videoFrameFingerprintRepository).deleteByFileId(fileId);
         verify(videoFrameFingerprintRepository, never()).saveAll(any());
         assertThat(job.getStatus()).isEqualTo(ProcessingJob.JobStatus.COMPLETED);
+    }
+
+    @Test
+    void handleVideoAnalysisResult_ReplacesExistingPooledVideoEmbedding() {
+        UUID jobId = UUID.randomUUID();
+        UUID fileId = UUID.randomUUID();
+        FileEntity file = file(fileId);
+        ProcessingJob job = job(jobId, file, ProcessingJob.JobType.VIDEO_ANALYSIS);
+        VideoAnalysisResultRequest request = videoAnalysisRequest(fileId);
+        VideoEmbedding existing = VideoEmbedding.builder()
+                .file(file)
+                .modelName("old")
+                .modelVersion("old")
+                .dimension(EmbeddingDimensions.IMAGE_EMBEDDING_DIMENSION)
+                .embedding(new float[EmbeddingDimensions.IMAGE_EMBEDDING_DIMENSION])
+                .poolingStrategy("mean")
+                .sourceFrameCount(1)
+                .build();
+
+        when(processingJobRepository.findById(jobId)).thenReturn(Optional.of(job));
+        when(fileRepository.findByIdAndDeletedAtIsNull(fileId)).thenReturn(Optional.of(file));
+        when(videoFingerprintRepository.findByFileId(fileId)).thenReturn(Optional.empty());
+        when(videoEmbeddingRepository.findByFileId(fileId)).thenReturn(Optional.of(existing));
+
+        processingJobService.handleVideoAnalysisResult(jobId, request);
+
+        verify(videoEmbeddingRepository).save(existing);
+        assertThat(existing.getModelName()).isEqualTo("openai/clip-vit-large-patch14");
+        assertThat(existing.getModelVersion()).isEqualTo("1");
+        assertThat(existing.getSourceFrameCount()).isEqualTo(2);
+        assertThat(existing.getEmbedding()).hasSize(EmbeddingDimensions.IMAGE_EMBEDDING_DIMENSION);
     }
 
     @Test
