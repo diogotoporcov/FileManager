@@ -30,4 +30,32 @@ public class FileManagerMetrics {
     public void recordJobFailed(String jobType) {
         applicationMetricsPort.recordJobFailed(jobType);
     }
+
+    public void recordDuplicateSearchRequested() {
+        applicationMetricsPort.recordDuplicateSearchRequested();
+    }
+
+    public void recordDuplicateSearchMethodCompleted(String method) {
+        applicationMetricsPort.recordDuplicateSearchMethodCompleted(method);
+    }
+
+    public void recordDuplicateSearchMethodNotReady(String method) {
+        applicationMetricsPort.recordDuplicateSearchMethodNotReady(method);
+    }
+
+    public void recordDuplicateSearchMethodDisabled(String method) {
+        applicationMetricsPort.recordDuplicateSearchMethodDisabled(method);
+    }
+
+    public void recordDuplicateMatchesReturned(String method, int count) {
+        applicationMetricsPort.recordDuplicateMatchesReturned(method, count);
+    }
+
+    public void recordDuplicateGroupsRequested() {
+        applicationMetricsPort.recordDuplicateGroupsRequested();
+    }
+
+    public void recordDuplicateGroupsReturned(String method, int count) {
+        applicationMetricsPort.recordDuplicateGroupsReturned(method, count);
+    }
 }

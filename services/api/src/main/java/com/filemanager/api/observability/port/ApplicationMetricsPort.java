@@ -10,4 +10,18 @@ public interface ApplicationMetricsPort {
     void recordJobCompleted(String jobType);
 
     void recordJobFailed(String jobType);
+
+    void recordDuplicateSearchRequested();
+
+    void recordDuplicateSearchMethodCompleted(String method);
+
+    void recordDuplicateSearchMethodNotReady(String method);
+
+    void recordDuplicateSearchMethodDisabled(String method);
+
+    void recordDuplicateMatchesReturned(String method, int count);
+
+    void recordDuplicateGroupsRequested();
+
+    void recordDuplicateGroupsReturned(String method, int count);
 }

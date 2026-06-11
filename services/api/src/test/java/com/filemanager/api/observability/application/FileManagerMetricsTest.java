@@ -56,4 +56,28 @@ class FileManagerMetricsTest {
 
         verify(applicationMetricsPort).recordJobFailed("CHECKSUM");
     }
+
+    @Test
+    void recordDuplicateSearchMetrics() {
+        metrics.recordDuplicateSearchRequested();
+        metrics.recordDuplicateSearchMethodCompleted("EXACT");
+        metrics.recordDuplicateSearchMethodNotReady("IMAGE_PHASH");
+        metrics.recordDuplicateSearchMethodDisabled("IMAGE_EMBEDDING");
+        metrics.recordDuplicateMatchesReturned("EXACT", 2);
+
+        verify(applicationMetricsPort).recordDuplicateSearchRequested();
+        verify(applicationMetricsPort).recordDuplicateSearchMethodCompleted("EXACT");
+        verify(applicationMetricsPort).recordDuplicateSearchMethodNotReady("IMAGE_PHASH");
+        verify(applicationMetricsPort).recordDuplicateSearchMethodDisabled("IMAGE_EMBEDDING");
+        verify(applicationMetricsPort).recordDuplicateMatchesReturned("EXACT", 2);
+    }
+
+    @Test
+    void recordDuplicateGroupMetrics() {
+        metrics.recordDuplicateGroupsRequested();
+        metrics.recordDuplicateGroupsReturned("EXACT", 1);
+
+        verify(applicationMetricsPort).recordDuplicateGroupsRequested();
+        verify(applicationMetricsPort).recordDuplicateGroupsReturned("EXACT", 1);
+    }
 }
