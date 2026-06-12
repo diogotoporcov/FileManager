@@ -1,0 +1,7 @@
+profile: baseline
+
+requiredEnvironmentMetadata:
+  cpu: ""
+  memory: ""
+  storage: ""
+  dockerResourceLimits: ""

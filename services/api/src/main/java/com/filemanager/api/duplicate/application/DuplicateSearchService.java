@@ -40,6 +40,7 @@ import com.filemanager.api.processing.persistence.result.VideoEmbeddingRepositor
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -84,33 +85,59 @@ public class DuplicateSearchService {
             UUID sourceFileId,
             Collection<DuplicateSearchMethod> requestedMethods,
             UUID actorUserId) {
-        FileEntity sourceFile = loadOwnedSourceFile(sourceFileId, actorUserId);
-        List<DuplicateSearchMethod> methods = normalizeMethods(requestedMethods);
-        fileManagerMetrics.recordDuplicateSearchRequested();
+        long started = System.nanoTime();
+        String status = "success";
+        try {
+            FileEntity sourceFile = loadOwnedSourceFile(sourceFileId, actorUserId);
+            List<DuplicateSearchMethod> methods = normalizeMethods(requestedMethods);
+            fileManagerMetrics.recordDuplicateSearchRequested();
 
-        List<DuplicateMethodResultResponse> methodResponses = methods.stream()
-                .map(method -> searchByMethod(method, sourceFile, actorUserId))
-                .toList();
+            List<DuplicateMethodResultResponse> methodResponses = methods.stream()
+                    .map(method -> searchByMethod(method, sourceFile, actorUserId))
+                    .toList();
 
-        return new DuplicateSearchResponse(sourceFileId, methodResponses);
+            return new DuplicateSearchResponse(sourceFileId, methodResponses);
+        } catch (RuntimeException ex) {
+            status = "failure";
+            throw ex;
+        } finally {
+            fileManagerMetrics.recordOperationDuration(
+                    "duplicate.search",
+                    status,
+                    Duration.ofNanos(System.nanoTime() - started));
+        }
     }
 
     @Transactional(readOnly = true)
     public DuplicateGroupSearchResponse searchGroups(DuplicateGroupSearchRequest request, UUID actorUserId) {
-        List<DuplicateSearchMethod> methods = normalizeMethods(request == null ? null : request.methods());
-        int requestedLimit = request == null || request.limit() == null ? properties.getExact().getMaxGroups() : request.limit();
-        UUID folderId = request == null ? null : request.folderId();
-        String mimeType = normalizeOptionalText(request == null ? null : request.mimeType());
-        DuplicateConfidence minConfidence = request == null || request.minConfidence() == null
-                ? DuplicateConfidence.SIMILAR
-                : request.minConfidence();
-        fileManagerMetrics.recordDuplicateGroupsRequested();
+        long started = System.nanoTime();
+        String status = "success";
+        try {
+            List<DuplicateSearchMethod> methods = normalizeMethods(request == null ? null : request.methods());
+            int requestedLimit = request == null || request.limit() == null
+                    ? properties.getExact().getMaxGroups()
+                    : request.limit();
+            UUID folderId = request == null ? null : request.folderId();
+            String mimeType = normalizeOptionalText(request == null ? null : request.mimeType());
+            DuplicateConfidence minConfidence = request == null || request.minConfidence() == null
+                    ? DuplicateConfidence.SIMILAR
+                    : request.minConfidence();
+            fileManagerMetrics.recordDuplicateGroupsRequested();
 
-        List<DuplicateGroupMethodResultResponse> methodResponses = methods.stream()
-                .map(method -> searchGroupsByMethod(method, actorUserId, requestedLimit, folderId, mimeType, minConfidence))
-                .toList();
+            List<DuplicateGroupMethodResultResponse> methodResponses = methods.stream()
+                    .map(method -> searchGroupsByMethod(method, actorUserId, requestedLimit, folderId, mimeType, minConfidence))
+                    .toList();
 
-        return new DuplicateGroupSearchResponse(methodResponses, null);
+            return new DuplicateGroupSearchResponse(methodResponses, null);
+        } catch (RuntimeException ex) {
+            status = "failure";
+            throw ex;
+        } finally {
+            fileManagerMetrics.recordOperationDuration(
+                    "duplicate.groups",
+                    status,
+                    Duration.ofNanos(System.nanoTime() - started));
+        }
     }
 
     private DuplicateMethodResultResponse searchByMethod(
@@ -190,6 +217,7 @@ public class DuplicateSearchService {
         if (!properties.getImagePhash().isEnabled()) {
             return methodResult(DuplicateSearchMethod.IMAGE_PHASH, DuplicateMethodStatus.DISABLED_BY_CONFIG, List.of());
         }
+
         if (!isImage(sourceFile)) {
             return methodResult(
                     DuplicateSearchMethod.IMAGE_PHASH,
@@ -220,6 +248,7 @@ public class DuplicateSearchService {
         if (!properties.getImageEmbedding().isEnabled()) {
             return methodResult(DuplicateSearchMethod.IMAGE_EMBEDDING, DuplicateMethodStatus.DISABLED_BY_CONFIG, List.of());
         }
+
         if (!isImage(sourceFile)) {
             return methodResult(
                     DuplicateSearchMethod.IMAGE_EMBEDDING,
@@ -257,6 +286,7 @@ public class DuplicateSearchService {
         if (!properties.getAudioFingerprint().isEnabled()) {
             return methodResult(DuplicateSearchMethod.AUDIO_FINGERPRINT, DuplicateMethodStatus.DISABLED_BY_CONFIG, List.of());
         }
+
         if (!isAudio(sourceFile)) {
             return methodResult(DuplicateSearchMethod.AUDIO_FINGERPRINT, DuplicateMethodStatus.UNSUPPORTED_FOR_FILE_TYPE, List.of());
         }
@@ -285,6 +315,7 @@ public class DuplicateSearchService {
         if (!properties.getVideoEmbedding().isEnabled()) {
             return methodResult(DuplicateSearchMethod.VIDEO_EMBEDDING, DuplicateMethodStatus.DISABLED_BY_CONFIG, List.of());
         }
+
         if (!isVideo(sourceFile)) {
             return methodResult(
                     DuplicateSearchMethod.VIDEO_EMBEDDING,
@@ -326,6 +357,7 @@ public class DuplicateSearchService {
         if (!properties.getExact().isEnabled()) {
             return groupMethodResult(DuplicateSearchMethod.EXACT, DuplicateMethodStatus.DISABLED_BY_CONFIG, List.of());
         }
+
         if (!allowsConfidence(minConfidence, DuplicateConfidence.EXACT)) {
             return groupMethodResult(DuplicateSearchMethod.EXACT, DuplicateMethodStatus.COMPLETED, List.of());
         }
@@ -373,12 +405,14 @@ public class DuplicateSearchService {
                     DuplicateMethodStatus.DISABLED_BY_CONFIG,
                     List.of());
         }
+
         if (!properties.getAudioFingerprint().isGroupedEnabled()) {
             return groupMethodResult(
                     DuplicateSearchMethod.AUDIO_FINGERPRINT,
                     DuplicateMethodStatus.NOT_SUPPORTED_FOR_GROUPED_SEARCH_YET,
                     List.of());
         }
+
         if (!allowsConfidence(minConfidence, DuplicateConfidence.EXACT)) {
             return groupMethodResult(
                     DuplicateSearchMethod.AUDIO_FINGERPRINT,
@@ -427,6 +461,7 @@ public class DuplicateSearchService {
         if (!enabled) {
             return groupMethodResult(method, DuplicateMethodStatus.DISABLED_BY_CONFIG, List.of());
         }
+
         if (!groupedEnabled) {
             return groupMethodResult(method, DuplicateMethodStatus.NOT_SUPPORTED_FOR_GROUPED_SEARCH_YET, List.of());
         }
@@ -437,6 +472,7 @@ public class DuplicateSearchService {
     private FileEntity loadOwnedSourceFile(UUID sourceFileId, UUID actorUserId) {
         FileEntity sourceFile = fileRepository.findByIdAndDeletedAtIsNull(sourceFileId)
                 .orElseThrow(() -> new ResourceNotFoundException("File not found: " + sourceFileId));
+
         if (!sourceFile.isOwnedBy(actorUserId)) {
             throw new AccessDeniedException("You do not have permission to run duplicate detection for this file.");
         }
@@ -622,6 +658,7 @@ public class DuplicateSearchService {
         if (mimeType == null) {
             return false;
         }
+
         String lowerMimeType = mimeType.toLowerCase(Locale.ROOT);
 
         return configuredTypes.stream().map(value -> value.toLowerCase(Locale.ROOT)).anyMatch(lowerMimeType::equals)
@@ -648,16 +685,19 @@ public class DuplicateSearchService {
         } else if (status == DuplicateMethodStatus.DISABLED_BY_CONFIG) {
             fileManagerMetrics.recordDuplicateSearchMethodDisabled(method.name());
         }
+
         fileManagerMetrics.recordDuplicateMatchesReturned(method.name(), matchesReturned);
     }
 
     private String stableGroupId(String... parts) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
+
             for (String part : parts) {
                 digest.update(part.getBytes(StandardCharsets.UTF_8));
                 digest.update((byte) 0);
             }
+
             return HexFormat.of().formatHex(digest.digest());
         } catch (NoSuchAlgorithmException ex) {
             throw new IllegalStateException("SHA-256 digest is unavailable", ex);

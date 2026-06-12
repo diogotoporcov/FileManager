@@ -3,7 +3,9 @@ package com.filemanager.api.observability.adapter;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import java.time.Duration;
 import java.util.Objects;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -90,6 +92,18 @@ class MicrometerApplicationMetricsAdapterTest {
         assertThat(counter("filemanager.duplicate.groups.requested").count()).isEqualTo(1.0);
         assertThat(summary("filemanager.duplicate.groups.returned", "method", "EXACT").totalAmount())
                 .isEqualTo(2.0);
+    }
+
+    @Test
+    void recordOperationDuration() {
+        metrics.recordOperationDuration("duplicate.search", "success", Duration.ofMillis(12));
+
+        Timer timer = Objects.requireNonNull(registry.find("filemanager.operation.duration")
+                .tag("operation", "duplicate.search")
+                .tag("status", "success")
+                .timer());
+        assertThat(timer.count()).isEqualTo(1);
+        assertThat(timer.totalTime(java.util.concurrent.TimeUnit.MILLISECONDS)).isEqualTo(12.0);
     }
 
     private Counter counter(String name) {

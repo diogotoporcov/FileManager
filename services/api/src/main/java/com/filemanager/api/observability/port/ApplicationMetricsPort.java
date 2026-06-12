@@ -1,5 +1,7 @@
 package com.filemanager.api.observability.port;
 
+import java.time.Duration;
+
 public interface ApplicationMetricsPort {
     void recordFileUpload(long bytes, String ownerType);
 
@@ -24,4 +26,6 @@ public interface ApplicationMetricsPort {
     void recordDuplicateGroupsRequested();
 
     void recordDuplicateGroupsReturned(String method, int count);
+
+    void recordOperationDuration(String operation, String status, Duration duration);
 }

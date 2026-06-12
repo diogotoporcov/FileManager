@@ -1,6 +1,7 @@
 package com.filemanager.api.observability.application;
 
 import com.filemanager.api.observability.port.ApplicationMetricsPort;
+import java.time.Duration;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -79,5 +80,14 @@ class FileManagerMetricsTest {
 
         verify(applicationMetricsPort).recordDuplicateGroupsRequested();
         verify(applicationMetricsPort).recordDuplicateGroupsReturned("EXACT", 1);
+    }
+
+    @Test
+    void recordOperationDuration() {
+        Duration duration = Duration.ofMillis(12);
+
+        metrics.recordOperationDuration("duplicate.search", "success", duration);
+
+        verify(applicationMetricsPort).recordOperationDuration("duplicate.search", "success", duration);
     }
 }
