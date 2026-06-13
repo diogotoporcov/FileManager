@@ -1,6 +1,7 @@
 package com.filemanager.api.benchmark;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.filemanager.api.duplicate.application.DuplicateCandidateMaintenanceService;
 import com.filemanager.api.duplicate.application.DuplicateSearchService;
 import com.filemanager.api.file.application.FileService;
 import com.filemanager.api.processing.messaging.FileProcessingRequestedEvent;
@@ -32,7 +33,7 @@ import org.testcontainers.utility.DockerImageName;
 @Testcontainers
 @TestConstructor(autowireMode = TestConstructor.AutowireMode.ALL)
 class BenchmarkSuiteTest {
-    private static final int SCHEMA_VERSION = 2;
+    private static final int SCHEMA_VERSION = 3;
     private static final DockerImageName POSTGRES_IMAGE = DockerImageName
             .parse(System.getProperty("benchmark.postgres-image", "pgvector/pgvector:pg18"))
             .asCompatibleSubstituteFor("postgres");
@@ -51,6 +52,7 @@ class BenchmarkSuiteTest {
                     "pg_stat_statements.track=all");
 
     private final DuplicateSearchService duplicateSearchService;
+    private final DuplicateCandidateMaintenanceService duplicateCandidateMaintenanceService;
     private final FileService fileService;
     private final JdbcTemplate jdbcTemplate;
     private final DataSource dataSource;
@@ -67,11 +69,13 @@ class BenchmarkSuiteTest {
 
     BenchmarkSuiteTest(
             DuplicateSearchService duplicateSearchService,
+            DuplicateCandidateMaintenanceService duplicateCandidateMaintenanceService,
             FileService fileService,
             JdbcTemplate jdbcTemplate,
             DataSource dataSource,
             EntityManager entityManager) {
         this.duplicateSearchService = duplicateSearchService;
+        this.duplicateCandidateMaintenanceService = duplicateCandidateMaintenanceService;
         this.fileService = fileService;
         this.jdbcTemplate = jdbcTemplate;
         this.dataSource = dataSource;
@@ -119,6 +123,7 @@ class BenchmarkSuiteTest {
 
         List<BenchmarkMeasurement> measurements = new BenchmarkRunner(
                 duplicateSearchService,
+                duplicateCandidateMaintenanceService,
                 fileService,
                 jdbcTemplate,
                 databaseCollector::resetStatementStats)

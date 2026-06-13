@@ -45,7 +45,7 @@ class BenchmarkArtifactValidatorTest {
         writeCompleteRawArtifacts();
         Files.writeString(directory.resolve("correctness-results.json"), """
                 {
-                  "schemaVersion": 2,
+                  "schemaVersion": 3,
                   "passed": false,
                   "caseCount": 1,
                   "passedCount": 0,
@@ -142,7 +142,7 @@ class BenchmarkArtifactValidatorTest {
     private void writeCompleteRawArtifacts() throws Exception {
         Files.writeString(directory.resolve("environment.json"), """
                 {
-                  "schemaVersion": 2,
+                  "schemaVersion": 3,
                   "benchmarkRunId": "run",
                   "benchmarkProfile": "default",
                   "baselineQuality": "informational",
@@ -159,12 +159,12 @@ class BenchmarkArtifactValidatorTest {
                 """, StandardCharsets.UTF_8);
 
         Files.writeString(directory.resolve("dataset-manifest.json"), """
-                {"schemaVersion": 2, "recordCount": 10000}
+                {"schemaVersion": 3, "recordCount": 10000}
                 """, StandardCharsets.UTF_8);
 
         Files.writeString(directory.resolve("correctness-results.json"), """
                 {
-                  "schemaVersion": 2,
+                  "schemaVersion": 3,
                   "passed": true,
                   "caseCount": 1,
                   "passedCount": 1,
@@ -174,12 +174,12 @@ class BenchmarkArtifactValidatorTest {
                 """, StandardCharsets.UTF_8);
 
         Files.writeString(directory.resolve("setup-timings.json"), """
-                {"schemaVersion": 2, "timingsMs": {}}
+                {"schemaVersion": 3, "timingsMs": {}}
                 """, StandardCharsets.UTF_8);
 
         Files.writeString(directory.resolve("repository-latency.json"), """
                 {
-                  "schemaVersion": 2,
+                  "schemaVersion": 3,
                   "measurements": [{
                     "operation": "operation",
                     "scope": "SPRING_SERVICE_REPOSITORY",
@@ -197,7 +197,7 @@ class BenchmarkArtifactValidatorTest {
 
         Files.writeString(directory.resolve("component-status.json"), """
                 {
-                  "schemaVersion": 2,
+                  "schemaVersion": 3,
                   "components": {
                     "serviceRepositoryBenchmark": {"status": "COMPLETED"},
                     "k6": {"status": "NOT_REQUESTED"},
@@ -218,7 +218,7 @@ class BenchmarkArtifactValidatorTest {
 
         Files.writeString(directory.resolve("jvm-resource-usage.json"), """
                 {
-                  "schemaVersion": 2,
+                  "schemaVersion": 3,
                   "scope": "JVM_PROCESS",
                   "metrics": {
                     "heapMaxBytes": 1,
@@ -233,14 +233,20 @@ class BenchmarkArtifactValidatorTest {
         Files.createDirectories(queryPlans);
 
         Files.writeString(queryPlans.resolve("duplicate-exact.json"), "[{}]\n", StandardCharsets.UTF_8);
+        Files.writeString(queryPlans.resolve("duplicate-groups-exact-summary.json"), "[{}]\n", StandardCharsets.UTF_8);
 
         Files.writeString(directory.resolve("query-plan-manifest.json"), """
                 {
-                  "schemaVersion": 2,
+                  "schemaVersion": 3,
                   "captured": [{
                     "operation": "operation",
                     "scope": "DATABASE_DIRECT",
                     "file": "query-plans/duplicate-exact.json",
+                    "status": "COMPLETED"
+                  }, {
+                    "operation": "summary",
+                    "scope": "DATABASE_DIRECT",
+                    "file": "query-plans/duplicate-groups-exact-summary.json",
                     "status": "COMPLETED"
                   }],
                   "notCaptured": [{"operation": "other", "scope": "DATABASE_DIRECT", "status": "NOT_IMPLEMENTED"}]
@@ -251,7 +257,7 @@ class BenchmarkArtifactValidatorTest {
     private String componentStatus(String pgStatStatements) {
         return """
                 {
-                  "schemaVersion": 2,
+                  "schemaVersion": 3,
                   "components": {
                     "serviceRepositoryBenchmark": {"status": "COMPLETED"},
                     "k6": {"status": "NOT_REQUESTED"},

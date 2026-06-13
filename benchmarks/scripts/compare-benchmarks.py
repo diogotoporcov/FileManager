@@ -167,7 +167,7 @@ def comparison_type_for(baseline_dir: Path, current_dir: Path) -> str:
     current_env = json.loads((current_dir / "environment.json").read_text(encoding="utf-8"))
 
     for name, environment in {"baseline": baseline_env, "candidate": current_env}.items():
-        if environment.get("schemaVersion") != 2:
+        if environment.get("schemaVersion") != 3:
             raise SystemExit(f"Unsupported environment schema for {name}: {environment.get('schemaVersion')}")
 
     if baseline_env.get("benchmarkProfile") != "baseline" or current_env.get("benchmarkProfile") != "baseline":

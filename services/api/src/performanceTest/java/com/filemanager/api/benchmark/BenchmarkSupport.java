@@ -8,7 +8,7 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 final class BenchmarkSupport {
-    static final int SCHEMA_VERSION = 2;
+    static final int SCHEMA_VERSION = 3;
 
     private BenchmarkSupport() {
     }

@@ -1,6 +1,8 @@
 package com.filemanager.api.processing.application;
 
 import com.filemanager.api.config.AppProperties;
+import com.filemanager.api.duplicate.application.DuplicateCandidateMaintenanceService;
+import com.filemanager.api.duplicate.application.ExactDuplicateGroupMaintenanceService;
 import com.filemanager.api.exception.ResourceNotFoundException;
 import com.filemanager.api.file.domain.FileEntity;
 import com.filemanager.api.file.persistence.FileRepository;
@@ -53,6 +55,8 @@ public class ProcessingJobService {
     private final VideoFrameEmbeddingRepository videoFrameEmbeddingRepository;
     private final FileManagerMetrics fileManagerMetrics;
     private final AppProperties appProperties;
+    private final ExactDuplicateGroupMaintenanceService exactDuplicateGroupMaintenanceService;
+    private final DuplicateCandidateMaintenanceService duplicateCandidateMaintenanceService;
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void updateExternalJobId(UUID jobId, String externalJobId) {
@@ -91,7 +95,12 @@ public class ProcessingJobService {
         ProcessingJob job = getAndValidateJob(jobId, fileId, ProcessingJob.JobType.CHECKSUM);
         FileEntity file = getActiveFile(fileId);
 
-        updateFileFingerprint(file, normalizedSha256);
+        String oldHashValue = updateFileFingerprint(file, normalizedSha256);
+        exactDuplicateGroupMaintenanceService.refreshAfterFingerprintChange(
+                file.getOwnerUser().getId(),
+                FileFingerprint.FingerprintAlgorithm.SHA256,
+                oldHashValue,
+                normalizedSha256);
         completeJob(job);
     }
 
@@ -106,6 +115,7 @@ public class ProcessingJobService {
         FileEntity file = getActiveFile(fileId);
 
         updateImageFingerprint(file, normalizedPhash);
+        duplicateCandidateMaintenanceService.refreshImagePhashCandidates(file);
         completeJob(job);
     }
 
@@ -127,6 +137,7 @@ public class ProcessingJobService {
 
         float[] normalizedEmbedding = normalizeEmbedding(embedding);
         updateFileEmbedding(file, modelName, modelVersion, dimension, normalizedEmbedding);
+        duplicateCandidateMaintenanceService.refreshImageEmbeddingCandidates(file, modelName, modelVersion, dimension);
         completeJob(job);
     }
 
@@ -161,6 +172,7 @@ public class ProcessingJobService {
         FileEntity file = getActiveFile(request.getFileId());
 
         updateAudioFingerprint(file, request);
+        duplicateCandidateMaintenanceService.refreshAudioFingerprintCandidates(file);
         completeJob(job);
     }
 
@@ -353,22 +365,23 @@ public class ProcessingJobService {
                 .orElseThrow(() -> new ResourceNotFoundException("File not found or deleted: " + fileId));
     }
 
-    private void updateFileFingerprint(FileEntity file, String hashValue) {
-        fileFingerprintRepository.findByFileIdAndAlgorithm(file.getId(), FileFingerprint.FingerprintAlgorithm.SHA256)
-                .ifPresentOrElse(
-                        f -> {
-                            f.setHashValue(hashValue);
-                            fileFingerprintRepository.save(f);
-                        },
-                        () -> {
-                            FileFingerprint fingerprint = FileFingerprint.builder()
-                                    .file(file)
-                                    .algorithm(FileFingerprint.FingerprintAlgorithm.SHA256)
-                                    .hashValue(hashValue)
-                                    .build();
-                            fileFingerprintRepository.save(fingerprint);
-                        }
-                );
+    private String updateFileFingerprint(FileEntity file, String hashValue) {
+        return fileFingerprintRepository.findByFileIdAndAlgorithm(file.getId(), FileFingerprint.FingerprintAlgorithm.SHA256)
+                .map(existing -> {
+                    String oldHashValue = existing.getHashValue();
+                    existing.setHashValue(hashValue);
+                    fileFingerprintRepository.save(existing);
+                    return oldHashValue;
+                })
+                .orElseGet(() -> {
+                    FileFingerprint fingerprint = FileFingerprint.builder()
+                            .file(file)
+                            .algorithm(FileFingerprint.FingerprintAlgorithm.SHA256)
+                            .hashValue(hashValue)
+                            .build();
+                    fileFingerprintRepository.save(fingerprint);
+                    return null;
+                });
     }
 
     private void updateImageFingerprint(FileEntity file, String phash) {
@@ -504,6 +517,11 @@ public class ProcessingJobService {
                                 .sourceFrameCount(frameEmbeddings.size())
                                 .build())
                 );
+        duplicateCandidateMaintenanceService.refreshVideoEmbeddingCandidates(
+                file,
+                first.getModelName(),
+                first.getModelVersion(),
+                first.getDimension());
     }
 
     private boolean sameEmbeddingModel(VideoFrameEmbedding expected, VideoFrameEmbedding actual) {

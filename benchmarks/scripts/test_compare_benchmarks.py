@@ -111,7 +111,7 @@ def write_run(path: Path, env_overrides: dict[str, object], rows: list[dict[str,
     path.mkdir(parents=True)
 
     environment = {
-        "schemaVersion": 2,
+        "schemaVersion": 3,
         "benchmarkProfile": "baseline",
         "baselineQuality": "stable",
         "environmentFingerprint": "fingerprint",
@@ -123,7 +123,7 @@ def write_run(path: Path, env_overrides: dict[str, object], rows: list[dict[str,
         "measuredIterations": 100,
         "concurrency": "1,10,25",
         "instrumentationMode": "metrics",
-        "benchmarkSchemaVersion": 2,
+        "benchmarkSchemaVersion": 3,
         "runtime": {
             "javaVersion": "25",
             "postgresqlVersion": "18",

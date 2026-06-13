@@ -2,19 +2,23 @@ package com.filemanager.api.duplicate.application;
 
 import com.filemanager.api.config.AppProperties;
 import com.filemanager.api.duplicate.domain.DuplicateConfidence;
+import com.filemanager.api.duplicate.domain.DuplicateCandidate;
+import com.filemanager.api.duplicate.domain.DuplicateCandidate.DuplicateCandidateStatus;
 import com.filemanager.api.duplicate.domain.DuplicateEvidenceType;
 import com.filemanager.api.duplicate.domain.DuplicateMethodStatus;
 import com.filemanager.api.duplicate.domain.DuplicateSearchMethod;
 import com.filemanager.api.duplicate.persistence.AudioDuplicateCandidateRepository;
 import com.filemanager.api.duplicate.persistence.AudioDuplicateGroupFileProjection;
 import com.filemanager.api.duplicate.persistence.AudioDuplicateGroupKeyProjection;
-import com.filemanager.api.duplicate.persistence.EmbeddingDuplicateCandidateProjection;
+import com.filemanager.api.duplicate.persistence.DuplicateCandidateFileProjection;
+import com.filemanager.api.duplicate.persistence.DuplicateCandidateRefreshRepository;
+import com.filemanager.api.duplicate.persistence.DuplicateCandidateRepository;
 import com.filemanager.api.duplicate.persistence.ExactDuplicateCandidateRepository;
+import com.filemanager.api.duplicate.persistence.ExactDuplicateGroupRepository;
 import com.filemanager.api.duplicate.persistence.ExactDuplicateGroupFileProjection;
 import com.filemanager.api.duplicate.persistence.ExactDuplicateGroupKeyProjection;
 import com.filemanager.api.duplicate.persistence.ImageEmbeddingDuplicateCandidateRepository;
 import com.filemanager.api.duplicate.persistence.ImagePhashDuplicateCandidateRepository;
-import com.filemanager.api.duplicate.persistence.PhashDuplicateCandidateProjection;
 import com.filemanager.api.duplicate.persistence.VideoEmbeddingDuplicateCandidateRepository;
 import com.filemanager.api.duplicate.web.DuplicateGroupSearchRequest;
 import com.filemanager.api.duplicate.web.DuplicateGroupSearchResponse;
@@ -71,12 +75,16 @@ public class DuplicateSearchService {
     private final FileEmbeddingRepository fileEmbeddingRepository;
     private final AudioFingerprintRepository audioFingerprintRepository;
     private final ExactDuplicateCandidateRepository exactDuplicateCandidateRepository;
+    private final ExactDuplicateGroupRepository exactDuplicateGroupRepository;
+    private final DuplicateCandidateRepository duplicateCandidateRepository;
+    private final DuplicateCandidateRefreshRepository duplicateCandidateRefreshRepository;
     private final ImagePhashDuplicateCandidateRepository imagePhashDuplicateCandidateRepository;
     private final ImageEmbeddingDuplicateCandidateRepository imageEmbeddingDuplicateCandidateRepository;
     private final AudioDuplicateCandidateRepository audioDuplicateCandidateRepository;
     private final VideoEmbeddingRepository videoEmbeddingRepository;
     private final VideoEmbeddingDuplicateCandidateRepository videoEmbeddingDuplicateCandidateRepository;
     private final DuplicateDetectionProperties properties;
+    private final DuplicateCandidateMaintenanceService duplicateCandidateMaintenanceService;
     private final AppProperties appProperties;
     private final FileManagerMetrics fileManagerMetrics;
 
@@ -227,15 +235,35 @@ public class DuplicateSearchService {
 
         return imageFingerprintRepository.findByFileId(sourceFile.getId())
                 .map(sourceFingerprint -> {
-                    List<DuplicateMatchResponse> matches = imagePhashDuplicateCandidateRepository.findCandidates(
-                                    actorUserId,
-                                    sourceFile.getId(),
-                                    sourceFingerprint.getPhash(),
-                                    properties.getImagePhash().getMaxDistance(),
-                                    properties.getImagePhash().getMaxCandidates())
+                    String thresholdVersion = duplicateCandidateMaintenanceService.phashThresholdVersion();
+                    List<DuplicateMatchResponse> matches = findPersistedCandidates(
+                            actorUserId,
+                            sourceFile.getId(),
+                            DuplicateSearchMethod.IMAGE_PHASH,
+                            DuplicateCandidate.NO_MODEL,
+                            DuplicateCandidate.NO_MODEL,
+                            thresholdVersion,
+                            properties.getImagePhash().getMaxCandidates())
                             .stream()
-                            .map(this::phashMatch)
+                            .map(candidate -> phashMatch(candidate.fileId(), candidate.distance().intValue()))
                             .toList();
+                    if (matches.isEmpty() && !hasCandidateRefresh(
+                            actorUserId,
+                            sourceFile.getId(),
+                            DuplicateSearchMethod.IMAGE_PHASH,
+                            DuplicateCandidate.NO_MODEL,
+                            DuplicateCandidate.NO_MODEL,
+                            thresholdVersion)) {
+                        matches = imagePhashDuplicateCandidateRepository.findCandidates(
+                                        actorUserId,
+                                        sourceFile.getId(),
+                                        sourceFingerprint.getPhash(),
+                                        properties.getImagePhash().getMaxDistance(),
+                                        properties.getImagePhash().getMaxCandidates())
+                                .stream()
+                                .map(candidate -> phashMatch(candidate.getFileId(), candidate.getDistance()))
+                                .toList();
+                    }
                     return methodResult(DuplicateSearchMethod.IMAGE_PHASH, DuplicateMethodStatus.COMPLETED, matches);
                 })
                 .orElseGet(() -> methodResult(
@@ -263,17 +291,43 @@ public class DuplicateSearchService {
                         embeddingProperties.getModelVersion())
                 .filter(sourceEmbedding -> Objects.equals(sourceEmbedding.getDimension(), embeddingProperties.getDimension()))
                 .map(sourceEmbedding -> {
-                    List<DuplicateMatchResponse> matches = imageEmbeddingDuplicateCandidateRepository.findCandidates(
-                                    actorUserId,
-                                    sourceFile.getId(),
-                                    sourceEmbedding.getModelName(),
-                                    sourceEmbedding.getModelVersion(),
-                                    sourceEmbedding.getDimension(),
-                                    properties.getImageEmbedding().getMaxDistance(),
-                                    properties.getImageEmbedding().getMaxCandidates())
+                    String thresholdVersion = duplicateCandidateMaintenanceService.imageEmbeddingThresholdVersion();
+                    List<DuplicateMatchResponse> matches = findPersistedCandidates(
+                            actorUserId,
+                            sourceFile.getId(),
+                            DuplicateSearchMethod.IMAGE_EMBEDDING,
+                            sourceEmbedding.getModelName(),
+                            sourceEmbedding.getModelVersion(),
+                            thresholdVersion,
+                            properties.getImageEmbedding().getMaxCandidates())
                             .stream()
-                            .map(candidate -> embeddingMatch(candidate, DuplicateEvidenceType.IMAGE_EMBEDDING))
+                            .map(candidate -> embeddingMatch(
+                                    candidate.fileId(),
+                                    candidate.distance(),
+                                    DuplicateEvidenceType.IMAGE_EMBEDDING))
                             .toList();
+                    if (matches.isEmpty() && !hasCandidateRefresh(
+                            actorUserId,
+                            sourceFile.getId(),
+                            DuplicateSearchMethod.IMAGE_EMBEDDING,
+                            sourceEmbedding.getModelName(),
+                            sourceEmbedding.getModelVersion(),
+                            thresholdVersion)) {
+                        matches = imageEmbeddingDuplicateCandidateRepository.findCandidates(
+                                        actorUserId,
+                                        sourceFile.getId(),
+                                        sourceEmbedding.getModelName(),
+                                        sourceEmbedding.getModelVersion(),
+                                        sourceEmbedding.getDimension(),
+                                        properties.getImageEmbedding().getMaxDistance(),
+                                        properties.getImageEmbedding().getMaxCandidates())
+                                .stream()
+                                .map(candidate -> embeddingMatch(
+                                        candidate.getFileId(),
+                                        candidate.getDistance(),
+                                        DuplicateEvidenceType.IMAGE_EMBEDDING))
+                                .toList();
+                    }
                     return methodResult(DuplicateSearchMethod.IMAGE_EMBEDDING, DuplicateMethodStatus.COMPLETED, matches);
                 })
                 .orElseGet(() -> methodResult(
@@ -293,16 +347,36 @@ public class DuplicateSearchService {
 
         return audioFingerprintRepository.findByFileId(sourceFile.getId())
                 .map(sourceFingerprint -> {
-                    List<DuplicateMatchResponse> matches = audioDuplicateCandidateRepository.findCandidates(
-                                    actorUserId,
-                                    sourceFile.getId(),
-                                    sourceFingerprint.getFingerprintAlgorithm(),
-                                    sourceFingerprint.getFingerprintVersion(),
-                                    sourceFingerprint.getFingerprintHash(),
-                                    PageRequest.of(0, properties.getAudioFingerprint().getMaxCandidates()))
+                    String thresholdVersion = duplicateCandidateMaintenanceService.audioThresholdVersion();
+                    List<DuplicateMatchResponse> matches = findPersistedCandidates(
+                            actorUserId,
+                            sourceFile.getId(),
+                            DuplicateSearchMethod.AUDIO_FINGERPRINT,
+                            DuplicateCandidate.NO_MODEL,
+                            DuplicateCandidate.NO_MODEL,
+                            thresholdVersion,
+                            properties.getAudioFingerprint().getMaxCandidates())
                             .stream()
                             .map(candidate -> audioMatch(candidate.fileId()))
                             .toList();
+                    if (matches.isEmpty() && !hasCandidateRefresh(
+                            actorUserId,
+                            sourceFile.getId(),
+                            DuplicateSearchMethod.AUDIO_FINGERPRINT,
+                            DuplicateCandidate.NO_MODEL,
+                            DuplicateCandidate.NO_MODEL,
+                            thresholdVersion)) {
+                        matches = audioDuplicateCandidateRepository.findCandidates(
+                                        actorUserId,
+                                        sourceFile.getId(),
+                                        sourceFingerprint.getFingerprintAlgorithm(),
+                                        sourceFingerprint.getFingerprintVersion(),
+                                        sourceFingerprint.getFingerprintHash(),
+                                        PageRequest.of(0, properties.getAudioFingerprint().getMaxCandidates()))
+                                .stream()
+                                .map(candidate -> audioMatch(candidate.fileId()))
+                                .toList();
+                    }
                     return methodResult(DuplicateSearchMethod.AUDIO_FINGERPRINT, DuplicateMethodStatus.COMPLETED, matches);
                 })
                 .orElseGet(() -> methodResult(
@@ -329,17 +403,43 @@ public class DuplicateSearchService {
                 .filter(sourceEmbedding -> Objects.equals(sourceEmbedding.getModelVersion(), embeddingProperties.getModelVersion()))
                 .filter(sourceEmbedding -> Objects.equals(sourceEmbedding.getDimension(), embeddingProperties.getDimension()))
                 .map(sourceEmbedding -> {
-                    List<DuplicateMatchResponse> matches = videoEmbeddingDuplicateCandidateRepository.findCandidates(
-                                    actorUserId,
-                                    sourceFile.getId(),
-                                    sourceEmbedding.getModelName(),
-                                    sourceEmbedding.getModelVersion(),
-                                    sourceEmbedding.getDimension(),
-                                    properties.getVideoEmbedding().getMaxDistance(),
-                                    properties.getVideoEmbedding().getMaxCandidates())
+                    String thresholdVersion = duplicateCandidateMaintenanceService.videoEmbeddingThresholdVersion();
+                    List<DuplicateMatchResponse> matches = findPersistedCandidates(
+                            actorUserId,
+                            sourceFile.getId(),
+                            DuplicateSearchMethod.VIDEO_EMBEDDING,
+                            sourceEmbedding.getModelName(),
+                            sourceEmbedding.getModelVersion(),
+                            thresholdVersion,
+                            properties.getVideoEmbedding().getMaxCandidates())
                             .stream()
-                            .map(candidate -> embeddingMatch(candidate, DuplicateEvidenceType.VIDEO_EMBEDDING))
+                            .map(candidate -> embeddingMatch(
+                                    candidate.fileId(),
+                                    candidate.distance(),
+                                    DuplicateEvidenceType.VIDEO_EMBEDDING))
                             .toList();
+                    if (matches.isEmpty() && !hasCandidateRefresh(
+                            actorUserId,
+                            sourceFile.getId(),
+                            DuplicateSearchMethod.VIDEO_EMBEDDING,
+                            sourceEmbedding.getModelName(),
+                            sourceEmbedding.getModelVersion(),
+                            thresholdVersion)) {
+                        matches = videoEmbeddingDuplicateCandidateRepository.findCandidates(
+                                        actorUserId,
+                                        sourceFile.getId(),
+                                        sourceEmbedding.getModelName(),
+                                        sourceEmbedding.getModelVersion(),
+                                        sourceEmbedding.getDimension(),
+                                        properties.getVideoEmbedding().getMaxDistance(),
+                                        properties.getVideoEmbedding().getMaxCandidates())
+                                .stream()
+                                .map(candidate -> embeddingMatch(
+                                        candidate.getFileId(),
+                                        candidate.getDistance(),
+                                        DuplicateEvidenceType.VIDEO_EMBEDDING))
+                                .toList();
+                    }
                     return methodResult(DuplicateSearchMethod.VIDEO_EMBEDDING, DuplicateMethodStatus.COMPLETED, matches);
                 })
                 .orElseGet(() -> methodResult(
@@ -363,11 +463,13 @@ public class DuplicateSearchService {
         }
 
         int limit = Math.min(requestedLimit, properties.getExact().getMaxGroups());
-        List<ExactDuplicateGroupKeyProjection> keys = exactDuplicateCandidateRepository.findGroupKeys(
-                actorUserId,
-                folderId,
-                mimeType,
-                PageRequest.of(0, limit));
+        List<ExactDuplicateGroupKeyProjection> keys = hasSummaryCompatibleFilters(folderId, mimeType)
+                ? exactDuplicateGroupRepository.findOwnerGroupKeys(actorUserId, PageRequest.of(0, limit))
+                : exactDuplicateCandidateRepository.findGroupKeys(
+                        actorUserId,
+                        folderId,
+                        mimeType,
+                        PageRequest.of(0, limit));
         if (keys.isEmpty()) {
             return groupMethodResult(DuplicateSearchMethod.EXACT, DuplicateMethodStatus.COMPLETED, List.of());
         }
@@ -470,7 +572,7 @@ public class DuplicateSearchService {
     }
 
     private FileEntity loadOwnedSourceFile(UUID sourceFileId, UUID actorUserId) {
-        FileEntity sourceFile = fileRepository.findByIdAndDeletedAtIsNull(sourceFileId)
+        FileEntity sourceFile = fileRepository.findEligibleById(sourceFileId)
                 .orElseThrow(() -> new ResourceNotFoundException("File not found: " + sourceFileId));
 
         if (!sourceFile.isOwnedBy(actorUserId)) {
@@ -531,12 +633,47 @@ public class DuplicateSearchService {
                 .build();
     }
 
-    private DuplicateMatchResponse phashMatch(PhashDuplicateCandidateProjection candidate) {
-        int distance = candidate.getDistance();
+    private List<DuplicateCandidateFileProjection> findPersistedCandidates(
+            UUID actorUserId,
+            UUID sourceFileId,
+            DuplicateSearchMethod method,
+            String modelName,
+            String modelVersion,
+            String thresholdVersion,
+            int maxCandidates) {
+        return duplicateCandidateRepository.findCandidatesForFile(
+                actorUserId,
+                sourceFileId,
+                method,
+                modelName,
+                modelVersion,
+                thresholdVersion,
+                DuplicateCandidateStatus.ACTIVE,
+                PageRequest.of(0, maxCandidates));
+    }
+
+    private boolean hasCandidateRefresh(
+            UUID actorUserId,
+            UUID sourceFileId,
+            DuplicateSearchMethod method,
+            String modelName,
+            String modelVersion,
+            String thresholdVersion) {
+        return duplicateCandidateRefreshRepository
+                .existsByOwnerUserIdAndSourceFileIdAndMethodAndModelNameAndModelVersionAndThresholdVersion(
+                        actorUserId,
+                        sourceFileId,
+                        method,
+                        modelName,
+                        modelVersion,
+                        thresholdVersion);
+    }
+
+    private DuplicateMatchResponse phashMatch(UUID fileId, int distance) {
         double score = Math.max(0.0, 1.0 - distance / 64.0);
 
         return DuplicateMatchResponse.builder()
-                .fileId(candidate.getFileId())
+                .fileId(fileId)
                 .confidence(DuplicateConfidence.NEAR_DUPLICATE)
                 .score(score)
                 .evidence(List.of(DuplicateEvidenceResponse.builder()
@@ -547,14 +684,11 @@ public class DuplicateSearchService {
                 .build();
     }
 
-    private DuplicateMatchResponse embeddingMatch(
-            EmbeddingDuplicateCandidateProjection candidate,
-            DuplicateEvidenceType evidenceType) {
-        double distance = candidate.getDistance();
+    private DuplicateMatchResponse embeddingMatch(UUID fileId, double distance, DuplicateEvidenceType evidenceType) {
         double score = Math.max(0.0, 1.0 - distance / 2.0);
 
         return DuplicateMatchResponse.builder()
-                .fileId(candidate.getFileId())
+                .fileId(fileId)
                 .confidence(DuplicateConfidence.NEAR_DUPLICATE)
                 .score(score)
                 .evidence(List.of(DuplicateEvidenceResponse.builder()
@@ -667,6 +801,10 @@ public class DuplicateSearchService {
 
     private boolean allowsConfidence(DuplicateConfidence requestedMinimum, DuplicateConfidence actualConfidence) {
         return confidenceRank(actualConfidence) >= confidenceRank(requestedMinimum);
+    }
+
+    private boolean hasSummaryCompatibleFilters(UUID folderId, String mimeType) {
+        return folderId == null && mimeType == null;
     }
 
     private int confidenceRank(DuplicateConfidence confidence) {

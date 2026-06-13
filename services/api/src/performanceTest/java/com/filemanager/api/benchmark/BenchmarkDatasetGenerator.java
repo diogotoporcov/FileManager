@@ -6,8 +6,12 @@ import static com.filemanager.api.benchmark.BenchmarkSupport.sha256;
 import com.filemanager.api.duplicate.domain.DuplicateSearchMethod;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
 
 final class BenchmarkDatasetGenerator {
@@ -29,6 +33,7 @@ final class BenchmarkDatasetGenerator {
         addFolders();
         addDuplicateFixtures();
         addFillerRecords();
+        addDuplicateReadModels();
 
         return dataset;
     }
@@ -276,6 +281,248 @@ final class BenchmarkDatasetGenerator {
         }
     }
 
+    private void addDuplicateReadModels() {
+        addExactDuplicateGroups();
+        addNearDuplicateCandidates();
+    }
+
+    private void addExactDuplicateGroups() {
+        Map<UUID, FileRow> filesById = filesById();
+        Map<UUID, FolderRow> foldersById = foldersById();
+        Map<ExactGroupKey, List<FileRow>> filesByGroup = new LinkedHashMap<>();
+
+        for (FileFingerprintRow fingerprint : dataset.fileFingerprints) {
+            FileRow file = filesById.get(fingerprint.fileId());
+            if (file == null || !isEligible(file, foldersById)) {
+                continue;
+            }
+
+            ExactGroupKey key = new ExactGroupKey(file.ownerUserId(), fingerprint.algorithm(), fingerprint.hashValue());
+            filesByGroup.computeIfAbsent(key, ignored -> new ArrayList<>()).add(file);
+        }
+
+        filesByGroup.forEach((key, files) -> {
+            FileRow representative = files.stream()
+                    .min(Comparator.comparing(FileRow::createdAt).thenComparing(FileRow::id))
+                    .orElseThrow();
+            dataset.exactDuplicateGroups.add(new ExactDuplicateGroupRow(
+                    id(options.seed(), "exact-group-" + key.ownerUserId + "-" + key.algorithm + "-" + key.hashValue),
+                    key.ownerUserId,
+                    key.algorithm,
+                    key.hashValue,
+                    files.size(),
+                    representative.id(),
+                    CREATED_AT,
+                    CREATED_AT));
+        });
+    }
+
+    private void addNearDuplicateCandidates() {
+        UUID actor = dataset.actorUserId();
+        addDuplicateCandidate(
+                actor,
+                dataset.source("image-phash-threshold"),
+                id(options.seed(), "file-image-phash-identical"),
+                "IMAGE_PHASH",
+                "NEAR_DUPLICATE",
+                0.0,
+                1.0,
+                "IMAGE_PHASH",
+                "none",
+                "none",
+                "maxDistance=10;topN=100");
+        addDuplicateCandidate(
+                actor,
+                dataset.source("image-phash-threshold"),
+                id(options.seed(), "file-image-phash-inside"),
+                "IMAGE_PHASH",
+                "NEAR_DUPLICATE",
+                5.0,
+                1.0 - 5.0 / 64.0,
+                "IMAGE_PHASH",
+                "none",
+                "none",
+                "maxDistance=10;topN=100");
+        addDuplicateCandidate(
+                actor,
+                dataset.source("image-phash-threshold"),
+                id(options.seed(), "file-image-phash-at-threshold"),
+                "IMAGE_PHASH",
+                "NEAR_DUPLICATE",
+                10.0,
+                1.0 - 10.0 / 64.0,
+                "IMAGE_PHASH",
+                "none",
+                "none",
+                "maxDistance=10;topN=100");
+        addDuplicateCandidateRefresh(
+                actor,
+                dataset.source("image-phash-threshold"),
+                "IMAGE_PHASH",
+                "none",
+                "none",
+                "maxDistance=10;topN=100",
+                3);
+        addDuplicateCandidate(
+                actor,
+                dataset.source("image-embedding-threshold"),
+                id(options.seed(), "file-image-embedding-inside"),
+                "IMAGE_EMBEDDING",
+                "NEAR_DUPLICATE",
+                0.10,
+                0.95,
+                "IMAGE_EMBEDDING",
+                MODEL_NAME,
+                MODEL_VERSION,
+                "maxDistance=0.200000");
+        addDuplicateCandidate(
+                actor,
+                dataset.source("image-embedding-threshold"),
+                id(options.seed(), "file-image-embedding-at-threshold"),
+                "IMAGE_EMBEDDING",
+                "NEAR_DUPLICATE",
+                0.20,
+                0.90,
+                "IMAGE_EMBEDDING",
+                MODEL_NAME,
+                MODEL_VERSION,
+                "maxDistance=0.200000");
+        addDuplicateCandidateRefresh(
+                actor,
+                dataset.source("image-embedding-threshold"),
+                "IMAGE_EMBEDDING",
+                MODEL_NAME,
+                MODEL_VERSION,
+                "maxDistance=0.200000",
+                2);
+        addDuplicateCandidate(
+                actor,
+                dataset.source("audio-one-match"),
+                id(options.seed(), "file-audio-match"),
+                "AUDIO_FINGERPRINT",
+                "EXACT",
+                0.0,
+                1.0,
+                "AUDIO_FINGERPRINT",
+                "none",
+                "none",
+                "topN=100");
+        addDuplicateCandidateRefresh(
+                actor,
+                dataset.source("audio-one-match"),
+                "AUDIO_FINGERPRINT",
+                "none",
+                "none",
+                "topN=100",
+                1);
+        addDuplicateCandidate(
+                actor,
+                dataset.source("video-embedding-one-match"),
+                id(options.seed(), "file-video-inside"),
+                "VIDEO_EMBEDDING",
+                "NEAR_DUPLICATE",
+                0.10,
+                0.95,
+                "VIDEO_EMBEDDING",
+                MODEL_NAME,
+                MODEL_VERSION,
+                "maxDistance=0.200000");
+        addDuplicateCandidateRefresh(
+                actor,
+                dataset.source("video-embedding-one-match"),
+                "VIDEO_EMBEDDING",
+                MODEL_NAME,
+                MODEL_VERSION,
+                "maxDistance=0.200000",
+                1);
+    }
+
+    private void addDuplicateCandidate(
+            UUID ownerUserId,
+            UUID firstFileId,
+            UUID secondFileId,
+            String method,
+            String confidence,
+            Double distance,
+            double score,
+            String evidenceType,
+            String modelName,
+            String modelVersion,
+            String thresholdVersion) {
+        UUID low = firstFileId.compareTo(secondFileId) < 0 ? firstFileId : secondFileId;
+        UUID high = firstFileId.compareTo(secondFileId) < 0 ? secondFileId : firstFileId;
+        dataset.duplicateCandidates.add(new DuplicateCandidateRow(
+                id(options.seed(), "duplicate-candidate-" + method + "-" + low + "-" + high),
+                ownerUserId,
+                low,
+                high,
+                method,
+                confidence,
+                distance,
+                score,
+                evidenceType,
+                modelName,
+                modelVersion,
+                thresholdVersion,
+                "ACTIVE",
+                CREATED_AT,
+                CREATED_AT));
+    }
+
+    private void addDuplicateCandidateRefresh(
+            UUID ownerUserId,
+            UUID sourceFileId,
+            String method,
+            String modelName,
+            String modelVersion,
+            String thresholdVersion,
+            int candidateCount) {
+        dataset.duplicateCandidateRefreshes.add(new DuplicateCandidateRefreshRow(
+                id(options.seed(), "duplicate-candidate-refresh-" + method + "-" + sourceFileId + "-" + thresholdVersion),
+                ownerUserId,
+                sourceFileId,
+                method,
+                modelName,
+                modelVersion,
+                thresholdVersion,
+                candidateCount,
+                CREATED_AT,
+                CREATED_AT,
+                CREATED_AT));
+    }
+
+    private Map<UUID, FileRow> filesById() {
+        Map<UUID, FileRow> rows = new LinkedHashMap<>();
+        for (FileRow file : dataset.files) {
+            rows.put(file.id(), file);
+        }
+
+        return rows;
+    }
+
+    private Map<UUID, FolderRow> foldersById() {
+        Map<UUID, FolderRow> rows = new LinkedHashMap<>();
+        for (FolderRow folder : dataset.folders) {
+            rows.put(folder.id(), folder);
+        }
+
+        return rows;
+    }
+
+    private boolean isEligible(FileRow file, Map<UUID, FolderRow> foldersById) {
+        if (file.deletedAt() != null) {
+            return false;
+        }
+
+        if (file.folderId() == null) {
+            return true;
+        }
+
+        FolderRow folder = foldersById.get(file.folderId());
+
+        return folder == null || folder.deletedAt() == null;
+    }
+
     private FileRow addFile(String label, UUID ownerUserId, UUID folderId, String mimeType, OffsetDateTime deletedAt) {
         UUID fileId = id(options.seed(), "file-" + label);
         FileRow file = new FileRow(
@@ -398,5 +645,8 @@ final class BenchmarkDatasetGenerator {
         }
 
         return builder.append(']').toString();
+    }
+
+    private record ExactGroupKey(UUID ownerUserId, String algorithm, String hashValue) {
     }
 }

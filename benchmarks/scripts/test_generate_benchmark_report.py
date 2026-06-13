@@ -114,7 +114,7 @@ def write_scale(scale_dir: Path, measurements: list[dict[str, object]]) -> None:
     scale_dir.mkdir(parents=True, exist_ok=True)
 
     (scale_dir / "repository-latency.json").write_text(
-        json_text({"schemaVersion": 2, "measurements": measurements}),
+        json_text({"schemaVersion": 3, "measurements": measurements}),
         encoding="utf-8",
     )
 
@@ -128,7 +128,7 @@ def write_complete_scale(
     write_scale(scale_dir, [measurement(f"operation-{scale}", "SPRING_SERVICE_REPOSITORY", "WARM")])
     (scale_dir / "environment.json").write_text(
         json_text({
-            "schemaVersion": 2,
+            "schemaVersion": 3,
             "benchmarkRunId": "run",
 
             "benchmarkProfile": profile,
@@ -149,7 +149,7 @@ def write_complete_scale(
             "postgresqlVersion": "18",
             "pgvectorVersion": "0.8.2",
             "jdkVersion": "25",
-            "benchmarkSchemaVersion": 2,
+            "benchmarkSchemaVersion": 3,
 
             "executionEnvironment": {
                 "operatingSystem": "test-os",
@@ -167,23 +167,23 @@ def write_complete_scale(
     )
 
     (scale_dir / "dataset-manifest.json").write_text(
-        json_text({"schemaVersion": 2, "recordCount": records, "seed": 20260611}),
+        json_text({"schemaVersion": 3, "recordCount": records, "seed": 20260611}),
         encoding="utf-8",
     )
 
     (scale_dir / "correctness-results.json").write_text(
-        json_text({"schemaVersion": 2, "passed": True, "caseCount": 1, "failedCount": 0}),
+        json_text({"schemaVersion": 3, "passed": True, "caseCount": 1, "failedCount": 0}),
         encoding="utf-8",
     )
 
     (scale_dir / "setup-timings.json").write_text(
-        json_text({"schemaVersion": 2, "timingsMs": {}}),
+        json_text({"schemaVersion": 3, "timingsMs": {}}),
         encoding="utf-8",
     )
 
     (scale_dir / "component-status.json").write_text(
         json_text({
-            "schemaVersion": 2,
+            "schemaVersion": 3,
             "components": {
                 "serviceRepositoryBenchmark": {"status": "COMPLETED"},
                 "k6": {"status": "NOT_REQUESTED"},
@@ -199,7 +199,7 @@ def write_complete_scale(
 
 def measurement(operation: str, scope: str, cold_or_warm: str) -> dict[str, object]:
     return {
-        "schemaVersion": 2,
+        "schemaVersion": 3,
         "operation": operation,
         "scope": scope,
         "coldOrWarm": cold_or_warm,

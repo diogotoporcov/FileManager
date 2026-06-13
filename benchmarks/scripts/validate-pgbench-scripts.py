@@ -43,7 +43,12 @@ def validate_script(path: Path) -> list[str]:
     errors.extend(f"{path}: stale or unexpected pgbench variable is used: {name}" for name in unexpected)
     errors.extend(f"{path}: unused pgbench variable defined with \\set: {name}" for name in unused)
 
-    for restriction, token in REQUIRED_RESTRICTIONS.items():
+    restrictions = REQUIRED_RESTRICTIONS.copy()
+    if path.name == "duplicate-groups-exact.sql" and "FROM exact_duplicate_groups" in text:
+        restrictions["exact-summary-count"] = "active_file_count > 1"
+        restrictions.pop("deleted-resource")
+
+    for restriction, token in restrictions.items():
         if token not in text:
             errors.append(f"{path}: required restriction is missing: {restriction}")
 

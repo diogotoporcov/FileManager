@@ -6,7 +6,7 @@ from typing import Any
 
 
 SCALES = ["10k", "100k", "1m"]
-SUPPORTED_SCHEMA_VERSION = 2
+SUPPORTED_SCHEMA_VERSION = 3
 REQUIRED_SCALE_ARTIFACTS = [
     "environment.json",
     "dataset-manifest.json",

@@ -109,6 +109,29 @@ record FileFingerprintRow(
     }
 }
 
+record ExactDuplicateGroupRow(
+        UUID id,
+        UUID ownerUserId,
+        String algorithm,
+        String hashValue,
+        long activeFileCount,
+        UUID representativeFileId,
+        OffsetDateTime createdAt,
+        OffsetDateTime updatedAt) implements CsvWritable {
+    @Override
+    public String toCsv() {
+        return BenchmarkCsvRows.row(
+                id,
+                ownerUserId,
+                algorithm,
+                hashValue,
+                activeFileCount,
+                representativeFileId,
+                createdAt,
+                updatedAt);
+    }
+}
+
 record ImageFingerprintRow(UUID id, UUID fileId, String phash, OffsetDateTime createdAt)
         implements CsvWritable {
     @Override
@@ -192,6 +215,72 @@ record VideoEmbeddingRow(
                 embedding,
                 poolingStrategy,
                 sourceFrameCount,
+                createdAt,
+                updatedAt);
+    }
+}
+
+record DuplicateCandidateRow(
+        UUID id,
+        UUID ownerUserId,
+        UUID fileIdLow,
+        UUID fileIdHigh,
+        String method,
+        String confidence,
+        Double distance,
+        double score,
+        String evidenceType,
+        String modelName,
+        String modelVersion,
+        String thresholdVersion,
+        String status,
+        OffsetDateTime createdAt,
+        OffsetDateTime updatedAt) implements CsvWritable {
+    @Override
+    public String toCsv() {
+        return BenchmarkCsvRows.row(
+                id,
+                ownerUserId,
+                fileIdLow,
+                fileIdHigh,
+                method,
+                confidence,
+                distance,
+                score,
+                evidenceType,
+                modelName,
+                modelVersion,
+                thresholdVersion,
+                status,
+                createdAt,
+                updatedAt);
+    }
+}
+
+record DuplicateCandidateRefreshRow(
+        UUID id,
+        UUID ownerUserId,
+        UUID sourceFileId,
+        String method,
+        String modelName,
+        String modelVersion,
+        String thresholdVersion,
+        int candidateCount,
+        OffsetDateTime refreshedAt,
+        OffsetDateTime createdAt,
+        OffsetDateTime updatedAt) implements CsvWritable {
+    @Override
+    public String toCsv() {
+        return BenchmarkCsvRows.row(
+                id,
+                ownerUserId,
+                sourceFileId,
+                method,
+                modelName,
+                modelVersion,
+                thresholdVersion,
+                candidateCount,
+                refreshedAt,
                 createdAt,
                 updatedAt);
     }

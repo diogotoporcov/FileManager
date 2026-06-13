@@ -4,6 +4,7 @@ import com.filemanager.api.auth.application.AccessControlService;
 import com.filemanager.api.auth.domain.Permission;
 import com.filemanager.api.config.AppProperties;
 import com.filemanager.api.config.FileTransferProperties;
+import com.filemanager.api.duplicate.application.ExactDuplicateGroupMaintenanceService;
 import com.filemanager.api.exception.FileTransferDisabledException;
 import com.filemanager.api.exception.ResourceNotFoundException;
 import com.filemanager.api.file.web.FileResponse;
@@ -24,7 +25,9 @@ import com.filemanager.api.observability.application.FileManagerMetrics;
 import com.filemanager.api.processing.application.job.ProcessingJobPlanner;
 import com.filemanager.api.processing.application.policy.ProcessingPolicyContext;
 import com.filemanager.api.processing.domain.ProcessingJob;
+import com.filemanager.api.processing.domain.result.FileFingerprint;
 import com.filemanager.api.processing.messaging.FileProcessingRequestedEvent;
+import com.filemanager.api.processing.persistence.result.FileFingerprintRepository;
 import com.filemanager.api.processing.persistence.ProcessingJobRepository;
 import com.filemanager.api.storage.exception.StorageException;
 import com.filemanager.api.storage.port.CreatePresignedDownloadUrlRequest;
@@ -56,6 +59,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class FileService {
 
     private final FileRepository fileRepository;
+    private final FileFingerprintRepository fileFingerprintRepository;
     private final FolderRepository folderRepository;
     private final UserRepository userRepository;
     private final ProcessingJobRepository processingJobRepository;
@@ -71,6 +75,7 @@ public class FileService {
     private final FileSortMapper fileSortMapper;
     private final FileResponseMapper fileResponseMapper;
     private final TagService tagService;
+    private final ExactDuplicateGroupMaintenanceService exactDuplicateGroupMaintenanceService;
 
     @Transactional
     public FileEntity uploadFile(
@@ -331,5 +336,10 @@ public class FileService {
                 .orElseThrow(() -> new ResourceNotFoundException("File not found: " + fileId));
         file.setDeletedAt(OffsetDateTime.now());
         fileRepository.save(file);
+        fileFingerprintRepository.findByFileIdAndAlgorithm(fileId, FileFingerprint.FingerprintAlgorithm.SHA256)
+                .ifPresent(fingerprint -> exactDuplicateGroupMaintenanceService.refreshGroup(
+                        file.getOwnerUser().getId(),
+                        fingerprint.getAlgorithm(),
+                        fingerprint.getHashValue()));
     }
 }

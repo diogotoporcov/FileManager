@@ -14,10 +14,13 @@ final class BenchmarkDatasetPlan {
     final List<FolderClosureRow> folderClosures = new ArrayList<>();
     final List<FileRow> files = new ArrayList<>();
     final List<FileFingerprintRow> fileFingerprints = new ArrayList<>();
+    final List<ExactDuplicateGroupRow> exactDuplicateGroups = new ArrayList<>();
     final List<ImageFingerprintRow> imageFingerprints = new ArrayList<>();
     final List<FileEmbeddingRow> fileEmbeddings = new ArrayList<>();
     final List<AudioFingerprintRow> audioFingerprints = new ArrayList<>();
     final List<VideoEmbeddingRow> videoEmbeddings = new ArrayList<>();
+    final List<DuplicateCandidateRow> duplicateCandidates = new ArrayList<>();
+    final List<DuplicateCandidateRefreshRow> duplicateCandidateRefreshes = new ArrayList<>();
     final List<FileGrantRow> fileGrants = new ArrayList<>();
     final List<FolderGrantRow> folderGrants = new ArrayList<>();
     final List<ProcessingJobRow> processingJobs = new ArrayList<>();
@@ -68,10 +71,13 @@ final class BenchmarkDatasetPlan {
         counts.put("folder_closure", (long) folderClosures.size());
         counts.put("files", (long) files.size());
         counts.put("file_fingerprints", (long) fileFingerprints.size());
+        counts.put("exact_duplicate_groups", (long) exactDuplicateGroups.size());
         counts.put("image_fingerprints", (long) imageFingerprints.size());
         counts.put("file_embeddings", (long) fileEmbeddings.size());
         counts.put("audio_fingerprints", (long) audioFingerprints.size());
         counts.put("video_embeddings", (long) videoEmbeddings.size());
+        counts.put("duplicate_candidates", (long) duplicateCandidates.size());
+        counts.put("duplicate_candidate_refreshes", (long) duplicateCandidateRefreshes.size());
         counts.put("file_grants", (long) fileGrants.size());
         counts.put("folder_grants", (long) folderGrants.size());
         counts.put("processing_jobs", (long) processingJobs.size());
@@ -95,6 +101,10 @@ final class BenchmarkDatasetPlan {
                 "IMAGE_EMBEDDING", fileEmbeddings.size(),
                 "AUDIO_FINGERPRINT", audioFingerprints.size(),
                 "VIDEO_EMBEDDING", videoEmbeddings.size()));
+        manifest.put("readModelRows", Map.of(
+                "exact_duplicate_groups", exactDuplicateGroups.size(),
+                "duplicate_candidates", duplicateCandidates.size(),
+                "duplicate_candidate_refreshes", duplicateCandidateRefreshes.size()));
 
         manifest.put("duplicateGroupsByMethod", Map.of(
                 "EXACT", 2,

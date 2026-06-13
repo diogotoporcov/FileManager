@@ -46,6 +46,19 @@ final class BenchmarkQueryPlanCollector {
 
         Files.writeString(path, plan + "\n", StandardCharsets.UTF_8);
 
+        Path summaryPath = queryPlanDir.resolve("duplicate-groups-exact-summary.json");
+        String summarySql = """
+                EXPLAIN (ANALYZE, BUFFERS, WAL, SETTINGS, FORMAT JSON)
+                SELECT algorithm, hash_value, active_file_count
+                FROM exact_duplicate_groups
+                WHERE owner_user_id = ? AND active_file_count > 1
+                ORDER BY active_file_count DESC, algorithm, hash_value
+                LIMIT 50
+                """;
+        String summaryPlan = jdbcTemplate.queryForObject(summarySql, String.class, dataset.actorUserId());
+
+        Files.writeString(summaryPath, summaryPlan + "\n", StandardCharsets.UTF_8);
+
         writeManifest(scaleDir.resolve("query-plan-manifest.json"));
     }
 
@@ -54,13 +67,19 @@ final class BenchmarkQueryPlanCollector {
 
         objectMapper.writerWithDefaultPrettyPrinter().writeValue(path.toFile(), Map.of(
                 "schemaVersion", BenchmarkSupport.SCHEMA_VERSION,
-                "captured", List.of(Map.of(
-                        "operation", "duplicate.search.EXACT.one-match",
-                        "scope", "DATABASE_DIRECT",
-                        "file", "query-plans/duplicate-exact.json",
-                        "status", "COMPLETED")),
+                "captured", List.of(
+                        Map.of(
+                                "operation", "duplicate.search.EXACT.one-match",
+                                "scope", "DATABASE_DIRECT",
+                                "file", "query-plans/duplicate-exact.json",
+                                "status", "COMPLETED"),
+                        Map.of(
+                                "operation", "duplicate.groups.EXACT.summary.first-50",
+                                "scope", "DATABASE_DIRECT",
+                                "file", "query-plans/duplicate-groups-exact-summary.json",
+                                "status", "COMPLETED")),
                 "notCaptured", List.of(
-                        notImplemented("duplicate.groups.EXACT.first-50"),
+                        notImplemented("duplicate.groups.EXACT.files.first-50"),
                         notImplemented("duplicate.search.IMAGE_PHASH.threshold"),
                         notImplemented("duplicate.search.IMAGE_EMBEDDING.threshold"),
                         notImplemented("duplicate.search.AUDIO_FINGERPRINT.one-match"),

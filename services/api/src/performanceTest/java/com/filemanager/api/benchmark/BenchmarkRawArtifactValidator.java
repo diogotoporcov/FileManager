@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Set;
 
 final class BenchmarkRawArtifactValidator {
-    private static final int SUPPORTED_SCHEMA_VERSION = 2;
+    private static final int SUPPORTED_SCHEMA_VERSION = 3;
     private static final Set<String> VALID_COMPONENT_STATUSES = Set.of(
             "COMPLETED",
             "NOT_REQUESTED",

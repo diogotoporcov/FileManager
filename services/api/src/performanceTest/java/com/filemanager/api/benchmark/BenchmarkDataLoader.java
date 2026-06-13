@@ -29,6 +29,9 @@ final class BenchmarkDataLoader {
                     + "created_by_user_id,created_at,updated_at,deleted_at) FROM STDIN WITH CSV", dataset.files);
             copy(connection, "COPY file_fingerprints (id,file_id,algorithm,hash_value,created_at) FROM STDIN WITH CSV",
                     dataset.fileFingerprints);
+            copy(connection, "COPY exact_duplicate_groups (id,owner_user_id,algorithm,hash_value,active_file_count,"
+                    + "representative_file_id,created_at,updated_at) FROM STDIN WITH CSV",
+                    dataset.exactDuplicateGroups);
             copy(connection, "COPY image_fingerprints (id,file_id,phash,created_at) FROM STDIN WITH CSV",
                     dataset.imageFingerprints);
             copy(connection, "COPY file_embeddings (id,file_id,model_name,model_version,dimension,embedding,created_at)"
@@ -40,6 +43,13 @@ final class BenchmarkDataLoader {
             copy(connection, "COPY video_embeddings (id,file_id,model_name,model_version,dimension,embedding,"
                     + "pooling_strategy,source_frame_count,created_at,updated_at) FROM STDIN WITH CSV",
                     dataset.videoEmbeddings);
+            copy(connection, "COPY duplicate_candidates (id,owner_user_id,file_id_low,file_id_high,method,confidence,"
+                    + "distance,score,evidence_type,model_name,model_version,threshold_version,status,"
+                    + "created_at,updated_at) FROM STDIN WITH CSV",
+                    dataset.duplicateCandidates);
+            copy(connection, "COPY duplicate_candidate_refreshes (id,owner_user_id,source_file_id,method,model_name,"
+                    + "model_version,threshold_version,candidate_count,refreshed_at,created_at,updated_at)"
+                    + " FROM STDIN WITH CSV", dataset.duplicateCandidateRefreshes);
             copy(connection, "COPY file_grants (id,file_id,grantee_user_id,permission,created_by_user_id,"
                     + "created_at,revoked_at) FROM STDIN WITH CSV", dataset.fileGrants);
             copy(connection, "COPY folder_grants (id,folder_id,grantee_user_id,permission,scope,created_by_user_id,"

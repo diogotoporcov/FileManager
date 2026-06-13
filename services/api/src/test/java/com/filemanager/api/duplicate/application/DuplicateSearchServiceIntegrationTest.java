@@ -1,13 +1,17 @@
 package com.filemanager.api.duplicate.application;
 
 import com.filemanager.api.auth.domain.Permission;
-import com.filemanager.api.duplicate.domain.DuplicateMethodStatus;
-import com.filemanager.api.duplicate.domain.DuplicateSearchMethod;
+import com.filemanager.api.duplicate.domain.*;
+import com.filemanager.api.duplicate.domain.DuplicateCandidate.DuplicateCandidateStatus;
+import com.filemanager.api.duplicate.persistence.DuplicateCandidateRefreshRepository;
+import com.filemanager.api.duplicate.persistence.DuplicateCandidateRepository;
+import com.filemanager.api.duplicate.persistence.ExactDuplicateGroupRepository;
 import com.filemanager.api.duplicate.web.DuplicateGroupSearchRequest;
 import com.filemanager.api.duplicate.web.DuplicateGroupSearchResponse;
 import com.filemanager.api.duplicate.web.DuplicateSearchResponse;
 import com.filemanager.api.exception.AccessDeniedException;
 import com.filemanager.api.file.domain.FileEntity;
+import com.filemanager.api.file.application.FileService;
 import com.filemanager.api.file.persistence.FileRepository;
 import com.filemanager.api.folder.domain.FolderClosureEntity;
 import com.filemanager.api.folder.domain.FolderClosureId;
@@ -19,9 +23,11 @@ import com.filemanager.api.identity.persistence.UserRepository;
 import com.filemanager.api.processing.domain.result.FileFingerprint;
 import com.filemanager.api.processing.domain.result.FileFingerprint.FingerprintAlgorithm;
 import com.filemanager.api.processing.domain.result.AudioFingerprint;
+import com.filemanager.api.processing.domain.result.ImageFingerprint;
 import com.filemanager.api.processing.messaging.FileProcessingRequestedEvent;
 import com.filemanager.api.processing.persistence.result.AudioFingerprintRepository;
 import com.filemanager.api.processing.persistence.result.FileFingerprintRepository;
+import com.filemanager.api.processing.persistence.result.ImageFingerprintRepository;
 import com.filemanager.api.processing.persistence.result.VideoEmbeddingRepository;
 import com.filemanager.api.sharing.domain.FileGrantEntity;
 import com.filemanager.api.sharing.domain.FolderGrantEntity;
@@ -29,6 +35,7 @@ import com.filemanager.api.sharing.domain.FolderGrantScope;
 import com.filemanager.api.sharing.persistence.FileGrantRepository;
 import com.filemanager.api.sharing.persistence.FolderGrantRepository;
 import io.minio.MinioClient;
+import jakarta.persistence.EntityManager;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -55,13 +62,25 @@ class DuplicateSearchServiceIntegrationTest {
     @Autowired
     private DuplicateSearchService duplicateSearchService;
     @Autowired
+    private ExactDuplicateGroupMaintenanceService exactDuplicateGroupMaintenanceService;
+    @Autowired
+    private FileService fileService;
+    @Autowired
     private UserRepository userRepository;
     @Autowired
     private FileRepository fileRepository;
     @Autowired
     private FileFingerprintRepository fileFingerprintRepository;
     @Autowired
+    private ImageFingerprintRepository imageFingerprintRepository;
+    @Autowired
     private AudioFingerprintRepository audioFingerprintRepository;
+    @Autowired
+    private ExactDuplicateGroupRepository exactDuplicateGroupRepository;
+    @Autowired
+    private DuplicateCandidateRepository duplicateCandidateRepository;
+    @Autowired
+    private DuplicateCandidateRefreshRepository duplicateCandidateRefreshRepository;
     @Autowired
     private FolderRepository folderRepository;
     @Autowired
@@ -70,6 +89,8 @@ class DuplicateSearchServiceIntegrationTest {
     private FileGrantRepository fileGrantRepository;
     @Autowired
     private FolderGrantRepository folderGrantRepository;
+    @Autowired
+    private EntityManager entityManager;
 
     @MockitoBean
     private MinioClient minioClient;
@@ -96,6 +117,132 @@ class DuplicateSearchServiceIntegrationTest {
         assertThat(response.methods().getFirst().matches())
                 .extracting(DuplicateSearchResponse.DuplicateMatchResponse::fileId)
                 .containsExactly(duplicate.getId());
+    }
+
+    @Test
+    void checksumSummaryIsMaintainedForNewAndExistingExactHashes() {
+        User owner = saveUser("summary-owner@example.com");
+        FileEntity first = saveFile("first.txt", owner, null);
+        FileEntity second = saveFile("second.txt", owner, null);
+
+        saveFingerprint(first, HASH_A);
+
+        var oneFileGroup = exactDuplicateGroupRepository
+                .findByOwnerUserIdAndAlgorithmAndHashValue(owner.getId(), FingerprintAlgorithm.SHA256, HASH_A)
+                .orElseThrow();
+        assertThat(oneFileGroup.getActiveFileCount()).isEqualTo(1);
+        assertThat(oneFileGroup.getRepresentativeFileId()).isEqualTo(first.getId());
+
+        saveFingerprint(second, HASH_A);
+        clearPersistenceContext();
+
+        var twoFileGroup = exactDuplicateGroupRepository
+                .findByOwnerUserIdAndAlgorithmAndHashValue(owner.getId(), FingerprintAlgorithm.SHA256, HASH_A)
+                .orElseThrow();
+        assertThat(twoFileGroup.getActiveFileCount()).isEqualTo(2);
+        assertThat(twoFileGroup.getRepresentativeFileId()).isEqualTo(first.getId());
+    }
+
+    @Test
+    void checksumReplacementMovesFileBetweenExactSummaryGroups() {
+        User owner = saveUser("replace-owner@example.com");
+        FileEntity file = saveFile("replace.txt", owner, null);
+        saveFingerprint(file, HASH_A);
+
+        FileFingerprint fingerprint = fileFingerprintRepository
+                .findByFileIdAndAlgorithm(file.getId(), FingerprintAlgorithm.SHA256)
+                .orElseThrow();
+        fingerprint.setHashValue(HASH_B);
+        fileFingerprintRepository.saveAndFlush(fingerprint);
+        exactDuplicateGroupMaintenanceService.refreshAfterFingerprintChange(
+                owner.getId(),
+                FingerprintAlgorithm.SHA256,
+                HASH_A,
+                HASH_B);
+
+        assertThat(exactDuplicateGroupRepository
+                .findByOwnerUserIdAndAlgorithmAndHashValue(owner.getId(), FingerprintAlgorithm.SHA256, HASH_A))
+                .isEmpty();
+        assertThat(exactDuplicateGroupRepository
+                .findByOwnerUserIdAndAlgorithmAndHashValue(owner.getId(), FingerprintAlgorithm.SHA256, HASH_B))
+                .get()
+                .extracting(ExactDuplicateGroup::getActiveFileCount)
+                .isEqualTo(1L);
+    }
+
+    @Test
+    void deletingFileRefreshesExactSummary() {
+        User owner = saveUser("delete-summary@example.com");
+        FileEntity first = saveFile("first.txt", owner, null);
+        FileEntity second = saveFile("second.txt", owner, null);
+        saveFingerprint(first, HASH_A);
+        saveFingerprint(second, HASH_A);
+
+        fileService.deleteFile(second.getId(), owner.getId());
+        clearPersistenceContext();
+
+        var group = exactDuplicateGroupRepository
+                .findByOwnerUserIdAndAlgorithmAndHashValue(owner.getId(), FingerprintAlgorithm.SHA256, HASH_A)
+                .orElseThrow();
+        assertThat(group.getActiveFileCount()).isEqualTo(1);
+        assertThat(group.getRepresentativeFileId()).isEqualTo(first.getId());
+    }
+
+    @Test
+    void refreshDeletesExactSummaryWhenNoEligibleFilesRemain() {
+        User owner = saveUser("delete-empty-summary@example.com");
+        FileEntity onlyFile = saveFile("only.txt", owner, null);
+        saveFingerprint(onlyFile, HASH_A);
+
+        fileService.deleteFile(onlyFile.getId(), owner.getId());
+        clearPersistenceContext();
+
+        assertThat(exactDuplicateGroupRepository
+                .findByOwnerUserIdAndAlgorithmAndHashValue(owner.getId(), FingerprintAlgorithm.SHA256, HASH_A))
+                .isEmpty();
+    }
+
+    @Test
+    void refreshUpdatesExistingExactSummaryFromSourceTables() {
+        User owner = saveUser("update-summary@example.com");
+        FileEntity first = saveFile("first.txt", owner, null);
+        FileEntity second = saveFile("second.txt", owner, null);
+        saveFingerprint(first, HASH_A);
+        saveFingerprint(second, HASH_A);
+        var staleGroup = exactDuplicateGroupRepository
+                .findByOwnerUserIdAndAlgorithmAndHashValue(owner.getId(), FingerprintAlgorithm.SHA256, HASH_A)
+                .orElseThrow();
+        staleGroup.setActiveFileCount(99);
+        staleGroup.setRepresentativeFileId(second.getId());
+        exactDuplicateGroupRepository.saveAndFlush(staleGroup);
+
+        exactDuplicateGroupMaintenanceService.refreshGroup(owner.getId(), FingerprintAlgorithm.SHA256, HASH_A);
+        clearPersistenceContext();
+
+        var refreshedGroup = exactDuplicateGroupRepository
+                .findByOwnerUserIdAndAlgorithmAndHashValue(owner.getId(), FingerprintAlgorithm.SHA256, HASH_A)
+                .orElseThrow();
+        assertThat(refreshedGroup.getActiveFileCount()).isEqualTo(2);
+        assertThat(refreshedGroup.getRepresentativeFileId()).isEqualTo(first.getId());
+    }
+
+    @Test
+    void repeatedExactSummaryRefreshIsIdempotent() {
+        User owner = saveUser("idempotent-summary@example.com");
+        FileEntity first = saveFile("first.txt", owner, null);
+        FileEntity second = saveFile("second.txt", owner, null);
+        saveFingerprint(first, HASH_A);
+        saveFingerprint(second, HASH_A);
+
+        exactDuplicateGroupMaintenanceService.refreshGroup(owner.getId(), FingerprintAlgorithm.SHA256, HASH_A);
+        exactDuplicateGroupMaintenanceService.refreshGroup(owner.getId(), FingerprintAlgorithm.SHA256, HASH_A);
+        clearPersistenceContext();
+
+        var group = exactDuplicateGroupRepository
+                .findByOwnerUserIdAndAlgorithmAndHashValue(owner.getId(), FingerprintAlgorithm.SHA256, HASH_A)
+                .orElseThrow();
+        assertThat(group.getActiveFileCount()).isEqualTo(2);
+        assertThat(group.getRepresentativeFileId()).isEqualTo(first.getId());
     }
 
     @Test
@@ -207,6 +354,97 @@ class DuplicateSearchServiceIntegrationTest {
         assertThat(response.methods().getFirst().groups().getFirst().files())
                 .extracting(DuplicateGroupSearchResponse.DuplicateGroupFileResponse::fileId)
                 .containsExactlyInAnyOrder(first.getId(), second.getId());
+    }
+
+    @Test
+    void groupedExactDoesNotReturnStaleSummaryGroupWithFewerThanTwoEligibleFiles() {
+        User actor = saveUser("stale-summary@example.com");
+        FileEntity onlyFile = saveFile("only.txt", actor, null);
+        saveFingerprint(onlyFile, HASH_A);
+        var group = exactDuplicateGroupRepository
+                .findByOwnerUserIdAndAlgorithmAndHashValue(actor.getId(), FingerprintAlgorithm.SHA256, HASH_A)
+                .orElseThrow();
+        group.setActiveFileCount(2);
+        exactDuplicateGroupRepository.saveAndFlush(group);
+
+        var response = duplicateSearchService.searchGroups(null, actor.getId());
+
+        assertThat(response.methods().getFirst().groups()).isEmpty();
+    }
+
+    @Test
+    void perFilePhashSearchCanReadPersistedCandidatesFromBothPairDirections() {
+        User actor = saveUser("candidate-owner@example.com");
+        FileEntity lower = saveFile("lower.png", actor, null, "image/png");
+        FileEntity higher = saveFile("higher.png", actor, null, "image/png");
+        saveImageFingerprint(lower, "0000000000000000");
+        saveImageFingerprint(higher, "0000000000000001");
+        saveDuplicateCandidate(actor, lower, higher, DuplicateSearchMethod.IMAGE_PHASH, 1.0, "maxDistance=10;topN=100");
+
+        var lowerResponse = duplicateSearchService.searchDuplicatesForFile(
+                lower.getId(),
+                List.of(DuplicateSearchMethod.IMAGE_PHASH),
+                actor.getId());
+        var higherResponse = duplicateSearchService.searchDuplicatesForFile(
+                higher.getId(),
+                List.of(DuplicateSearchMethod.IMAGE_PHASH),
+                actor.getId());
+
+        assertThat(lowerResponse.methods().getFirst().matches())
+                .extracting(DuplicateSearchResponse.DuplicateMatchResponse::fileId)
+                .containsExactly(higher.getId());
+        assertThat(higherResponse.methods().getFirst().matches())
+                .extracting(DuplicateSearchResponse.DuplicateMatchResponse::fileId)
+                .containsExactly(lower.getId());
+    }
+
+    @Test
+    void perFilePhashSearchReturnsEmptyWithoutFallbackWhenRefreshMarkerExists() {
+        User actor = saveUser("phash-marker-owner@example.com");
+        FileEntity source = saveFile("source.png", actor, null, "image/png");
+        FileEntity directFallbackMatch = saveFile("direct-match.png", actor, null, "image/png");
+        saveImageFingerprint(source, "0000000000000000");
+        saveImageFingerprint(directFallbackMatch, "0000000000000001");
+        saveDuplicateCandidateRefresh(
+                actor,
+                source,
+                DuplicateSearchMethod.IMAGE_PHASH,
+                DuplicateCandidate.NO_MODEL,
+                DuplicateCandidate.NO_MODEL,
+                "maxDistance=10;topN=100",
+                0);
+
+        var response = duplicateSearchService.searchDuplicatesForFile(
+                source.getId(),
+                List.of(DuplicateSearchMethod.IMAGE_PHASH),
+                actor.getId());
+
+        assertThat(response.methods().getFirst().matches()).isEmpty();
+    }
+
+    @Test
+    void persistedCandidateRepositoryExcludesForeignAndDeletedFilesAtReadTime() {
+        User actor = saveUser("stale-candidate-owner@example.com");
+        User other = saveUser("stale-candidate-other@example.com");
+        FileEntity source = saveFile("source.png", actor, null, "image/png");
+        FileEntity deleted = saveFile("deleted.png", actor, null, "image/png");
+        FileEntity foreign = saveFile("foreign.png", other, null, "image/png");
+        deleted.setDeletedAt(OffsetDateTime.now());
+        fileRepository.saveAndFlush(deleted);
+        saveDuplicateCandidate(actor, source, deleted, DuplicateSearchMethod.IMAGE_PHASH, 1.0, "maxDistance=10;topN=100");
+        saveDuplicateCandidate(actor, source, foreign, DuplicateSearchMethod.IMAGE_PHASH, 1.0, "maxDistance=10;topN=100");
+
+        var candidates = duplicateCandidateRepository.findCandidatesForFile(
+                actor.getId(),
+                source.getId(),
+                DuplicateSearchMethod.IMAGE_PHASH,
+                DuplicateCandidate.NO_MODEL,
+                DuplicateCandidate.NO_MODEL,
+                "maxDistance=10;topN=100",
+                DuplicateCandidateStatus.ACTIVE,
+                org.springframework.data.domain.PageRequest.of(0, 100));
+
+        assertThat(candidates).isEmpty();
     }
 
     @Test
@@ -495,6 +733,68 @@ class DuplicateSearchServiceIntegrationTest {
                 .file(file)
                 .algorithm(FingerprintAlgorithm.SHA256)
                 .hashValue(hashValue)
+                .build());
+        exactDuplicateGroupMaintenanceService.refreshGroup(
+                file.getOwnerUser().getId(),
+                FingerprintAlgorithm.SHA256,
+                hashValue);
+    }
+
+    private void clearPersistenceContext() {
+        entityManager.flush();
+        entityManager.clear();
+    }
+
+    private void saveImageFingerprint(FileEntity file, String phash) {
+        imageFingerprintRepository.saveAndFlush(ImageFingerprint.builder()
+                .file(file)
+                .phash(phash)
+                .build());
+    }
+
+    private void saveDuplicateCandidate(
+            User owner,
+            FileEntity first,
+            FileEntity second,
+            DuplicateSearchMethod method,
+            double distance,
+            String thresholdVersion) {
+        UUID low = first.getId().compareTo(second.getId()) < 0 ? first.getId() : second.getId();
+        UUID high = first.getId().compareTo(second.getId()) < 0 ? second.getId() : first.getId();
+
+        duplicateCandidateRepository.saveAndFlush(DuplicateCandidate.builder()
+                .ownerUserId(owner.getId())
+                .fileIdLow(low)
+                .fileIdHigh(high)
+                .method(method)
+                .confidence(DuplicateConfidence.NEAR_DUPLICATE)
+                .distance(distance)
+                .score(Math.max(0.0, 1.0 - distance / 64.0))
+                .evidenceType(DuplicateEvidenceType.IMAGE_PHASH)
+                .modelName(DuplicateCandidate.NO_MODEL)
+                .modelVersion(DuplicateCandidate.NO_MODEL)
+                .thresholdVersion(thresholdVersion)
+                .status(DuplicateCandidateStatus.ACTIVE)
+                .build());
+    }
+
+    private void saveDuplicateCandidateRefresh(
+            User owner,
+            FileEntity source,
+            DuplicateSearchMethod method,
+            String modelName,
+            String modelVersion,
+            String thresholdVersion,
+            int candidateCount) {
+        duplicateCandidateRefreshRepository.saveAndFlush(DuplicateCandidateRefresh.builder()
+                .ownerUserId(owner.getId())
+                .sourceFileId(source.getId())
+                .method(method)
+                .modelName(modelName)
+                .modelVersion(modelVersion)
+                .thresholdVersion(thresholdVersion)
+                .candidateCount(candidateCount)
+                .refreshedAt(OffsetDateTime.now())
                 .build());
     }
 
