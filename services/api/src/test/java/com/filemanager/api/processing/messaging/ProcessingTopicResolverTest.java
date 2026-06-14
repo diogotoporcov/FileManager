@@ -18,7 +18,6 @@ class ProcessingTopicResolverTest {
         appProperties.getKafka().getTopics().setFileProcessingChecksum("topic.checksum");
         appProperties.getKafka().getTopics().setFileProcessingImage("topic.image");
         appProperties.getKafka().getTopics().setFileProcessingAudio("topic.audio");
-        appProperties.getKafka().getTopics().setFileProcessingVideo("topic.video");
         resolver = new ProcessingTopicResolver(appProperties);
     }
 
@@ -51,17 +50,10 @@ class ProcessingTopicResolverTest {
     }
 
     @Test
-    void videoAnalysisPublishesToVideoTopicForSupportedVideo() {
-        String topic = resolver.resolve(ProcessingJob.JobType.VIDEO_ANALYSIS, "video/mp4");
-
-        assertThat(topic).isEqualTo("topic.video");
-    }
-
-    @Test
-    void audioAnalysisPublishesToVideoTopicForVideoMimeType() {
-        String topic = resolver.resolve(ProcessingJob.JobType.AUDIO_ANALYSIS, "video/webm");
-
-        assertThat(topic).isEqualTo("topic.video");
+    void audioAnalysisRejectsVideoMimeType() {
+        assertThatThrownBy(() -> resolver.resolve(ProcessingJob.JobType.AUDIO_ANALYSIS, "video/webm"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Audio analysis job cannot handle MIME type");
     }
 
     @Test
@@ -76,13 +68,6 @@ class ProcessingTopicResolverTest {
         assertThatThrownBy(() -> resolver.resolve(ProcessingJob.JobType.PHASH, "application/pdf"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Image processing job cannot handle MIME type");
-    }
-
-    @Test
-    void videoJobForUnsupportedMimeTypeFailsClearly() {
-        assertThatThrownBy(() -> resolver.resolve(ProcessingJob.JobType.VIDEO_ANALYSIS, "audio/mpeg"))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Video analysis job cannot handle MIME type");
     }
 
     @Test

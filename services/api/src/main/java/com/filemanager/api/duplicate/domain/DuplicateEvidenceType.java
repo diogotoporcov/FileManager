@@ -4,6 +4,5 @@ public enum DuplicateEvidenceType {
     CHECKSUM,
     IMAGE_PHASH,
     IMAGE_EMBEDDING,
-    AUDIO_FINGERPRINT,
-    VIDEO_EMBEDDING
+    AUDIO_FINGERPRINT
 }

@@ -13,7 +13,6 @@ from app.processors.base import Processor
 from app.processors.audio import AudioFingerprintProcessor
 from app.processors.embedding import ImageEmbeddingProcessor
 from app.processors.impl import ChecksumProcessor, PHashProcessor
-from app.processors.video import VideoAnalysisProcessor
 from app.sinks.http import HttpProcessingResultSink
 from app.storage.s3 import S3ObjectStorageReader
 from app.worker.consumer import EventConsumer
@@ -34,14 +33,7 @@ processors: MutableSequence[Processor] = [
     PHashProcessor(storage_reader),
 ]
 
-needs_embedding_client = settings.embedding_processor_enabled and (
-    settings.worker_image_embedding_enabled
-    or (
-        settings.worker_video_enabled
-        and settings.worker_video_analysis_enabled
-        and settings.worker_video_frame_embedding_enabled
-    )
-)
+needs_embedding_client = settings.embedding_processor_enabled and settings.worker_image_embedding_enabled
 embedding_client = None
 
 if needs_embedding_client:
@@ -56,13 +48,7 @@ if needs_embedding_client:
 if settings.worker_image_embedding_enabled and embedding_client is not None:
     processors.append(ImageEmbeddingProcessor(storage_reader, embedding_client))
 
-if settings.worker_video_enabled and settings.worker_video_analysis_enabled:
-    if settings.worker_video_frame_phash_enabled or settings.worker_video_frame_embedding_enabled:
-        processors.append(VideoAnalysisProcessor(storage_reader, embedding_client))
-
-if settings.worker_audio_enabled and (
-    settings.worker_audio_fingerprint_enabled or settings.worker_video_audio_analysis_enabled
-):
+if settings.worker_audio_enabled and settings.worker_audio_fingerprint_enabled:
     processors.append(AudioFingerprintProcessor(storage_reader))
 
 flow = ProcessingFlow(processors, result_sink)

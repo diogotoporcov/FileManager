@@ -33,3 +33,9 @@ tasks.register("benchmarkReport") {
     description = "Regenerate benchmark reports from existing raw results."
     dependsOn(":services:api:benchmarkReport")
 }
+
+tasks.register("benchmarkGenerateDataset") {
+    group = "benchmark"
+    description = "Generate a deterministic precomputed duplicate benchmark dataset artifact."
+    dependsOn(":services:api:benchmarkGenerateDataset")
+}

@@ -13,7 +13,6 @@ from app.config import settings
 from app.events.models import FileProcessingRequestedEvent
 from app.processors.audio_mime_types import is_processable_audio_mime_type, parse_processable_audio_mime_types
 from app.processors.base import Processor, ProcessorResult
-from app.processors.video_mime_types import is_processable_video_mime_type, parse_processable_video_mime_types
 from app.storage.base import StorageObjectReader
 from app.worker.errors import NonRetryableProcessingError, RetryableProcessingError
 
@@ -59,9 +58,6 @@ class AudioFingerprintProcessor(Processor):
         self.processable_audio_mime_types = parse_processable_audio_mime_types(
             settings.worker_audio_supported_mime_types
         )
-        self.processable_video_mime_types = parse_processable_video_mime_types(
-            settings.worker_video_supported_mime_types
-        )
 
     @property
     def name(self) -> str:
@@ -77,21 +73,14 @@ class AudioFingerprintProcessor(Processor):
         ):
             return settings.worker_audio_enabled and settings.worker_audio_fingerprint_enabled
 
-        if is_processable_video_mime_type(
-            event.mime_type,
-            self.processable_video_mime_types,
-        ):
-            return settings.worker_audio_enabled and settings.worker_video_audio_analysis_enabled
-
         return False
 
     async def process(self, event: FileProcessingRequestedEvent) -> ProcessorResult:
-        if is_processable_video_mime_type(event.mime_type, self.processable_video_mime_types):
-            if not settings.worker_audio_enabled or not settings.worker_video_audio_analysis_enabled:
-                raise NonRetryableProcessingError("Video audio-track analysis is disabled")
-        elif is_processable_audio_mime_type(event.mime_type, self.processable_audio_mime_types):
-            if not settings.worker_audio_enabled or not settings.worker_audio_fingerprint_enabled:
-                raise NonRetryableProcessingError("Standalone audio fingerprint processing is disabled")
+        if not is_processable_audio_mime_type(event.mime_type, self.processable_audio_mime_types):
+            raise NonRetryableProcessingError("Audio analysis only supports audio MIME types")
+
+        if not settings.worker_audio_enabled or not settings.worker_audio_fingerprint_enabled:
+            raise NonRetryableProcessingError("Audio fingerprint processing is disabled")
 
         if event.size > self.max_file_bytes:
             raise NonRetryableProcessingError("Audio exceeds maximum processing size")
@@ -368,18 +357,6 @@ def _safe_media_suffix(mime_type: str | None) -> str:
         "audio/3gpp2": ".3g2",
         "audio/x-aiff": ".aiff",
         "audio/aiff": ".aiff",
-        "video/mp4": ".mp4",
-        "video/webm": ".webm",
-        "video/quicktime": ".mov",
-        "video/x-msvideo": ".avi",
-        "video/avi": ".avi",
-        "video/matroska": ".mkv",
-        "video/x-matroska": ".mkv",
-        "video/x-m4v": ".m4v",
-        "video/mpeg": ".mpeg",
-        "video/mp2t": ".ts",
-        "video/3gpp": ".3gp",
-        "video/3gpp2": ".3g2",
     }
 
     return suffixes.get(normalized, ".media")

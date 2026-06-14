@@ -42,12 +42,11 @@ final class BenchmarkCorrectnessValidator {
         }
 
         validateCompletedGroups(results, dataset, DuplicateSearchMethod.EXACT, "duplicate.groups.EXACT");
-        validateCompletedGroups(results, dataset, DuplicateSearchMethod.AUDIO_FINGERPRINT, "duplicate.groups.AUDIO_FINGERPRINT");
 
         for (DuplicateSearchMethod method : List.of(
                 DuplicateSearchMethod.IMAGE_PHASH,
                 DuplicateSearchMethod.IMAGE_EMBEDDING,
-                DuplicateSearchMethod.VIDEO_EMBEDDING)) {
+                DuplicateSearchMethod.AUDIO_FINGERPRINT)) {
             DuplicateGroupSearchResponse response = duplicateSearchService.searchGroups(
                     new DuplicateGroupSearchRequest(List.of(method), 10, null, null, null, null),
                     dataset.actorUserId());

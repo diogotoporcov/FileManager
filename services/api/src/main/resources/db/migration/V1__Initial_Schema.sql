@@ -182,7 +182,7 @@ CREATE INDEX idx_file_embeddings_model_version_dimension
 CREATE TABLE processing_jobs (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
     file_id UUID NOT NULL REFERENCES files(id),
-    job_type VARCHAR(255) NOT NULL CHECK (job_type IN ('CHECKSUM', 'PHASH', 'EMBEDDING', 'VIDEO_ANALYSIS', 'AUDIO_ANALYSIS')),
+    job_type VARCHAR(255) NOT NULL CHECK (job_type IN ('CHECKSUM', 'PHASH', 'EMBEDDING', 'AUDIO_ANALYSIS')),
     status VARCHAR(50) NOT NULL CHECK (status IN ('PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED')),
     external_job_id VARCHAR(255),
     error_message TEXT,
@@ -305,67 +305,6 @@ CREATE INDEX idx_folder_grants_grantee_active
     ON folder_grants(grantee_user_id, revoked_at);
 
 -- Fingerprinting and embeddings.
-CREATE TABLE video_fingerprints (
-    id UUID PRIMARY KEY DEFAULT uuidv7(),
-    file_id UUID NOT NULL REFERENCES files(id) UNIQUE,
-    duration_ms BIGINT NOT NULL CHECK (duration_ms > 0),
-    width INTEGER CHECK (width > 0),
-    height INTEGER CHECK (height > 0),
-    frame_count BIGINT CHECK (frame_count >= 0),
-    codec VARCHAR(255),
-    sampled_frame_count INTEGER NOT NULL CHECK (sampled_frame_count > 0),
-    sampling_strategy VARCHAR(255) NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX idx_video_fingerprints_file ON video_fingerprints(file_id);
-
-CREATE TABLE video_frame_fingerprints (
-    id UUID PRIMARY KEY DEFAULT uuidv7(),
-    file_id UUID NOT NULL REFERENCES files(id),
-    timestamp_ms BIGINT NOT NULL CHECK (timestamp_ms >= 0),
-    frame_index INTEGER NOT NULL CHECK (frame_index >= 0),
-    phash VARCHAR(255) NOT NULL CHECK (phash ~ '^[0-9a-fA-F]{16}$'),
-    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(file_id, frame_index)
-);
-
-CREATE INDEX idx_video_frame_fingerprints_file ON video_frame_fingerprints(file_id);
-CREATE INDEX idx_video_frame_fingerprints_phash ON video_frame_fingerprints(phash);
-
-CREATE TABLE video_frame_embeddings (
-    id UUID PRIMARY KEY DEFAULT uuidv7(),
-    file_id UUID NOT NULL REFERENCES files(id),
-    timestamp_ms BIGINT NOT NULL CHECK (timestamp_ms >= 0),
-    frame_index INTEGER NOT NULL CHECK (frame_index >= 0),
-    model_name VARCHAR(255) NOT NULL,
-    model_version VARCHAR(255) NOT NULL,
-    dimension INTEGER NOT NULL CHECK (dimension = 768),
-    embedding vector(768) NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(file_id, frame_index, model_name, model_version)
-);
-
-CREATE INDEX idx_video_frame_embeddings_file_model
-    ON video_frame_embeddings(file_id, model_name, model_version);
-
-CREATE TABLE video_embeddings (
-    id UUID PRIMARY KEY DEFAULT uuidv7(),
-    file_id UUID NOT NULL REFERENCES files(id) UNIQUE,
-    model_name VARCHAR(255) NOT NULL CHECK (length(trim(model_name)) > 0),
-    model_version VARCHAR(255) NOT NULL CHECK (length(trim(model_version)) > 0),
-    dimension INTEGER NOT NULL CHECK (dimension = 768),
-    embedding vector(768) NOT NULL,
-    pooling_strategy VARCHAR(64) NOT NULL CHECK (length(trim(pooling_strategy)) > 0),
-    source_frame_count INTEGER NOT NULL CHECK (source_frame_count > 0),
-    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX idx_video_embeddings_model_version_dimension
-    ON video_embeddings(model_name, model_version, dimension);
-
 CREATE TABLE audio_fingerprints (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
     file_id UUID NOT NULL REFERENCES files(id) UNIQUE,
@@ -403,75 +342,3 @@ CREATE TABLE exact_duplicate_groups (
 
 CREATE INDEX idx_exact_duplicate_groups_owner_count_algorithm_hash
     ON exact_duplicate_groups(owner_user_id, active_file_count DESC, algorithm, hash_value);
-
-CREATE TABLE duplicate_candidates (
-    id UUID PRIMARY KEY DEFAULT uuidv7(),
-    owner_user_id UUID NOT NULL REFERENCES users(id),
-    file_id_low UUID NOT NULL REFERENCES files(id),
-    file_id_high UUID NOT NULL REFERENCES files(id),
-    method VARCHAR(64) NOT NULL CHECK (
-        method IN ('IMAGE_PHASH', 'IMAGE_EMBEDDING', 'AUDIO_FINGERPRINT', 'VIDEO_EMBEDDING')
-    ),
-    confidence VARCHAR(64) NOT NULL CHECK (confidence IN ('SIMILAR', 'NEAR_DUPLICATE', 'EXACT')),
-    distance DOUBLE PRECISION,
-    score DOUBLE PRECISION NOT NULL CHECK (score >= 0.0 AND score <= 1.0),
-    evidence_type VARCHAR(64) NOT NULL CHECK (
-        evidence_type IN ('IMAGE_PHASH', 'IMAGE_EMBEDDING', 'AUDIO_FINGERPRINT', 'VIDEO_EMBEDDING')
-    ),
-    model_name VARCHAR(255) NOT NULL,
-    model_version VARCHAR(255) NOT NULL,
-    threshold_version VARCHAR(255) NOT NULL,
-    status VARCHAR(32) NOT NULL CHECK (status IN ('ACTIVE', 'STALE')),
-    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT chk_duplicate_candidates_canonical_pair CHECK (file_id_low < file_id_high),
-    CONSTRAINT uk_duplicate_candidates_pair_method_version
-        UNIQUE (
-            owner_user_id,
-            file_id_low,
-            file_id_high,
-            method,
-            model_name,
-            model_version,
-            threshold_version
-        )
-);
-
-CREATE INDEX idx_duplicate_candidates_owner_method_low
-    ON duplicate_candidates(owner_user_id, method, file_id_low)
-    WHERE status = 'ACTIVE';
-
-CREATE INDEX idx_duplicate_candidates_owner_method_high
-    ON duplicate_candidates(owner_user_id, method, file_id_high)
-    WHERE status = 'ACTIVE';
-
-CREATE TABLE duplicate_candidate_refreshes (
-    id UUID PRIMARY KEY DEFAULT uuidv7(),
-    owner_user_id UUID NOT NULL REFERENCES users(id),
-    source_file_id UUID NOT NULL REFERENCES files(id),
-    method VARCHAR(64) NOT NULL CHECK (
-        method IN ('IMAGE_PHASH', 'IMAGE_EMBEDDING', 'AUDIO_FINGERPRINT', 'VIDEO_EMBEDDING')
-    ),
-    model_name VARCHAR(255) NOT NULL,
-    model_version VARCHAR(255) NOT NULL,
-    threshold_version VARCHAR(255) NOT NULL,
-    candidate_count INTEGER NOT NULL CHECK (candidate_count >= 0),
-    refreshed_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT uk_duplicate_candidate_refreshes_source_method_version
-        UNIQUE (
-            owner_user_id,
-            source_file_id,
-            method,
-            model_name,
-            model_version,
-            threshold_version
-        )
-);
-
-CREATE INDEX idx_duplicate_candidate_refreshes_source_method
-    ON duplicate_candidate_refreshes(owner_user_id, source_file_id, method);
-
-CREATE INDEX idx_duplicate_candidate_refreshes_method_refreshed
-    ON duplicate_candidate_refreshes(owner_user_id, method, refreshed_at);

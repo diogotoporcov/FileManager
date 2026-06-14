@@ -122,11 +122,66 @@ class BenchmarkArtifactValidatorTest {
     @Test
     void rawValidatorRejectsUnexpectedArtifactForNotRequestedComponent() throws Exception {
         writeCompleteRawArtifacts();
-        Files.writeString(directory.resolve("api-k6-summary.json"), "{}\n", StandardCharsets.UTF_8);
+        Files.writeString(directory.resolve("pgbench-summary.json"), "{}\n", StandardCharsets.UTF_8);
 
         assertThatThrownBy(() -> new BenchmarkRawArtifactValidator(directory).validate())
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Unexpected placeholder benchmark artifact exists");
+    }
+
+    @Test
+    void rawValidatorRejectsRemovedBenchmarkTableDimension() throws Exception {
+        writeCompleteRawArtifacts();
+        Files.writeString(directory.resolve("dataset-manifest.json"), """
+                {
+                  "schemaVersion": 3,
+                  "datasetId": "default-10000-20260611-test",
+                  "datasetMode": "inline",
+                  "configFingerprint": "fingerprint",
+                  "recordCount": 10000,
+                  "seed": 20260611,
+                  "duplicateDistribution": "default",
+                  "tableCounts": {"file_grants": 1},
+                  "actualLoadedTableCounts": {},
+                  "actualEvidenceTableCounts": {},
+                  "sourceRegistrySampleSizes": {}
+                }
+                """, StandardCharsets.UTF_8);
+
+        assertThatThrownBy(() -> new BenchmarkRawArtifactValidator(directory).validate())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Removed benchmark dimension");
+    }
+
+    @Test
+    void rawValidatorRejectsRemovedBenchmarkOperation() throws Exception {
+        writeCompleteRawArtifacts();
+        Files.writeString(directory.resolve("repository-latency.json"), """
+                {
+                  "schemaVersion": 3,
+                  "measurements": [{
+                    "operation": "%s",
+                    "scope": "SPRING_SERVICE_REPOSITORY",
+                    "sampleCount": 100,
+                    "sourceSampleCount": 100,
+                    "warmupCount": 20,
+                    "successCount": 100,
+                    "failureCount": 0,
+                    "coldOrWarm": "WARM",
+                    "p50Ms": 1.0,
+                    "p95Ms": 2.0,
+                    "standardDeviationMethod": "population",
+                    "resultCountMin": 0,
+                    "resultCountP50": 1,
+                    "resultCountP95": 2,
+                    "resultCountMax": 3
+                  }]
+                }
+                """.formatted("file." + "search.owner-first-page"), StandardCharsets.UTF_8);
+
+        assertThatThrownBy(() -> new BenchmarkRawArtifactValidator(directory).validate())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Unsupported benchmark operation");
     }
 
     @Test
@@ -159,7 +214,37 @@ class BenchmarkArtifactValidatorTest {
                 """, StandardCharsets.UTF_8);
 
         Files.writeString(directory.resolve("dataset-manifest.json"), """
-                {"schemaVersion": 3, "recordCount": 10000}
+                {
+                  "schemaVersion": 3,
+                  "datasetId": "default-10000-20260611-test",
+                  "datasetMode": "inline",
+                  "configFingerprint": "fingerprint",
+                  "recordCount": 10000,
+                  "seed": 20260611,
+                  "duplicateDistribution": "default",
+                  "tableCounts": {},
+                  "actualLoadedTableCounts": {},
+                  "actualEvidenceTableCounts": {},
+                  "sourceRegistrySampleSizes": {}
+                }
+                """, StandardCharsets.UTF_8);
+
+        Files.writeString(directory.resolve("benchmark-registry.json"), """
+                {
+                  "schemaVersion": 3,
+                  "datasetId": "default-10000-20260611-test",
+                  "configFingerprint": "fingerprint",
+                  "records": 10000,
+                  "seed": 20260611,
+                  "duplicateDistribution": "default",
+                  "operations": {
+                    "duplicate.search.EXACT": {
+                      "sourceFileIds": ["00000000-0000-0000-0000-000000000000"],
+                      "sampleSize": 1,
+                      "evidenceTable": "file_fingerprints"
+                    }
+                  }
+                }
                 """, StandardCharsets.UTF_8);
 
         Files.writeString(directory.resolve("correctness-results.json"), """
@@ -181,16 +266,21 @@ class BenchmarkArtifactValidatorTest {
                 {
                   "schemaVersion": 3,
                   "measurements": [{
-                    "operation": "operation",
+                    "operation": "duplicate.search.EXACT",
                     "scope": "SPRING_SERVICE_REPOSITORY",
                     "sampleCount": 100,
+                    "sourceSampleCount": 100,
                     "warmupCount": 20,
                     "successCount": 100,
                     "failureCount": 0,
                     "coldOrWarm": "WARM",
                     "p50Ms": 1.0,
                     "p95Ms": 2.0,
-                    "standardDeviationMethod": "population"
+                    "standardDeviationMethod": "population",
+                    "resultCountMin": 0,
+                    "resultCountP50": 1,
+                    "resultCountP95": 2,
+                    "resultCountMax": 3
                   }]
                 }
                 """, StandardCharsets.UTF_8);
@@ -200,7 +290,6 @@ class BenchmarkArtifactValidatorTest {
                   "schemaVersion": 3,
                   "components": {
                     "serviceRepositoryBenchmark": {"status": "COMPLETED"},
-                    "k6": {"status": "NOT_REQUESTED"},
                     "pgbench": {"status": "NOT_REQUESTED"},
                     "pgStatStatements": {
                       "status": "COMPLETED",
@@ -239,17 +328,17 @@ class BenchmarkArtifactValidatorTest {
                 {
                   "schemaVersion": 3,
                   "captured": [{
-                    "operation": "operation",
+                    "operation": "duplicate.search.EXACT",
                     "scope": "DATABASE_DIRECT",
                     "file": "query-plans/duplicate-exact.json",
                     "status": "COMPLETED"
                   }, {
-                    "operation": "summary",
+                    "operation": "duplicate.groups.EXACT",
                     "scope": "DATABASE_DIRECT",
                     "file": "query-plans/duplicate-groups-exact-summary.json",
                     "status": "COMPLETED"
                   }],
-                  "notCaptured": [{"operation": "other", "scope": "DATABASE_DIRECT", "status": "NOT_IMPLEMENTED"}]
+                  "notCaptured": [{"operation": "duplicate.search.IMAGE_PHASH", "scope": "DATABASE_DIRECT", "status": "NOT_IMPLEMENTED"}]
                 }
                 """, StandardCharsets.UTF_8);
     }
@@ -260,7 +349,6 @@ class BenchmarkArtifactValidatorTest {
                   "schemaVersion": 3,
                   "components": {
                     "serviceRepositoryBenchmark": {"status": "COMPLETED"},
-                    "k6": {"status": "NOT_REQUESTED"},
                     "pgbench": {"status": "NOT_REQUESTED"},
                 %s,
                     "queryPlan": {"status": "COMPLETED", "scope": "PARTIAL"},

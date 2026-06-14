@@ -22,8 +22,6 @@ benchmarks/results/**
 benchmarks/reports/**
 benchmarks/logs/**
 benchmarks/packages/**
-!benchmarks/results/.gitkeep
-!benchmarks/reports/.gitkeep
 
 # Generated Triton model artifacts
 services/embedding-inference/model_repository/**/model.onnx

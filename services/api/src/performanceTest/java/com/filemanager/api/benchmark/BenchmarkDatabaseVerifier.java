@@ -56,11 +56,6 @@ final class BenchmarkDatabaseVerifier {
                     'image_fingerprints'::regclass,
                     'file_embeddings'::regclass,
                     'audio_fingerprints'::regclass,
-                    'video_embeddings'::regclass,
-                    'duplicate_candidates'::regclass,
-                    'duplicate_candidate_refreshes'::regclass,
-                    'file_grants'::regclass,
-                    'folder_grants'::regclass,
                     'folder_closure'::regclass
                 )
                 """,
@@ -87,13 +82,7 @@ final class BenchmarkTables {
             "exact_duplicate_groups",
             "image_fingerprints",
             "file_embeddings",
-            "audio_fingerprints",
-            "video_embeddings",
-            "duplicate_candidates",
-            "duplicate_candidate_refreshes",
-            "file_grants",
-            "folder_grants",
-            "processing_jobs");
+            "audio_fingerprints");
 
     private BenchmarkTables() {
     }

@@ -4,7 +4,6 @@ import com.filemanager.api.config.AppProperties;
 import com.filemanager.api.processing.domain.ProcessingJob;
 import com.filemanager.api.processing.application.mime.ProcessableAudioMimeTypes;
 import com.filemanager.api.processing.application.mime.ProcessableImageMimeTypes;
-import com.filemanager.api.processing.application.mime.ProcessableVideoMimeTypes;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -33,7 +32,6 @@ public class ProcessingTopicResolver {
             case CHECKSUM -> topics.getFileProcessingChecksum();
             case PHASH, EMBEDDING -> resolveImageTopic(mimeType, topics);
             case AUDIO_ANALYSIS -> resolveAudioAnalysisTopic(mimeType, topics);
-            case VIDEO_ANALYSIS -> resolveVideoTopic(mimeType, topics);
         };
     }
 
@@ -45,21 +43,10 @@ public class ProcessingTopicResolver {
     }
 
     private String resolveAudioAnalysisTopic(String mimeType, AppProperties.Kafka.Topics topics) {
-        if (ProcessableVideoMimeTypes.contains(appProperties.getProcessableVideoMimeTypes(), mimeType)) {
-            return topics.getFileProcessingVideo();
-        }
-
         if (ProcessableAudioMimeTypes.contains(appProperties.getProcessableAudioMimeTypes(), mimeType)) {
             return topics.getFileProcessingAudio();
         }
         throw new IllegalArgumentException("Audio analysis job cannot handle MIME type: " + mimeType);
-    }
-
-    private String resolveVideoTopic(String mimeType, AppProperties.Kafka.Topics topics) {
-        if (ProcessableVideoMimeTypes.contains(appProperties.getProcessableVideoMimeTypes(), mimeType)) {
-            return topics.getFileProcessingVideo();
-        }
-        throw new IllegalArgumentException("Video analysis job cannot handle MIME type: " + mimeType);
     }
 
     private ProcessingJob.JobType parseJobType(String jobType) {

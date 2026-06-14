@@ -101,9 +101,6 @@ class FakeResultSink(ProcessingResultSink):
     ):
         pass
 
-    async def report_video_analysis_success(self, job_id: uuid.UUID, file_id: uuid.UUID, result):
-        pass
-
     async def report_audio_analysis_success(self, job_id: uuid.UUID, file_id: uuid.UUID, result):
         self.audio_reported = True
 

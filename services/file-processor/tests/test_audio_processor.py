@@ -42,17 +42,14 @@ def audio_event() -> FileProcessingRequestedEvent:
     )
 
 
-def test_audio_processor_selection_supports_audio_and_video(monkeypatch, audio_event):
+def test_audio_processor_selection_supports_audio_only(monkeypatch, audio_event):
     monkeypatch.setattr(audio_module.settings, "worker_audio_supported_mime_types", "audio/mpeg,audio/webm")
-    monkeypatch.setattr(audio_module.settings, "worker_video_supported_mime_types", "video/mp4,video/x-matroska")
     processor = AudioFingerprintProcessor(AudioStorageReader())
 
     assert processor.should_process(audio_event) is True
     audio_event.mime_type = "video/mp4"
-    assert processor.should_process(audio_event) is True
+    assert processor.should_process(audio_event) is False
     audio_event.mime_type = "audio/webm"
-    assert processor.should_process(audio_event) is True
-    audio_event.mime_type = "video/x-matroska; charset=binary"
     assert processor.should_process(audio_event) is True
     audio_event.mime_type = "image/jpeg"
     assert processor.should_process(audio_event) is False
@@ -88,27 +85,25 @@ def test_audio_processor_selection_supports_configured_audio_mime_types(monkeypa
 @pytest.mark.asyncio
 async def test_audio_fingerprint_disabled_rejects_standalone_audio_without_reading(monkeypatch, audio_event):
     monkeypatch.setattr(audio_module.settings, "worker_audio_fingerprint_enabled", False)
-    monkeypatch.setattr(audio_module.settings, "worker_video_audio_analysis_enabled", True)
     storage = AudioStorageReader()
     processor = AudioFingerprintProcessor(storage)
 
     assert processor.should_process(audio_event) is False
-    with pytest.raises(NonRetryableProcessingError, match="Standalone audio fingerprint processing is disabled"):
+    with pytest.raises(NonRetryableProcessingError, match="Audio fingerprint processing is disabled"):
         await processor.process(audio_event)
 
     assert storage.references == []
 
 
 @pytest.mark.asyncio
-async def test_video_audio_analysis_disabled_rejects_video_without_reading(monkeypatch, audio_event):
+async def test_audio_analysis_rejects_video_mime_type_without_reading(monkeypatch, audio_event):
     monkeypatch.setattr(audio_module.settings, "worker_audio_fingerprint_enabled", True)
-    monkeypatch.setattr(audio_module.settings, "worker_video_audio_analysis_enabled", False)
     audio_event.mime_type = "video/mp4"
     storage = AudioStorageReader()
     processor = AudioFingerprintProcessor(storage)
 
     assert processor.should_process(audio_event) is False
-    with pytest.raises(NonRetryableProcessingError, match="Video audio-track analysis is disabled"):
+    with pytest.raises(NonRetryableProcessingError, match="Audio analysis only supports audio MIME types"):
         await processor.process(audio_event)
 
     assert storage.references == []
@@ -164,7 +159,7 @@ async def test_audio_analysis_uses_storage_reference_argument_lists_length_and_c
 
 
 @pytest.mark.asyncio
-async def test_audio_analysis_rejects_video_without_audio_stream(monkeypatch, audio_event):
+async def test_audio_analysis_rejects_video_mime_type_before_probe(monkeypatch, audio_event):
     audio_event.mime_type = "video/mp4"
     processor = AudioFingerprintProcessor(AudioStorageReader(), max_file_bytes=1024)
 
@@ -173,7 +168,7 @@ async def test_audio_analysis_rejects_video_without_audio_stream(monkeypatch, au
 
     monkeypatch.setattr(subprocess, "run", fake_run)
 
-    with pytest.raises(NonRetryableProcessingError, match="No audio stream found"):
+    with pytest.raises(NonRetryableProcessingError, match="Audio analysis only supports audio MIME types"):
         await processor.process(audio_event)
 
 

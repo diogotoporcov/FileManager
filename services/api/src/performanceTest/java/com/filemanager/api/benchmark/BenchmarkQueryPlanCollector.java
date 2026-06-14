@@ -69,21 +69,19 @@ final class BenchmarkQueryPlanCollector {
                 "schemaVersion", BenchmarkSupport.SCHEMA_VERSION,
                 "captured", List.of(
                         Map.of(
-                                "operation", "duplicate.search.EXACT.one-match",
+                                "operation", "duplicate.search.EXACT",
                                 "scope", "DATABASE_DIRECT",
                                 "file", "query-plans/duplicate-exact.json",
                                 "status", "COMPLETED"),
                         Map.of(
-                                "operation", "duplicate.groups.EXACT.summary.first-50",
+                                "operation", "duplicate.groups.EXACT",
                                 "scope", "DATABASE_DIRECT",
                                 "file", "query-plans/duplicate-groups-exact-summary.json",
                                 "status", "COMPLETED")),
                 "notCaptured", List.of(
-                        notImplemented("duplicate.groups.EXACT.files.first-50"),
-                        notImplemented("duplicate.search.IMAGE_PHASH.threshold"),
-                        notImplemented("duplicate.search.IMAGE_EMBEDDING.threshold"),
-                        notImplemented("duplicate.search.AUDIO_FINGERPRINT.one-match"),
-                        notImplemented("duplicate.search.VIDEO_EMBEDDING.one-match"))));
+                        notImplemented("duplicate.search.IMAGE_PHASH"),
+                        notImplemented("duplicate.search.IMAGE_EMBEDDING"),
+                        notImplemented("duplicate.search.AUDIO_FINGERPRINT"))));
     }
 
     private Map<String, String> notImplemented(String operation) {

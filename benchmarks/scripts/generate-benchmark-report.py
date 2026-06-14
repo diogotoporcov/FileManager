@@ -10,6 +10,7 @@ SUPPORTED_SCHEMA_VERSION = 3
 REQUIRED_SCALE_ARTIFACTS = [
     "environment.json",
     "dataset-manifest.json",
+    "benchmark-registry.json",
     "correctness-results.json",
     "setup-timings.json",
     "repository-latency.json",
@@ -20,6 +21,7 @@ SUMMARY_COLUMNS = [
     "scope",
     "coldOrWarm",
     "sampleCount",
+    "sourceSampleCount",
     "warmupCount",
     "successCount",
     "failureCount",
@@ -33,6 +35,10 @@ SUMMARY_COLUMNS = [
     "p99Status",
     "stddevMs",
     "standardDeviationMethod",
+    "resultCountMin",
+    "resultCountP50",
+    "resultCountP95",
+    "resultCountMax",
 ]
 SCALE_COMPARISON_COLUMNS = ["scale", "records", *SUMMARY_COLUMNS]
 VALID_COMPONENT_STATUSES = {
@@ -42,6 +48,29 @@ VALID_COMPONENT_STATUSES = {
     "TOOL_UNAVAILABLE",
     "TARGET_UNAVAILABLE",
     "FAILED",
+}
+ALLOWED_OPERATIONS = {
+    "duplicate.search.EXACT",
+    "duplicate.search.IMAGE_PHASH",
+    "duplicate.search.IMAGE_EMBEDDING",
+    "duplicate.search.AUDIO_FINGERPRINT",
+    "duplicate.groups.EXACT",
+}
+REMOVED_DIMENSIONS = {
+    "video_embeddings",
+    "duplicate_candidates",
+    "duplicate_candidate_refreshes",
+    "file_grants",
+    "folder_grants",
+    "processing_jobs",
+    "VIDEO_" + "EMBEDDING",
+    "candidate-" + "refresh",
+    "permission." + "evaluate",
+    "processing." + "status",
+    "sharing." + "list",
+    "folder." + "list",
+    "file." + "search",
+    "download-" + "control-plane",
 }
 
 
@@ -82,6 +111,8 @@ def validate_scale_dir(scale_dir: Path) -> None:
 
     component_status = read_json(scale_dir / "component-status.json")
     components = require_dict(component_status.get("components"), "component-status.json.components")
+    reject_removed_dimensions(read_json(scale_dir / "dataset-manifest.json"), "dataset-manifest.json")
+    reject_removed_dimensions(read_json(scale_dir / "benchmark-registry.json"), "benchmark-registry.json")
 
     validate_component_statuses(components, scale_dir)
 
@@ -89,15 +120,12 @@ def validate_scale_dir(scale_dir: Path) -> None:
 
     validate_measurement_identities(require_list(latency.get("measurements"), "repository-latency.json.measurements"), scale_dir)
 
-    if components.get("k6", {}).get("status") == "COMPLETED" and not (scale_dir / "api-k6-summary.json").is_file():
-        raise SystemExit(f"k6 completed but api-k6-summary.json is missing for {scale_dir}")
-
     if components.get("pgbench", {}).get("status") == "COMPLETED" and not (scale_dir / "pgbench-summary.json").is_file():
         raise SystemExit(f"pgbench completed but pgbench-summary.json is missing for {scale_dir}")
 
 
 def validate_component_statuses(components: dict[str, Any], scale_dir: Path) -> None:
-    for component in ["serviceRepositoryBenchmark", "k6", "pgbench", "pgStatStatements", "queryPlan", "resourceUsage"]:
+    for component in ["serviceRepositoryBenchmark", "pgbench", "pgStatStatements", "queryPlan", "resourceUsage"]:
         status = require_dict(components.get(component), f"components.{component}").get("status")
 
         if status not in VALID_COMPONENT_STATUSES:
@@ -238,6 +266,10 @@ def validate_measurement_identities(measurements: list[dict[str, Any]], scale_di
 
     for measurement in measurements:
         identity = measurement_identity(measurement)
+        operation = str(measurement.get("operation"))
+
+        if operation not in ALLOWED_OPERATIONS:
+            raise SystemExit(f"Unsupported benchmark operation in {scale_dir}: {operation}")
 
         if identity in identities:
             raise SystemExit(f"Duplicate measurement identity in repository-latency.json for {scale_dir}: {identity}")
@@ -254,10 +286,13 @@ def write_report(scale_dir: Path) -> None:
 
     environment = read_json(scale_dir / "environment.json")
     dataset = read_json(scale_dir / "dataset-manifest.json")
+    registry = read_json(scale_dir / "benchmark-registry.json")
     correctness = read_json(scale_dir / "correctness-results.json")
     component_status = read_json(scale_dir / "component-status.json")
 
     rows = write_summary(scale_dir)
+    reject_removed_dimensions(dataset, "dataset-manifest.json")
+    reject_removed_dimensions(registry, "benchmark-registry.json")
 
     lines = [
         "# Benchmark Report",
@@ -280,8 +315,26 @@ def write_report(scale_dir: Path) -> None:
         "",
         "## Dataset",
         "",
+        f"- Dataset ID: {dataset['datasetId']}",
+        f"- Dataset mode: {dataset['datasetMode']}",
+        f"- Scale: {dataset['benchmarkScaleLabel']}",
+        f"- Duplicate distribution: {dataset['duplicateDistribution']}",
         f"- Records: {dataset['recordCount']} synthetic file metadata and fingerprint records",
         f"- Seed: {dataset['seed']}",
+        f"- Files: {dataset['actualEvidenceTableCounts']['files']}",
+        f"- File fingerprints: {dataset['actualEvidenceTableCounts']['file_fingerprints']}",
+        f"- Image fingerprints: {dataset['actualEvidenceTableCounts']['image_fingerprints']}",
+        f"- File embeddings: {dataset['actualEvidenceTableCounts']['file_embeddings']}",
+        f"- Audio fingerprints: {dataset['actualEvidenceTableCounts']['audio_fingerprints']}",
+        f"- Exact duplicate groups: {dataset['actualEvidenceTableCounts']['exact_duplicate_groups']}",
+        f"- Embedding model: {dataset['embeddingModelName']}:{dataset['embeddingModelVersion']} "
+        f"({dataset['embeddingDimension']} dimensions)",
+        f"- Audio fingerprint: {dataset['audioFingerprintAlgorithm']}:{dataset['audioFingerprintVersion']}",
+        "",
+        "## Benchmark Registry",
+        "",
+        f"- Dataset ID: {registry['datasetId']}",
+        f"- Config fingerprint: {registry['configFingerprint']}",
         "",
         "## Correctness Validation",
         "",
@@ -303,16 +356,17 @@ def write_report(scale_dir: Path) -> None:
         "",
         "## Spring Service/Repository Latency",
         "",
-        "| operation | scope | p50 ms | p95 ms | p99 ms | mean ms |",
-        "| --- | --- | ---: | ---: | ---: | ---: |",
+        "| operation | scope | sources | p50 ms | p95 ms | p99 ms | result p50 | result p95 | result max |",
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ])
 
     for row in sorted(rows, key=lambda item: measurement_identity(item)):
         p99 = row["p99Ms"] if row["p99Ms"] else row["p99Status"]
 
         lines.append(
-            f"| {row['operation']} | {row['scope']} | {row['p50Ms']} | "
-            f"{row['p95Ms']} | {p99} | {row['meanMs']} |"
+            f"| {row['operation']} | {row['scope']} | {row['sourceSampleCount']} | {row['p50Ms']} | "
+            f"{row['p95Ms']} | {p99} | {row['resultCountP50']} | {row['resultCountP95']} | "
+            f"{row['resultCountMax']} |"
         )
 
     lines.extend([
@@ -356,6 +410,14 @@ def compatible_environments(run_dir: Path, scale_dirs: list[Path]) -> bool:
         )
 
     return compatible
+
+
+def reject_removed_dimensions(value: Any, artifact: str) -> None:
+    serialized = json.dumps(value)
+
+    for removed in REMOVED_DIMENSIONS:
+        if removed in serialized:
+            raise SystemExit(f"Removed benchmark dimension in {artifact}: {removed}")
 
 
 def write_scale_comparison(run_dir: Path, requested_scales: list[str]) -> None:

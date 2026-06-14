@@ -52,14 +52,14 @@ class DuplicateControllerTest {
         when(duplicateSearchService.searchDuplicatesForFile(eq(fileId), any(), eq(actorUserId)))
                 .thenReturn(new DuplicateSearchResponse(fileId, List.of()));
 
-        controller.findDuplicatesForFile(fileId, "exact,image_phash,video_embedding");
+        controller.findDuplicatesForFile(fileId, "exact,image_phash,audio_fingerprint");
 
         verify(duplicateSearchService).searchDuplicatesForFile(
                 fileId,
                 List.of(
                         DuplicateSearchMethod.EXACT,
                         DuplicateSearchMethod.IMAGE_PHASH,
-                        DuplicateSearchMethod.VIDEO_EMBEDDING),
+                        DuplicateSearchMethod.AUDIO_FINGERPRINT),
                 actorUserId);
     }
 
@@ -83,6 +83,7 @@ class DuplicateControllerTest {
         for (String removedMethod : List.of(
                 "VIDEO_FRAME_PHASH",
                 "VIDEO_FRAME_EMBEDDING",
+                "VIDEO_EMBEDDING",
                 "VIDEO_AV_FINGERPRINT",
                 "VIDEO_AUDIO_FINGERPRINT")) {
             IllegalArgumentException exception = assertThrows(

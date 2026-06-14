@@ -9,14 +9,9 @@ VARIABLE_PATTERN = re.compile(r":'?([A-Za-z_][A-Za-z0-9_]*)'?\b")
 REQUIRED_VARIABLES = {
     "duplicate-audio.sql": {"fingerprint_algorithm", "fingerprint_version", "fingerprint_hash", "owner_user_id", "source_file_id"},
     "duplicate-exact.sql": {"hash_value", "owner_user_id", "source_file_id"},
-    "duplicate-groups-audio.sql": {"owner_user_id"},
     "duplicate-groups-exact.sql": {"owner_user_id"},
     "duplicate-image-embedding.sql": {"source_file_id", "model_name", "model_version", "owner_user_id", "max_distance"},
     "duplicate-image-phash.sql": {"owner_user_id", "source_file_id", "source_phash", "max_distance"},
-    "duplicate-video-embedding.sql": {"source_file_id", "model_name", "model_version", "owner_user_id", "max_distance"},
-    "file-search.sql": {"owner_user_id"},
-    "folder-listing.sql": {"owner_user_id", "folder_id"},
-    "permission-check.sql": {"file_id", "owner_user_id"},
 }
 REQUIRED_RESTRICTIONS = {
     "owner_user_id": "owner_user_id",
@@ -52,10 +47,10 @@ def validate_script(path: Path) -> list[str]:
         if token not in text:
             errors.append(f"{path}: required restriction is missing: {restriction}")
 
-    if path.name != "permission-check.sql" and "LIMIT" not in text:
+    if "LIMIT" not in text:
         errors.append(f"{path}: required restriction is missing: limit")
 
-    if "duplicate-image-embedding" in path.name or "duplicate-video-embedding" in path.name:
+    if "duplicate-image-embedding" in path.name:
         for token in ["model_name", "model_version", "dimension = 768"]:
             if token not in text:
                 errors.append(f"{path}: required embedding restriction is missing: {token}")
