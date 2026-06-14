@@ -1,6 +1,7 @@
 package com.filemanager.api.observability.application;
 
 import com.filemanager.api.observability.port.ApplicationMetricsPort;
+import java.time.Duration;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -57,5 +58,9 @@ public class FileManagerMetrics {
 
     public void recordDuplicateGroupsReturned(String method, int count) {
         applicationMetricsPort.recordDuplicateGroupsReturned(method, count);
+    }
+
+    public void recordOperationDuration(String operation, String status, Duration duration) {
+        applicationMetricsPort.recordOperationDuration(operation, status, duration);
     }
 }

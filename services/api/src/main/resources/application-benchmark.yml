@@ -1,0 +1,27 @@
+spring:
+  flyway:
+    enabled: true
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: http://localhost:8082/realms/filemanager/protocol/openid-connect/certs
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+
+filemanager:
+  internal:
+    api-token: benchmark-internal-token-000000000000
+
+minio:
+  endpoint: http://localhost:9000
+  access-key: benchmark
+  secret-key: benchmark-secret
+  bucket-name: filemanager-benchmark

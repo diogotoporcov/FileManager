@@ -1,5 +1,52 @@
 -- PostgreSQL extensions.
 CREATE EXTENSION IF NOT EXISTS vector;
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+CREATE OR REPLACE FUNCTION filemanager_hex_hamming_distance(left_hex TEXT, right_hex TEXT)
+RETURNS INTEGER
+LANGUAGE plpgsql
+IMMUTABLE
+STRICT
+AS $$
+DECLARE
+    position_index INTEGER;
+    left_value INTEGER;
+    right_value INTEGER;
+    xor_value INTEGER;
+    distance INTEGER := 0;
+BEGIN
+    IF left_hex !~ '^[0-9a-fA-F]{16}$' OR right_hex !~ '^[0-9a-fA-F]{16}$' THEN
+        RAISE EXCEPTION 'pHash values must be 16-character hexadecimal strings';
+    END IF;
+
+    FOR position_index IN 1..16 LOOP
+        left_value := strpos('0123456789abcdef', lower(substr(left_hex, position_index, 1))) - 1;
+        right_value := strpos('0123456789abcdef', lower(substr(right_hex, position_index, 1))) - 1;
+        xor_value := left_value # right_value;
+        distance := distance + CASE xor_value
+            WHEN 0 THEN 0
+            WHEN 1 THEN 1
+            WHEN 2 THEN 1
+            WHEN 3 THEN 2
+            WHEN 4 THEN 1
+            WHEN 5 THEN 2
+            WHEN 6 THEN 2
+            WHEN 7 THEN 3
+            WHEN 8 THEN 1
+            WHEN 9 THEN 2
+            WHEN 10 THEN 2
+            WHEN 11 THEN 3
+            WHEN 12 THEN 2
+            WHEN 13 THEN 3
+            WHEN 14 THEN 3
+            WHEN 15 THEN 4
+            ELSE 0
+        END;
+    END LOOP;
+
+    RETURN distance;
+END;
+$$;
 
 -- Identity tables.
 CREATE TABLE users (
@@ -86,6 +133,9 @@ CREATE INDEX idx_files_owner_user_active_created
 CREATE INDEX idx_files_folder_active_created
     ON files(folder_id, deleted_at, created_at DESC, id DESC);
 
+CREATE INDEX idx_files_owner_deleted_folder
+    ON files(owner_user_id, deleted_at, folder_id);
+
 CREATE INDEX idx_files_created_by_user
     ON files(created_by_user_id);
 
@@ -101,6 +151,7 @@ CREATE TABLE file_fingerprints (
 
 CREATE INDEX idx_fingerprints_value ON file_fingerprints(hash_value);
 CREATE INDEX idx_fingerprints_file_algo ON file_fingerprints(file_id, algorithm);
+CREATE INDEX idx_file_fingerprints_algorithm_hash ON file_fingerprints(algorithm, hash_value);
 
 CREATE TABLE image_fingerprints (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
@@ -123,6 +174,9 @@ CREATE TABLE file_embeddings (
 );
 
 CREATE INDEX idx_embeddings_file_model ON file_embeddings(file_id, model_name, model_version);
+
+CREATE INDEX idx_file_embeddings_model_version_dimension
+    ON file_embeddings(model_name, model_version, dimension);
 
 -- Background processing.
 CREATE TABLE processing_jobs (
@@ -296,6 +350,22 @@ CREATE TABLE video_frame_embeddings (
 CREATE INDEX idx_video_frame_embeddings_file_model
     ON video_frame_embeddings(file_id, model_name, model_version);
 
+CREATE TABLE video_embeddings (
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
+    file_id UUID NOT NULL REFERENCES files(id) UNIQUE,
+    model_name VARCHAR(255) NOT NULL CHECK (length(trim(model_name)) > 0),
+    model_version VARCHAR(255) NOT NULL CHECK (length(trim(model_version)) > 0),
+    dimension INTEGER NOT NULL CHECK (dimension = 768),
+    embedding vector(768) NOT NULL,
+    pooling_strategy VARCHAR(64) NOT NULL CHECK (length(trim(pooling_strategy)) > 0),
+    source_frame_count INTEGER NOT NULL CHECK (source_frame_count > 0),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_video_embeddings_model_version_dimension
+    ON video_embeddings(model_name, model_version, dimension);
+
 CREATE TABLE audio_fingerprints (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
     file_id UUID NOT NULL REFERENCES files(id) UNIQUE,
@@ -307,6 +377,7 @@ CREATE TABLE audio_fingerprints (
     audio_stream_index INTEGER CHECK (audio_stream_index >= 0),
     container_format VARCHAR(255),
     fingerprint VARCHAR(32768) NOT NULL CHECK (length(trim(fingerprint)) > 0),
+    fingerprint_hash VARCHAR(64) NOT NULL,
     fingerprint_algorithm VARCHAR(64) NOT NULL CHECK (length(trim(fingerprint_algorithm)) > 0),
     fingerprint_version VARCHAR(128) NOT NULL CHECK (length(trim(fingerprint_version)) > 0),
     fingerprint_duration_seconds INTEGER NOT NULL CHECK (fingerprint_duration_seconds > 0),
@@ -315,3 +386,92 @@ CREATE TABLE audio_fingerprints (
 );
 
 CREATE INDEX idx_audio_fingerprints_file ON audio_fingerprints(file_id);
+CREATE INDEX idx_audio_fingerprints_hash ON audio_fingerprints(fingerprint_hash);
+
+CREATE TABLE exact_duplicate_groups (
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
+    owner_user_id UUID NOT NULL REFERENCES users(id),
+    algorithm VARCHAR(50) NOT NULL CHECK (algorithm IN ('SHA256')),
+    hash_value VARCHAR(255) NOT NULL,
+    active_file_count BIGINT NOT NULL CHECK (active_file_count >= 0),
+    representative_file_id UUID REFERENCES files(id),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_exact_duplicate_groups_owner_algorithm_hash
+        UNIQUE(owner_user_id, algorithm, hash_value)
+);
+
+CREATE INDEX idx_exact_duplicate_groups_owner_count_algorithm_hash
+    ON exact_duplicate_groups(owner_user_id, active_file_count DESC, algorithm, hash_value);
+
+CREATE TABLE duplicate_candidates (
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
+    owner_user_id UUID NOT NULL REFERENCES users(id),
+    file_id_low UUID NOT NULL REFERENCES files(id),
+    file_id_high UUID NOT NULL REFERENCES files(id),
+    method VARCHAR(64) NOT NULL CHECK (
+        method IN ('IMAGE_PHASH', 'IMAGE_EMBEDDING', 'AUDIO_FINGERPRINT', 'VIDEO_EMBEDDING')
+    ),
+    confidence VARCHAR(64) NOT NULL CHECK (confidence IN ('SIMILAR', 'NEAR_DUPLICATE', 'EXACT')),
+    distance DOUBLE PRECISION,
+    score DOUBLE PRECISION NOT NULL CHECK (score >= 0.0 AND score <= 1.0),
+    evidence_type VARCHAR(64) NOT NULL CHECK (
+        evidence_type IN ('IMAGE_PHASH', 'IMAGE_EMBEDDING', 'AUDIO_FINGERPRINT', 'VIDEO_EMBEDDING')
+    ),
+    model_name VARCHAR(255) NOT NULL,
+    model_version VARCHAR(255) NOT NULL,
+    threshold_version VARCHAR(255) NOT NULL,
+    status VARCHAR(32) NOT NULL CHECK (status IN ('ACTIVE', 'STALE')),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT chk_duplicate_candidates_canonical_pair CHECK (file_id_low < file_id_high),
+    CONSTRAINT uk_duplicate_candidates_pair_method_version
+        UNIQUE (
+            owner_user_id,
+            file_id_low,
+            file_id_high,
+            method,
+            model_name,
+            model_version,
+            threshold_version
+        )
+);
+
+CREATE INDEX idx_duplicate_candidates_owner_method_low
+    ON duplicate_candidates(owner_user_id, method, file_id_low)
+    WHERE status = 'ACTIVE';
+
+CREATE INDEX idx_duplicate_candidates_owner_method_high
+    ON duplicate_candidates(owner_user_id, method, file_id_high)
+    WHERE status = 'ACTIVE';
+
+CREATE TABLE duplicate_candidate_refreshes (
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
+    owner_user_id UUID NOT NULL REFERENCES users(id),
+    source_file_id UUID NOT NULL REFERENCES files(id),
+    method VARCHAR(64) NOT NULL CHECK (
+        method IN ('IMAGE_PHASH', 'IMAGE_EMBEDDING', 'AUDIO_FINGERPRINT', 'VIDEO_EMBEDDING')
+    ),
+    model_name VARCHAR(255) NOT NULL,
+    model_version VARCHAR(255) NOT NULL,
+    threshold_version VARCHAR(255) NOT NULL,
+    candidate_count INTEGER NOT NULL CHECK (candidate_count >= 0),
+    refreshed_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_duplicate_candidate_refreshes_source_method_version
+        UNIQUE (
+            owner_user_id,
+            source_file_id,
+            method,
+            model_name,
+            model_version,
+            threshold_version
+        )
+);
+
+CREATE INDEX idx_duplicate_candidate_refreshes_source_method
+    ON duplicate_candidate_refreshes(owner_user_id, source_file_id, method);
+
+CREATE INDEX idx_duplicate_candidate_refreshes_method_refreshed
+    ON duplicate_candidate_refreshes(owner_user_id, method, refreshed_at);

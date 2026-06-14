@@ -14,6 +14,16 @@ import org.springframework.stereotype.Repository;
 public interface FileRepository extends JpaRepository<FileEntity, UUID>, JpaSpecificationExecutor<FileEntity> {
     Optional<FileEntity> findByIdAndDeletedAtIsNull(UUID id);
 
+    @Query("""
+            select file
+            from FileEntity file
+            left join file.folder folder
+            where file.id = :id
+                and file.deletedAt is null
+                and (folder is null or folder.deletedAt is null)
+            """)
+    Optional<FileEntity> findEligibleById(UUID id);
+
     @Query("select coalesce(sum(f.size), 0) from FileEntity f where f.ownerUser = :ownerUser and f.deletedAt is null")
     long sumActiveSizeByOwnerUser(User ownerUser);
 

@@ -2,6 +2,8 @@ package com.filemanager.api.processing.application;
 
 import com.filemanager.api.config.AppProperties;
 import com.filemanager.api.config.EmbeddingDimensions;
+import com.filemanager.api.duplicate.application.DuplicateCandidateMaintenanceService;
+import com.filemanager.api.duplicate.application.ExactDuplicateGroupMaintenanceService;
 import com.filemanager.api.file.domain.FileEntity;
 import com.filemanager.api.file.persistence.FileRepository;
 import com.filemanager.api.identity.domain.User;
@@ -44,6 +46,7 @@ import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.doThrow;
 
 @ExtendWith(MockitoExtension.class)
 class ProcessingJobServiceTest {
@@ -72,6 +75,10 @@ class ProcessingJobServiceTest {
     private FileManagerMetrics fileManagerMetrics;
     @Mock
     private AppProperties appProperties;
+    @Mock
+    private ExactDuplicateGroupMaintenanceService exactDuplicateGroupMaintenanceService;
+    @Mock
+    private DuplicateCandidateMaintenanceService duplicateCandidateMaintenanceService;
 
     @Captor
     private ArgumentCaptor<List<VideoFrameFingerprint>> frameFingerprintsCaptor;
@@ -119,8 +126,38 @@ class ProcessingJobServiceTest {
         verify(fileFingerprintRepository).save(fingerprintCaptor.capture());
         assertThat(fingerprintCaptor.getValue().getFile()).isEqualTo(file);
         assertThat(fingerprintCaptor.getValue().getHashValue()).isEqualTo(sha256.toLowerCase());
+        verify(exactDuplicateGroupMaintenanceService).refreshAfterFingerprintChange(
+                owner.getId(),
+                FileFingerprint.FingerprintAlgorithm.SHA256,
+                null,
+                sha256.toLowerCase());
         assertThat(job.getStatus()).isEqualTo(ProcessingJob.JobStatus.COMPLETED);
         verify(fileManagerMetrics).recordJobCompleted("CHECKSUM");
+    }
+
+    @Test
+    void handleChecksumResult_DoesNotCompleteJobWhenReadModelMaintenanceFails() {
+        UUID jobId = UUID.randomUUID();
+        UUID fileId = UUID.randomUUID();
+        String sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+        FileEntity file = file(fileId);
+        ProcessingJob job = job(jobId, file, ProcessingJob.JobType.CHECKSUM);
+
+        when(processingJobRepository.findById(jobId)).thenReturn(Optional.of(job));
+        when(fileRepository.findByIdAndDeletedAtIsNull(fileId)).thenReturn(Optional.of(file));
+        when(fileFingerprintRepository.findByFileIdAndAlgorithm(fileId, FileFingerprint.FingerprintAlgorithm.SHA256))
+                .thenReturn(Optional.empty());
+        doThrow(new IllegalStateException("summary update failed"))
+                .when(exactDuplicateGroupMaintenanceService)
+                .refreshAfterFingerprintChange(owner.getId(), FileFingerprint.FingerprintAlgorithm.SHA256, null, sha256);
+
+        assertThrows(
+                IllegalStateException.class,
+                () -> processingJobService.handleChecksumResult(jobId, fileId, sha256));
+
+        assertThat(job.getStatus()).isEqualTo(ProcessingJob.JobStatus.PENDING);
+        verify(processingJobRepository, never()).save(job);
+        verify(fileManagerMetrics, never()).recordJobCompleted("CHECKSUM");
     }
 
     @Test
@@ -140,6 +177,7 @@ class ProcessingJobServiceTest {
         verify(imageFingerprintRepository).save(fingerprintCaptor.capture());
         assertThat(fingerprintCaptor.getValue().getFile()).isEqualTo(file);
         assertThat(fingerprintCaptor.getValue().getPhash()).isEqualTo("fedcba9876543210");
+        verify(duplicateCandidateMaintenanceService).refreshImagePhashCandidates(file);
         assertThat(job.getStatus()).isEqualTo(ProcessingJob.JobStatus.COMPLETED);
         verify(fileManagerMetrics).recordJobCompleted("PHASH");
     }
@@ -171,6 +209,11 @@ class ProcessingJobServiceTest {
         verify(fileEmbeddingRepository).save(embeddingCaptor.capture());
         assertThat(embeddingCaptor.getValue().getFile()).isEqualTo(file);
         assertThat(embeddingCaptor.getValue().getEmbedding()).hasSize(EmbeddingDimensions.IMAGE_EMBEDDING_DIMENSION);
+        verify(duplicateCandidateMaintenanceService).refreshImageEmbeddingCandidates(
+                file,
+                "openai/clip-vit-large-patch14",
+                "1",
+                EmbeddingDimensions.IMAGE_EMBEDDING_DIMENSION);
         assertThat(job.getStatus()).isEqualTo(ProcessingJob.JobStatus.COMPLETED);
         verify(fileManagerMetrics).recordJobCompleted("EMBEDDING");
     }
@@ -248,6 +291,11 @@ class ProcessingJobServiceTest {
         assertThat(videoEmbeddingCaptor.getValue().getEmbedding()).hasSize(EmbeddingDimensions.IMAGE_EMBEDDING_DIMENSION);
         assertThat(videoEmbeddingCaptor.getValue().getPoolingStrategy()).isEqualTo("mean");
         assertThat(videoEmbeddingCaptor.getValue().getSourceFrameCount()).isEqualTo(2);
+        verify(duplicateCandidateMaintenanceService).refreshVideoEmbeddingCandidates(
+                file,
+                "openai/clip-vit-large-patch14",
+                "1",
+                EmbeddingDimensions.IMAGE_EMBEDDING_DIMENSION);
         assertThat(job.getStatus()).isEqualTo(ProcessingJob.JobStatus.COMPLETED);
         verify(fileManagerMetrics).recordJobCompleted("VIDEO_ANALYSIS");
     }
@@ -358,6 +406,7 @@ class ProcessingJobServiceTest {
         assertThat(fingerprintCaptor.getValue().getChannels()).isEqualTo(2);
         assertThat(fingerprintCaptor.getValue().getFingerprint()).isEqualTo("12345ABC");
         assertThat(fingerprintCaptor.getValue().getFingerprintAlgorithm()).isEqualTo("chromaprint");
+        verify(duplicateCandidateMaintenanceService).refreshAudioFingerprintCandidates(file);
         assertThat(job.getStatus()).isEqualTo(ProcessingJob.JobStatus.COMPLETED);
         verify(fileManagerMetrics).recordJobCompleted("AUDIO_ANALYSIS");
     }

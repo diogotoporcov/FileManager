@@ -4,6 +4,7 @@ import com.filemanager.api.auth.application.AccessControlService;
 import com.filemanager.api.auth.domain.Permission;
 import com.filemanager.api.config.AppProperties;
 import com.filemanager.api.config.FileTransferProperties;
+import com.filemanager.api.duplicate.application.ExactDuplicateGroupMaintenanceService;
 import com.filemanager.api.exception.FileTransferDisabledException;
 import com.filemanager.api.file.web.FileResponseMapper;
 import com.filemanager.api.file.web.search.FileSearchQuery;
@@ -22,6 +23,7 @@ import com.filemanager.api.processing.application.policy.ProcessingPolicyContext
 import com.filemanager.api.processing.domain.ProcessingJob;
 import com.filemanager.api.processing.messaging.FileProcessingRequestedEvent;
 import com.filemanager.api.processing.persistence.ProcessingJobRepository;
+import com.filemanager.api.processing.persistence.result.FileFingerprintRepository;
 import com.filemanager.api.storage.exception.StorageException;
 import com.filemanager.api.storage.port.CreatePresignedDownloadUrlRequest;
 import com.filemanager.api.storage.port.CreatePresignedDownloadUrlResponse;
@@ -61,6 +63,8 @@ class FileServiceTest {
     @Mock
     private FileRepository fileRepository;
     @Mock
+    private FileFingerprintRepository fileFingerprintRepository;
+    @Mock
     private FolderRepository folderRepository;
     @Mock
     private UserRepository userRepository;
@@ -78,6 +82,8 @@ class FileServiceTest {
     private FileManagerMetrics fileManagerMetrics;
     @Mock
     private TagService tagService;
+    @Mock
+    private ExactDuplicateGroupMaintenanceService exactDuplicateGroupMaintenanceService;
 
     private FileService fileService;
     private FileTransferProperties fileTransferProperties;
@@ -92,6 +98,7 @@ class FileServiceTest {
         fileTransferProperties = new FileTransferProperties();
         fileService = new FileService(
                 fileRepository,
+                fileFingerprintRepository,
                 folderRepository,
                 userRepository,
                 processingJobRepository,
@@ -106,7 +113,8 @@ class FileServiceTest {
                 new FileSearchSpecificationBuilder(),
                 fileSortMapper,
                 new FileResponseMapper(),
-                tagService);
+                tagService,
+                exactDuplicateGroupMaintenanceService);
     }
 
     @Test

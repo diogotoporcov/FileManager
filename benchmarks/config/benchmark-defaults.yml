@@ -1,0 +1,9 @@
+benchmark:
+  seed: 20260611
+  records: 10000
+  warmup-iterations: 20
+  measured-iterations: 100
+  concurrency: "1,10,25"
+  instrumentation-mode: metrics
+  benchmark-profile: default
+  duplicate-distribution: default

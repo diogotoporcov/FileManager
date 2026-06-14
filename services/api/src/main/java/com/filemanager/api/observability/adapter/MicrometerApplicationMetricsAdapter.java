@@ -1,6 +1,7 @@
 package com.filemanager.api.observability.adapter;
 
 import io.micrometer.core.instrument.MeterRegistry;
+import java.time.Duration;
 import org.springframework.stereotype.Component;
 import com.filemanager.api.observability.port.ApplicationMetricsPort;
 
@@ -71,5 +72,10 @@ public class MicrometerApplicationMetricsAdapter implements ApplicationMetricsPo
     @Override
     public void recordDuplicateGroupsReturned(String method, int count) {
         registry.summary("filemanager.duplicate.groups.returned", "method", method).record(count);
+    }
+
+    @Override
+    public void recordOperationDuration(String operation, String status, Duration duration) {
+        registry.timer("filemanager.operation.duration", "operation", operation, "status", status).record(duration);
     }
 }
