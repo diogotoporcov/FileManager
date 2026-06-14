@@ -10,31 +10,48 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface ImageEmbeddingDuplicateCandidateRepository extends JpaRepository<FileEmbedding, UUID> {
     @Query(value = """
+            WITH nearest AS MATERIALIZED (
+                SELECT
+                    candidate.file_id,
+                    candidate.embedding <=> CAST(:sourceEmbedding AS vector) AS distance
+                FROM file_embeddings candidate
+                WHERE candidate.file_id <> :sourceFileId
+                    AND candidate.model_name = :modelName
+                    AND candidate.model_version = :modelVersion
+                    AND candidate.dimension = :dimension
+                ORDER BY candidate.embedding <=> CAST(:sourceEmbedding AS vector)
+                LIMIT :searchWindow
+            )
             SELECT
                 f.id AS "fileId",
                 f.name AS "name",
                 f.mime_type AS "mimeType",
                 f.size AS "size",
-                (candidate.embedding <=> source.embedding) AS "distance"
-            FROM file_embeddings source
-            JOIN file_embeddings candidate
-                ON candidate.file_id <> source.file_id
-                AND candidate.model_name = source.model_name
-                AND candidate.model_version = source.model_version
-                AND candidate.dimension = source.dimension
-            JOIN files f ON f.id = candidate.file_id
+                nearest.distance AS "distance",
+                f.created_at AS "createdAt"
+            FROM nearest
+            JOIN files f ON f.id = nearest.file_id
             LEFT JOIN folders folder ON folder.id = f.folder_id
-            WHERE source.file_id = :sourceFileId
-                AND source.model_name = :modelName
-                AND source.model_version = :modelVersion
-                AND source.dimension = :dimension
-                AND f.owner_user_id = :actorUserId
+            WHERE f.owner_user_id = :actorUserId
                 AND f.deleted_at IS NULL
                 AND (f.folder_id IS NULL OR folder.deleted_at IS NULL)
                 AND lower(f.mime_type) LIKE 'image/%'
-                AND (candidate.embedding <=> source.embedding) <= :maxDistance
-            ORDER BY (candidate.embedding <=> source.embedding), f.created_at DESC, f.id
-            LIMIT :maxCandidates
+                AND nearest.distance <= :maxDistance
+                AND (
+                    :cursorDistance IS NULL
+                    OR nearest.distance > :cursorDistance
+                    OR (
+                        nearest.distance = :cursorDistance
+                        AND f.created_at < CAST(:cursorCreatedAt AS timestamptz)
+                    )
+                    OR (
+                        nearest.distance = :cursorDistance
+                        AND f.created_at = CAST(:cursorCreatedAt AS timestamptz)
+                        AND f.id > CAST(:cursorFileId AS uuid)
+                    )
+                )
+            ORDER BY nearest.distance, f.created_at DESC, f.id
+            LIMIT :limit
             """, nativeQuery = true)
     List<EmbeddingDuplicateCandidateProjection> findCandidates(
             UUID actorUserId,
@@ -42,6 +59,11 @@ public interface ImageEmbeddingDuplicateCandidateRepository extends JpaRepositor
             String modelName,
             String modelVersion,
             int dimension,
+            String sourceEmbedding,
             double maxDistance,
-            int maxCandidates);
+            int searchWindow,
+            Double cursorDistance,
+            String cursorCreatedAt,
+            String cursorFileId,
+            int limit);
 }

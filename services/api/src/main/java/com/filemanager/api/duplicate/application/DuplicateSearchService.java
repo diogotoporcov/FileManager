@@ -18,6 +18,7 @@ import com.filemanager.api.duplicate.web.DuplicateGroupSearchResponse.DuplicateG
 import com.filemanager.api.duplicate.web.DuplicateGroupSearchResponse.DuplicateGroupFileResponse;
 import com.filemanager.api.duplicate.web.DuplicateGroupSearchResponse.DuplicateGroupMethodResultResponse;
 import com.filemanager.api.duplicate.web.DuplicateGroupSearchResponse.DuplicateGroupResponse;
+import com.filemanager.api.duplicate.web.DuplicateSearchPageRequest;
 import com.filemanager.api.duplicate.web.DuplicateSearchResponse;
 import com.filemanager.api.duplicate.web.DuplicateSearchResponse.DuplicateEvidenceResponse;
 import com.filemanager.api.duplicate.web.DuplicateSearchResponse.DuplicateMatchResponse;
@@ -36,7 +37,10 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.EnumSet;
@@ -79,15 +83,25 @@ public class DuplicateSearchService {
             UUID sourceFileId,
             Collection<DuplicateSearchMethod> requestedMethods,
             UUID actorUserId) {
+        return searchDuplicatesForFile(sourceFileId, requestedMethods, actorUserId, DuplicateSearchPageRequest.defaults());
+    }
+
+    @Transactional(readOnly = true)
+    public DuplicateSearchResponse searchDuplicatesForFile(
+            UUID sourceFileId,
+            Collection<DuplicateSearchMethod> requestedMethods,
+            UUID actorUserId,
+            DuplicateSearchPageRequest pageRequest) {
         long started = System.nanoTime();
         String status = "success";
         try {
-            FileEntity sourceFile = loadOwnedSourceFile(sourceFileId, actorUserId);
             List<DuplicateSearchMethod> methods = normalizeMethods(requestedMethods);
+            SearchCursor cursor = validateAndDecodeCursor(requestedMethods, methods, pageRequest);
+            FileEntity sourceFile = loadOwnedSourceFile(sourceFileId, actorUserId);
             fileManagerMetrics.recordDuplicateSearchRequested();
 
             List<DuplicateMethodResultResponse> methodResponses = methods.stream()
-                    .map(method -> searchByMethod(method, sourceFile, actorUserId))
+                    .map(method -> searchByMethod(method, sourceFile, actorUserId, pageRequest, cursor))
                     .toList();
 
             return new DuplicateSearchResponse(sourceFileId, methodResponses);
@@ -137,12 +151,14 @@ public class DuplicateSearchService {
     private DuplicateMethodResultResponse searchByMethod(
             DuplicateSearchMethod method,
             FileEntity sourceFile,
-            UUID actorUserId) {
+            UUID actorUserId,
+            DuplicateSearchPageRequest pageRequest,
+            SearchCursor cursor) {
         DuplicateMethodResultResponse response = switch (method) {
-            case EXACT -> searchExact(sourceFile, actorUserId);
-            case IMAGE_PHASH -> searchImagePhash(sourceFile, actorUserId);
-            case IMAGE_EMBEDDING -> searchImageEmbedding(sourceFile, actorUserId);
-            case AUDIO_FINGERPRINT -> searchAudioFingerprint(sourceFile, actorUserId);
+            case EXACT -> searchExact(sourceFile, actorUserId, pageRequest, cursor);
+            case IMAGE_PHASH -> searchImagePhash(sourceFile, actorUserId, pageRequest, cursor);
+            case IMAGE_EMBEDDING -> searchImageEmbedding(sourceFile, actorUserId, pageRequest, cursor);
+            case AUDIO_FINGERPRINT -> searchAudioFingerprint(sourceFile, actorUserId, pageRequest, cursor);
         };
         recordMethodMetrics(method, response.status(), response.matches().size());
 
@@ -168,71 +184,110 @@ public class DuplicateSearchService {
         return response;
     }
 
-    private DuplicateMethodResultResponse searchExact(FileEntity sourceFile, UUID actorUserId) {
+    private DuplicateMethodResultResponse searchExact(
+            FileEntity sourceFile,
+            UUID actorUserId,
+            DuplicateSearchPageRequest pageRequest,
+            SearchCursor cursor) {
+        int pageSize = pageSize(pageRequest, properties.getExact().getPageSize());
+        SearchCursor methodCursor = methodCursor(cursor, DuplicateSearchMethod.EXACT);
         if (!properties.getExact().isEnabled()) {
-            return methodResult(DuplicateSearchMethod.EXACT, DuplicateMethodStatus.DISABLED_BY_CONFIG, List.of());
+            return methodResult(DuplicateSearchMethod.EXACT, DuplicateMethodStatus.DISABLED_BY_CONFIG, List.of(), pageSize);
         }
 
         return fileFingerprintRepository.findByFileIdAndAlgorithm(sourceFile.getId(), EXACT_ALGORITHM)
                 .map(sourceFingerprint -> {
-                    List<DuplicateMatchResponse> matches = exactDuplicateCandidateRepository.findCandidates(
+                    List<com.filemanager.api.duplicate.persistence.ExactDuplicateCandidateProjection> candidates =
+                            exactDuplicateCandidateRepository.findCandidates(
                                     actorUserId,
                                     sourceFile.getId(),
                                     sourceFingerprint.getAlgorithm(),
                                     sourceFingerprint.getHashValue(),
-                                    PageRequest.of(0, properties.getExact().getMaxCandidates()))
-                            .stream()
+                                    methodCursor == null ? null : methodCursor.createdAt(),
+                                    methodCursor == null ? null : methodCursor.fileId(),
+                                    PageRequest.of(0, pageSize + 1));
+                    List<DuplicateMatchResponse> matches = candidates.stream()
                             .map(candidate -> exactMatch(candidate.fileId(), candidate.algorithm().name()))
                             .toList();
-                    return methodResult(DuplicateSearchMethod.EXACT, DuplicateMethodStatus.COMPLETED, matches);
+                    return pagedMethodResult(
+                            DuplicateSearchMethod.EXACT,
+                            DuplicateMethodStatus.COMPLETED,
+                            matches,
+                            pageSize,
+                            exactNextCursor(candidates, pageSize));
                 })
                 .orElseGet(() -> methodResult(
                         DuplicateSearchMethod.EXACT,
                         DuplicateMethodStatus.SOURCE_FINGERPRINT_NOT_READY,
-                        List.of()));
+                        List.of(),
+                        pageSize));
     }
 
-    private DuplicateMethodResultResponse searchImagePhash(FileEntity sourceFile, UUID actorUserId) {
+    private DuplicateMethodResultResponse searchImagePhash(
+            FileEntity sourceFile,
+            UUID actorUserId,
+            DuplicateSearchPageRequest pageRequest,
+            SearchCursor cursor) {
+        int pageSize = pageSize(pageRequest, properties.getImagePhash().getPageSize());
+        SearchCursor methodCursor = methodCursor(cursor, DuplicateSearchMethod.IMAGE_PHASH);
         if (!properties.getImagePhash().isEnabled()) {
-            return methodResult(DuplicateSearchMethod.IMAGE_PHASH, DuplicateMethodStatus.DISABLED_BY_CONFIG, List.of());
+            return methodResult(DuplicateSearchMethod.IMAGE_PHASH, DuplicateMethodStatus.DISABLED_BY_CONFIG, List.of(), pageSize);
         }
 
         if (!isImage(sourceFile)) {
             return methodResult(
                     DuplicateSearchMethod.IMAGE_PHASH,
                     DuplicateMethodStatus.UNSUPPORTED_FOR_FILE_TYPE,
-                    List.of());
+                    List.of(),
+                    pageSize);
         }
 
         return imageFingerprintRepository.findByFileId(sourceFile.getId())
                 .map(sourceFingerprint -> {
-                    List<DuplicateMatchResponse> matches = imagePhashDuplicateCandidateRepository.findCandidates(
+                    List<com.filemanager.api.duplicate.persistence.PhashDuplicateCandidateProjection> candidates =
+                            imagePhashDuplicateCandidateRepository.findCandidates(
                                     actorUserId,
                                     sourceFile.getId(),
                                     sourceFingerprint.getPhash(),
                                     properties.getImagePhash().getMaxDistance(),
-                                    properties.getImagePhash().getMaxCandidates())
-                            .stream()
+                                    methodCursor == null ? null : methodCursor.distance().intValue(),
+                                    methodCursor == null ? null : methodCursor.createdAt().toString(),
+                                    methodCursor == null ? null : methodCursor.fileId().toString(),
+                                    pageSize + 1);
+                    List<DuplicateMatchResponse> matches = candidates.stream()
                             .map(candidate -> phashMatch(candidate.getFileId(), candidate.getDistance()))
                             .toList();
-                    return methodResult(DuplicateSearchMethod.IMAGE_PHASH, DuplicateMethodStatus.COMPLETED, matches);
+                    return pagedMethodResult(
+                            DuplicateSearchMethod.IMAGE_PHASH,
+                            DuplicateMethodStatus.COMPLETED,
+                            matches,
+                            pageSize,
+                            phashNextCursor(candidates, pageSize));
                 })
                 .orElseGet(() -> methodResult(
                         DuplicateSearchMethod.IMAGE_PHASH,
                         DuplicateMethodStatus.SOURCE_FINGERPRINT_NOT_READY,
-                        List.of()));
+                        List.of(),
+                        pageSize));
     }
 
-    private DuplicateMethodResultResponse searchImageEmbedding(FileEntity sourceFile, UUID actorUserId) {
+    private DuplicateMethodResultResponse searchImageEmbedding(
+            FileEntity sourceFile,
+            UUID actorUserId,
+            DuplicateSearchPageRequest pageRequest,
+            SearchCursor cursor) {
+        int pageSize = pageSize(pageRequest, properties.getImageEmbedding().getPageSize());
+        SearchCursor methodCursor = methodCursor(cursor, DuplicateSearchMethod.IMAGE_EMBEDDING);
         if (!properties.getImageEmbedding().isEnabled()) {
-            return methodResult(DuplicateSearchMethod.IMAGE_EMBEDDING, DuplicateMethodStatus.DISABLED_BY_CONFIG, List.of());
+            return methodResult(DuplicateSearchMethod.IMAGE_EMBEDDING, DuplicateMethodStatus.DISABLED_BY_CONFIG, List.of(), pageSize);
         }
 
         if (!isImage(sourceFile)) {
             return methodResult(
                     DuplicateSearchMethod.IMAGE_EMBEDDING,
                     DuplicateMethodStatus.UNSUPPORTED_FOR_FILE_TYPE,
-                    List.of());
+                    List.of(),
+                    pageSize);
         }
 
         AppProperties.Embedding embeddingProperties = appProperties.getEmbedding();
@@ -242,58 +297,82 @@ public class DuplicateSearchService {
                         embeddingProperties.getModelVersion())
                 .filter(sourceEmbedding -> Objects.equals(sourceEmbedding.getDimension(), embeddingProperties.getDimension()))
                 .map(sourceEmbedding -> {
-                    List<DuplicateMatchResponse> matches = imageEmbeddingDuplicateCandidateRepository.findCandidates(
-                                    actorUserId,
-                                    sourceFile.getId(),
-                                    sourceEmbedding.getModelName(),
-                                    sourceEmbedding.getModelVersion(),
-                                    sourceEmbedding.getDimension(),
-                                    properties.getImageEmbedding().getMaxDistance(),
-                                    properties.getImageEmbedding().getMaxCandidates())
-                            .stream()
+                    AdaptiveEmbeddingCandidates candidates = findAdaptiveEmbeddingCandidates(
+                            actorUserId,
+                            sourceFile.getId(),
+                            sourceEmbedding.getModelName(),
+                            sourceEmbedding.getModelVersion(),
+                            sourceEmbedding.getDimension(),
+                            vectorLiteral(sourceEmbedding.getEmbedding()),
+                            methodCursor,
+                            pageSize);
+                    List<DuplicateMatchResponse> matches = candidates.stream()
                             .map(candidate -> embeddingMatch(
                                     candidate.getFileId(),
                                     candidate.getDistance(),
                                     DuplicateEvidenceType.IMAGE_EMBEDDING))
                             .toList();
-                    return methodResult(DuplicateSearchMethod.IMAGE_EMBEDDING, DuplicateMethodStatus.COMPLETED, matches);
+                    return pagedMethodResult(
+                            DuplicateSearchMethod.IMAGE_EMBEDDING,
+                            DuplicateMethodStatus.COMPLETED,
+                            matches,
+                            pageSize,
+                            embeddingNextCursor(candidates.matches(), pageSize, candidates.forceHasMore()),
+                            candidates.forceHasMore());
                 })
                 .orElseGet(() -> methodResult(
                         DuplicateSearchMethod.IMAGE_EMBEDDING,
                         DuplicateMethodStatus.SOURCE_FINGERPRINT_NOT_READY,
-                        List.of()));
+                        List.of(),
+                        pageSize));
     }
 
-    private DuplicateMethodResultResponse searchAudioFingerprint(FileEntity sourceFile, UUID actorUserId) {
+    private DuplicateMethodResultResponse searchAudioFingerprint(
+            FileEntity sourceFile,
+            UUID actorUserId,
+            DuplicateSearchPageRequest pageRequest,
+            SearchCursor cursor) {
+        int pageSize = pageSize(pageRequest, properties.getAudioFingerprint().getPageSize());
+        SearchCursor methodCursor = methodCursor(cursor, DuplicateSearchMethod.AUDIO_FINGERPRINT);
         if (!properties.getAudioFingerprint().isEnabled()) {
-            return methodResult(DuplicateSearchMethod.AUDIO_FINGERPRINT, DuplicateMethodStatus.DISABLED_BY_CONFIG, List.of());
+            return methodResult(DuplicateSearchMethod.AUDIO_FINGERPRINT, DuplicateMethodStatus.DISABLED_BY_CONFIG, List.of(), pageSize);
         }
 
         if (!isAudio(sourceFile)) {
             return methodResult(
                     DuplicateSearchMethod.AUDIO_FINGERPRINT,
                     DuplicateMethodStatus.UNSUPPORTED_FOR_FILE_TYPE,
-                    List.of());
+                    List.of(),
+                    pageSize);
         }
 
         return audioFingerprintRepository.findByFileId(sourceFile.getId())
                 .map(sourceFingerprint -> {
-                    List<DuplicateMatchResponse> matches = audioDuplicateCandidateRepository.findCandidates(
+                    List<com.filemanager.api.duplicate.persistence.AudioDuplicateCandidateProjection> candidates =
+                            audioDuplicateCandidateRepository.findCandidates(
                                     actorUserId,
                                     sourceFile.getId(),
                                     sourceFingerprint.getFingerprintAlgorithm(),
                                     sourceFingerprint.getFingerprintVersion(),
                                     sourceFingerprint.getFingerprintHash(),
-                                    PageRequest.of(0, properties.getAudioFingerprint().getMaxCandidates()))
-                            .stream()
+                                    methodCursor == null ? null : methodCursor.createdAt(),
+                                    methodCursor == null ? null : methodCursor.fileId(),
+                                    PageRequest.of(0, pageSize + 1));
+                    List<DuplicateMatchResponse> matches = candidates.stream()
                             .map(candidate -> audioMatch(candidate.fileId()))
                             .toList();
-                    return methodResult(DuplicateSearchMethod.AUDIO_FINGERPRINT, DuplicateMethodStatus.COMPLETED, matches);
+                    return pagedMethodResult(
+                            DuplicateSearchMethod.AUDIO_FINGERPRINT,
+                            DuplicateMethodStatus.COMPLETED,
+                            matches,
+                            pageSize,
+                            audioNextCursor(candidates, pageSize));
                 })
                 .orElseGet(() -> methodResult(
                         DuplicateSearchMethod.AUDIO_FINGERPRINT,
                         DuplicateMethodStatus.SOURCE_FINGERPRINT_NOT_READY,
-                        List.of()));
+                        List.of(),
+                        pageSize));
     }
 
     private DuplicateGroupMethodResultResponse searchExactGroups(
@@ -373,11 +452,45 @@ public class DuplicateSearchService {
     private DuplicateMethodResultResponse methodResult(
             DuplicateSearchMethod method,
             DuplicateMethodStatus status,
-            List<DuplicateMatchResponse> matches) {
+            List<DuplicateMatchResponse> matches,
+            int pageSize) {
         return DuplicateMethodResultResponse.builder()
                 .method(method)
                 .status(status)
                 .matches(matches)
+                .pageSize(pageSize)
+                .hasMore(false)
+                .build();
+    }
+
+    private DuplicateMethodResultResponse pagedMethodResult(
+            DuplicateSearchMethod method,
+            DuplicateMethodStatus status,
+            List<DuplicateMatchResponse> fetchedMatches,
+            int pageSize,
+            SearchCursor nextCursor) {
+        return pagedMethodResult(method, status, fetchedMatches, pageSize, nextCursor, false);
+    }
+
+    private DuplicateMethodResultResponse pagedMethodResult(
+            DuplicateSearchMethod method,
+            DuplicateMethodStatus status,
+            List<DuplicateMatchResponse> fetchedMatches,
+            int pageSize,
+            SearchCursor nextCursor,
+            boolean forceHasMore) {
+        boolean hasMore = fetchedMatches.size() > pageSize || forceHasMore;
+        List<DuplicateMatchResponse> matches = hasMore
+                ? fetchedMatches.subList(0, pageSize)
+                : fetchedMatches;
+
+        return DuplicateMethodResultResponse.builder()
+                .method(method)
+                .status(status)
+                .matches(matches)
+                .pageSize(pageSize)
+                .hasMore(hasMore)
+                .nextCursor(hasMore ? encodeCursor(nextCursor) : null)
                 .build();
     }
 
@@ -508,6 +621,197 @@ public class DuplicateSearchService {
         return folderId == null && mimeType == null;
     }
 
+    private int pageSize(DuplicateSearchPageRequest pageRequest, int defaultPageSize) {
+        Integer requested = pageRequest == null ? null : pageRequest.pageSize();
+        int pageSize = requested == null ? defaultPageSize : requested;
+
+        if (pageSize < 1 || pageSize > 1000) {
+            throw new IllegalArgumentException("Duplicate search pageSize must be between 1 and 1000.");
+        }
+
+        return pageSize;
+    }
+
+    private SearchCursor validateAndDecodeCursor(
+            Collection<DuplicateSearchMethod> requestedMethods,
+            List<DuplicateSearchMethod> methods,
+            DuplicateSearchPageRequest pageRequest) {
+        String rawCursor = pageRequest == null ? null : pageRequest.cursor();
+        if (rawCursor == null || rawCursor.isBlank()) {
+            return null;
+        }
+
+        long explicitMethodCount = requestedMethods == null
+                ? 0
+                : requestedMethods.stream().filter(Objects::nonNull).distinct().count();
+        if (explicitMethodCount != 1 || methods.size() != 1) {
+            throw new IllegalArgumentException("Duplicate search cursor requests must specify exactly one method.");
+        }
+
+        SearchCursor cursor = decodeCursor(rawCursor);
+        if (cursor.method() != methods.getFirst()) {
+            throw new IllegalArgumentException("Duplicate search cursor method does not match requested method.");
+        }
+
+        return cursor;
+    }
+
+    private SearchCursor methodCursor(SearchCursor cursor, DuplicateSearchMethod method) {
+        if (cursor == null || cursor.method() != method) {
+            return null;
+        }
+
+        return cursor;
+    }
+
+    private SearchCursor exactNextCursor(
+            List<com.filemanager.api.duplicate.persistence.ExactDuplicateCandidateProjection> candidates,
+            int pageSize) {
+        if (candidates.size() <= pageSize) {
+            return null;
+        }
+
+        var last = candidates.get(pageSize - 1);
+
+        return new SearchCursor(DuplicateSearchMethod.EXACT, last.createdAt(), last.fileId(), null);
+    }
+
+    private SearchCursor phashNextCursor(
+            List<com.filemanager.api.duplicate.persistence.PhashDuplicateCandidateProjection> candidates,
+            int pageSize) {
+        if (candidates.size() <= pageSize) {
+            return null;
+        }
+
+        var last = candidates.get(pageSize - 1);
+
+        return new SearchCursor(
+                DuplicateSearchMethod.IMAGE_PHASH,
+                last.getCreatedAt(),
+                last.getFileId(),
+                last.getDistance().doubleValue());
+    }
+
+    private SearchCursor embeddingNextCursor(
+            List<com.filemanager.api.duplicate.persistence.EmbeddingDuplicateCandidateProjection> candidates,
+            int pageSize,
+            boolean forceHasMore) {
+        if (candidates.size() <= pageSize && !forceHasMore) {
+            return null;
+        }
+
+        var last = candidates.get(Math.clamp(pageSize, 1, candidates.size()) - 1);
+
+        return new SearchCursor(
+                DuplicateSearchMethod.IMAGE_EMBEDDING,
+                last.getCreatedAt(),
+                last.getFileId(),
+                last.getDistance());
+    }
+
+    private SearchCursor audioNextCursor(
+            List<com.filemanager.api.duplicate.persistence.AudioDuplicateCandidateProjection> candidates,
+            int pageSize) {
+        if (candidates.size() <= pageSize) {
+            return null;
+        }
+
+        var last = candidates.get(pageSize - 1);
+
+        return new SearchCursor(DuplicateSearchMethod.AUDIO_FINGERPRINT, last.createdAt(), last.fileId(), null);
+    }
+
+    private AdaptiveEmbeddingCandidates findAdaptiveEmbeddingCandidates(
+            UUID actorUserId,
+            UUID sourceFileId,
+            String modelName,
+            String modelVersion,
+            int dimension,
+            String sourceEmbedding,
+            SearchCursor methodCursor,
+            int pageSize) {
+        int maxSearchWindow = Math.max(
+                properties.getImageEmbedding().getSearchWindow(),
+                properties.getImageEmbedding().getMaxSearchWindow());
+        int searchWindow = Math.clamp(
+                pageSize + 1,
+                properties.getImageEmbedding().getSearchWindow(),
+                maxSearchWindow);
+        List<com.filemanager.api.duplicate.persistence.EmbeddingDuplicateCandidateProjection> candidates;
+
+        while (true) {
+            candidates = imageEmbeddingDuplicateCandidateRepository.findCandidates(
+                    actorUserId,
+                    sourceFileId,
+                    modelName,
+                    modelVersion,
+                    dimension,
+                    sourceEmbedding,
+                    properties.getImageEmbedding().getMaxDistance(),
+                    searchWindow,
+                    methodCursor == null ? null : methodCursor.distance(),
+                    methodCursor == null ? null : methodCursor.createdAt().toString(),
+                    methodCursor == null ? null : methodCursor.fileId().toString(),
+                    pageSize + 1);
+            if (candidates.size() > pageSize || searchWindow >= maxSearchWindow) {
+                break;
+            }
+
+            searchWindow = searchWindow > maxSearchWindow / 2 ? maxSearchWindow : searchWindow * 2;
+        }
+
+        boolean exhaustedBoundedWindowWithFullPage = candidates.size() == pageSize;
+
+        return new AdaptiveEmbeddingCandidates(candidates, exhaustedBoundedWindowWithFullPage);
+    }
+
+    private String encodeCursor(SearchCursor cursor) {
+        String rawCursor = cursor.method().name()
+                + "|" + cursor.createdAt()
+                + "|" + cursor.fileId()
+                + "|" + (cursor.distance() == null ? "" : cursor.distance());
+
+        return Base64.getUrlEncoder().withoutPadding()
+                .encodeToString(rawCursor.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private SearchCursor decodeCursor(String rawCursor) {
+        if (rawCursor == null || rawCursor.isBlank()) {
+            return null;
+        }
+
+        try {
+            String decoded = new String(Base64.getUrlDecoder().decode(rawCursor), StandardCharsets.UTF_8);
+            String[] parts = decoded.split("\\|", -1);
+            if (parts.length != 4) {
+                throw new IllegalArgumentException("Invalid duplicate search cursor.");
+            }
+
+            DuplicateSearchMethod method = DuplicateSearchMethod.valueOf(parts[0]);
+            OffsetDateTime createdAt = OffsetDateTime.parse(parts[1]);
+            UUID fileId = UUID.fromString(parts[2]);
+            Double distance = parts[3].isBlank() ? null : Double.parseDouble(parts[3]);
+
+            return new SearchCursor(method, createdAt, fileId, distance);
+        } catch (IllegalArgumentException | DateTimeParseException ex) {
+            throw new IllegalArgumentException("Invalid duplicate search cursor.", ex);
+        }
+    }
+
+    private String vectorLiteral(float[] vector) {
+        StringBuilder builder = new StringBuilder("[");
+
+        for (int index = 0; index < vector.length; index++) {
+            if (index > 0) {
+                builder.append(',');
+            }
+
+            builder.append(vector[index]);
+        }
+
+        return builder.append(']').toString();
+    }
+
     private int confidenceRank(DuplicateConfidence confidence) {
         return switch (confidence) {
             case SIMILAR -> 1;
@@ -552,5 +856,20 @@ public class DuplicateSearchService {
     }
 
     private record ExactGroupKey(FingerprintAlgorithm algorithm, String hashValue) {
+    }
+
+    private record SearchCursor(
+            DuplicateSearchMethod method,
+            OffsetDateTime createdAt,
+            UUID fileId,
+            Double distance) {
+    }
+
+    private record AdaptiveEmbeddingCandidates(
+            List<com.filemanager.api.duplicate.persistence.EmbeddingDuplicateCandidateProjection> matches,
+            boolean forceHasMore) {
+        java.util.stream.Stream<com.filemanager.api.duplicate.persistence.EmbeddingDuplicateCandidateProjection> stream() {
+            return matches.stream();
+        }
     }
 }

@@ -17,11 +17,6 @@ docs/codex
 
 # Application data
 minio/data
-benchmarks/datasets/generated/**
-benchmarks/results/**
-benchmarks/reports/**
-benchmarks/logs/**
-benchmarks/packages/**
 
 # Generated Triton model artifacts
 services/embedding-inference/model_repository/**/model.onnx

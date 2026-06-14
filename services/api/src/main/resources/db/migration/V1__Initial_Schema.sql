@@ -178,6 +178,11 @@ CREATE INDEX idx_embeddings_file_model ON file_embeddings(file_id, model_name, m
 CREATE INDEX idx_file_embeddings_model_version_dimension
     ON file_embeddings(model_name, model_version, dimension);
 
+CREATE INDEX idx_file_embeddings_embedding_hnsw_cosine
+    ON file_embeddings
+    USING hnsw (embedding vector_cosine_ops)
+    WITH (m = 16, ef_construction = 64);
+
 -- Background processing.
 CREATE TABLE processing_jobs (
     id UUID PRIMARY KEY DEFAULT uuidv7(),

@@ -111,22 +111,25 @@ class ConfigurationValidationTest {
     @Test
     void duplicateDetectionProperties_InvalidBounds_Fail() {
         DuplicateDetectionProperties properties = new DuplicateDetectionProperties();
-        properties.getExact().setMaxCandidates(0);
+        properties.getExact().setPageSize(0);
         properties.getImagePhash().setMaxDistance(65);
         properties.getImageEmbedding().setMaxDistance(2.1);
-        properties.getAudioFingerprint().setMaxCandidates(0);
+        properties.getImageEmbedding().setMaxSearchWindow(0);
+        properties.getAudioFingerprint().setPageSize(0);
 
-        assertThat(validator.validate(properties)).hasSize(4);
+        assertThat(validator.validate(properties)).hasSize(5);
     }
 
     @Test
     void duplicateDetectionProperties_BindCorrectly() {
         MapConfigurationPropertySource source = new MapConfigurationPropertySource(Map.of(
                 "duplicate-detection.exact.enabled", "false",
-                "duplicate-detection.exact.max-candidates", "25",
+                "duplicate-detection.exact.page-size", "25",
                 "duplicate-detection.image-phash.max-distance", "8",
                 "duplicate-detection.image-embedding.max-distance", "0.15",
-                "duplicate-detection.audio-fingerprint.max-candidates", "40"
+                "duplicate-detection.image-embedding.search-window", "1500",
+                "duplicate-detection.image-embedding.max-search-window", "3000",
+                "duplicate-detection.audio-fingerprint.page-size", "40"
         ));
 
         DuplicateDetectionProperties properties = new Binder(source)
@@ -134,10 +137,12 @@ class ConfigurationValidationTest {
                 .get();
 
         assertThat(properties.getExact().isEnabled()).isFalse();
-        assertThat(properties.getExact().getMaxCandidates()).isEqualTo(25);
+        assertThat(properties.getExact().getPageSize()).isEqualTo(25);
         assertThat(properties.getImagePhash().getMaxDistance()).isEqualTo(8);
         assertThat(properties.getImageEmbedding().getMaxDistance()).isEqualTo(0.15);
-        assertThat(properties.getAudioFingerprint().getMaxCandidates()).isEqualTo(40);
+        assertThat(properties.getImageEmbedding().getSearchWindow()).isEqualTo(1500);
+        assertThat(properties.getImageEmbedding().getMaxSearchWindow()).isEqualTo(3000);
+        assertThat(properties.getAudioFingerprint().getPageSize()).isEqualTo(40);
     }
 
     @Test

@@ -1,6 +1,7 @@
 package com.filemanager.api.duplicate.persistence;
 
 import com.filemanager.api.processing.domain.result.FileFingerprint.FingerprintAlgorithm;
+import java.time.OffsetDateTime;
 import java.util.UUID;
 
 public record ExactDuplicateCandidateProjection(
@@ -9,6 +10,7 @@ public record ExactDuplicateCandidateProjection(
         String mimeType,
         Long size,
         FingerprintAlgorithm algorithm,
-        String hashValue
+        String hashValue,
+        OffsetDateTime createdAt
 ) {
 }

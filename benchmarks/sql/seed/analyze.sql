@@ -1,9 +1,0 @@
-ANALYZE users;
-ANALYZE folders;
-ANALYZE folder_closure;
-ANALYZE files;
-ANALYZE file_fingerprints;
-ANALYZE image_fingerprints;
-ANALYZE file_embeddings;
-ANALYZE audio_fingerprints;
-ANALYZE exact_duplicate_groups;

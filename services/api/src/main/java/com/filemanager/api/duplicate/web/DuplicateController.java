@@ -12,6 +12,7 @@ import jakarta.validation.Valid;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -39,10 +40,20 @@ public class DuplicateController {
     public DuplicateSearchResponse findDuplicatesForFile(
             @Parameter(description = "ID of the source file") @PathVariable UUID fileId,
             @Parameter(description = "Comma-separated duplicate search methods")
-            @RequestParam(value = "methods", required = false) String methods) {
+            @RequestParam(value = "methods", required = false) String methods,
+            @Parameter(description = "Maximum duplicate candidates to return per method page")
+            @RequestParam(value = "pageSize", required = false) Integer pageSize,
+            @Parameter(description = "Opaque per-method pagination cursor from a previous response")
+            @RequestParam(value = "cursor", required = false) String cursor) {
+        List<DuplicateSearchMethod> parsedMethods = parseMethods(methods);
+        validateCursorRequest(cursor, parsedMethods);
         UUID actorUserId = currentUserService.getCurrentUserId();
 
-        return duplicateSearchService.searchDuplicatesForFile(fileId, parseMethods(methods), actorUserId);
+        return duplicateSearchService.searchDuplicatesForFile(
+                fileId,
+                parsedMethods,
+                actorUserId,
+                new DuplicateSearchPageRequest(pageSize, cursor));
     }
 
     @Operation(summary = "Find duplicate groups among files owned by the current user")
@@ -73,5 +84,16 @@ public class DuplicateController {
         }
 
         return methods;
+    }
+
+    private void validateCursorRequest(String cursor, List<DuplicateSearchMethod> methods) {
+        if (cursor == null || cursor.isBlank()) {
+            return;
+        }
+
+        long methodCount = methods.stream().filter(Objects::nonNull).distinct().count();
+        if (methodCount != 1) {
+            throw new IllegalArgumentException("Duplicate search cursor requests must specify exactly one method.");
+        }
     }
 }

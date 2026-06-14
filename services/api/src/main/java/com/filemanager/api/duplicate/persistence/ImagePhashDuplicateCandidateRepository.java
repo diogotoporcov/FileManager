@@ -15,7 +15,8 @@ public interface ImagePhashDuplicateCandidateRepository extends JpaRepository<Im
                 f.name AS "name",
                 f.mime_type AS "mimeType",
                 f.size AS "size",
-                filemanager_hex_hamming_distance(candidate.phash, :sourcePhash) AS "distance"
+                filemanager_hex_hamming_distance(candidate.phash, :sourcePhash) AS "distance",
+                f.created_at AS "createdAt"
             FROM image_fingerprints candidate
             JOIN files f ON f.id = candidate.file_id
             LEFT JOIN folders folder ON folder.id = f.folder_id
@@ -25,13 +26,29 @@ public interface ImagePhashDuplicateCandidateRepository extends JpaRepository<Im
                 AND (f.folder_id IS NULL OR folder.deleted_at IS NULL)
                 AND lower(f.mime_type) LIKE 'image/%'
                 AND filemanager_hex_hamming_distance(candidate.phash, :sourcePhash) <= :maxDistance
+                AND (
+                    :cursorDistance IS NULL
+                    OR filemanager_hex_hamming_distance(candidate.phash, :sourcePhash) > :cursorDistance
+                    OR (
+                        filemanager_hex_hamming_distance(candidate.phash, :sourcePhash) = :cursorDistance
+                        AND f.created_at < CAST(:cursorCreatedAt AS timestamptz)
+                    )
+                    OR (
+                        filemanager_hex_hamming_distance(candidate.phash, :sourcePhash) = :cursorDistance
+                        AND f.created_at = CAST(:cursorCreatedAt AS timestamptz)
+                        AND f.id > CAST(:cursorFileId AS uuid)
+                    )
+                )
             ORDER BY filemanager_hex_hamming_distance(candidate.phash, :sourcePhash), f.created_at DESC, f.id
-            LIMIT :maxCandidates
+            LIMIT :limit
             """, nativeQuery = true)
     List<PhashDuplicateCandidateProjection> findCandidates(
             UUID actorUserId,
             UUID sourceFileId,
             String sourcePhash,
             int maxDistance,
-            int maxCandidates);
+            Integer cursorDistance,
+            String cursorCreatedAt,
+            String cursorFileId,
+            int limit);
 }

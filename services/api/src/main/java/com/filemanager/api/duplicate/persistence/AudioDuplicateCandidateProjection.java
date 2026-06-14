@@ -1,5 +1,6 @@
 package com.filemanager.api.duplicate.persistence;
 
+import java.time.OffsetDateTime;
 import java.util.UUID;
 
 public record AudioDuplicateCandidateProjection(
@@ -9,6 +10,7 @@ public record AudioDuplicateCandidateProjection(
         Long size,
         String fingerprintAlgorithm,
         String fingerprintVersion,
-        String fingerprintHash
+        String fingerprintHash,
+        OffsetDateTime createdAt
 ) {
 }
