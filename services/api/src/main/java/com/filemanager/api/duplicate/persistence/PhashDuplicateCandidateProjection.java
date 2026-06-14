@@ -1,5 +1,6 @@
 package com.filemanager.api.duplicate.persistence;
 
+import java.time.OffsetDateTime;
 import java.util.UUID;
 
 public interface PhashDuplicateCandidateProjection {
@@ -12,4 +13,6 @@ public interface PhashDuplicateCandidateProjection {
     Long getSize();
 
     Integer getDistance();
+
+    OffsetDateTime getCreatedAt();
 }

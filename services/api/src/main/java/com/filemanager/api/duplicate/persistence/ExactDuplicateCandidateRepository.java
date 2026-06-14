@@ -2,6 +2,7 @@ package com.filemanager.api.duplicate.persistence;
 
 import com.filemanager.api.processing.domain.result.FileFingerprint;
 import com.filemanager.api.processing.domain.result.FileFingerprint.FingerprintAlgorithm;
+import java.time.OffsetDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
@@ -19,7 +20,8 @@ public interface ExactDuplicateCandidateRepository extends JpaRepository<FileFin
                 file.mimeType,
                 file.size,
                 candidate.algorithm,
-                candidate.hashValue
+                candidate.hashValue,
+                file.createdAt
             )
             from FileFingerprint candidate
             join candidate.file file
@@ -30,6 +32,11 @@ public interface ExactDuplicateCandidateRepository extends JpaRepository<FileFin
                 and file.id <> :sourceFileId
                 and file.deletedAt is null
                 and (folder is null or folder.deletedAt is null)
+                and (
+                    :cursorCreatedAt is null
+                    or file.createdAt < :cursorCreatedAt
+                    or (file.createdAt = :cursorCreatedAt and file.id > :cursorFileId)
+                )
             order by file.createdAt desc, file.id
             """)
     List<ExactDuplicateCandidateProjection> findCandidates(
@@ -37,6 +44,8 @@ public interface ExactDuplicateCandidateRepository extends JpaRepository<FileFin
             UUID sourceFileId,
             FingerprintAlgorithm algorithm,
             String hashValue,
+            OffsetDateTime cursorCreatedAt,
+            UUID cursorFileId,
             Pageable pageable);
 
     @Query("""

@@ -1,6 +1,7 @@
 package com.filemanager.api.duplicate.persistence;
 
 import com.filemanager.api.processing.domain.result.AudioFingerprint;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.data.domain.Pageable;
@@ -18,7 +19,8 @@ public interface AudioDuplicateCandidateRepository extends JpaRepository<AudioFi
                 file.size,
                 candidate.fingerprintAlgorithm,
                 candidate.fingerprintVersion,
-                candidate.fingerprintHash
+                candidate.fingerprintHash,
+                file.createdAt
             )
             from AudioFingerprint candidate
             join candidate.file file
@@ -31,6 +33,11 @@ public interface AudioDuplicateCandidateRepository extends JpaRepository<AudioFi
                 and file.deletedAt is null
                 and (folder is null or folder.deletedAt is null)
                 and lower(file.mimeType) like 'audio/%'
+                and (
+                    :cursorCreatedAt is null
+                    or file.createdAt < :cursorCreatedAt
+                    or (file.createdAt = :cursorCreatedAt and file.id > :cursorFileId)
+                )
             order by file.createdAt desc, file.id
             """)
     List<AudioDuplicateCandidateProjection> findCandidates(
@@ -39,5 +46,7 @@ public interface AudioDuplicateCandidateRepository extends JpaRepository<AudioFi
             String fingerprintAlgorithm,
             String fingerprintVersion,
             String fingerprintHash,
+            OffsetDateTime cursorCreatedAt,
+            UUID cursorFileId,
             Pageable pageable);
 }

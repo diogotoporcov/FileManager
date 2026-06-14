@@ -112,7 +112,9 @@ class FlywayMigrationVersionTest {
                 "CREATE INDEX idx_audio_fingerprints_hash",
                 "CREATE INDEX idx_file_fingerprints_algorithm_hash",
                 "CREATE INDEX idx_files_owner_deleted_folder",
-                "CREATE INDEX idx_file_embeddings_model_version_dimension");
+                "CREATE INDEX idx_file_embeddings_model_version_dimension",
+                "CREATE INDEX idx_file_embeddings_embedding_hnsw_cosine",
+                "USING hnsw (embedding vector_cosine_ops)");
         assertThat(migration).doesNotContain(
                 "CREATE TABLE video_fingerprints",
                 "CREATE TABLE video_frame_fingerprints",

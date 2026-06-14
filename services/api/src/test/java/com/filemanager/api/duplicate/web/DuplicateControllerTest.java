@@ -14,6 +14,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -36,12 +38,16 @@ class DuplicateControllerTest {
         UUID actorUserId = UUID.randomUUID();
         UUID fileId = UUID.randomUUID();
         when(currentUserService.getCurrentUserId()).thenReturn(actorUserId);
-        when(duplicateSearchService.searchDuplicatesForFile(eq(fileId), any(), eq(actorUserId)))
+        when(duplicateSearchService.searchDuplicatesForFile(eq(fileId), any(), eq(actorUserId), any()))
                 .thenReturn(new DuplicateSearchResponse(fileId, List.of()));
 
-        controller.findDuplicatesForFile(fileId, null);
+        controller.findDuplicatesForFile(fileId, null, null, null);
 
-        verify(duplicateSearchService).searchDuplicatesForFile(fileId, List.of(), actorUserId);
+        verify(duplicateSearchService).searchDuplicatesForFile(
+                eq(fileId),
+                eq(List.of()),
+                eq(actorUserId),
+                argThat(request -> request.pageSize() == null && request.cursor() == null));
     }
 
     @Test
@@ -49,36 +55,79 @@ class DuplicateControllerTest {
         UUID actorUserId = UUID.randomUUID();
         UUID fileId = UUID.randomUUID();
         when(currentUserService.getCurrentUserId()).thenReturn(actorUserId);
-        when(duplicateSearchService.searchDuplicatesForFile(eq(fileId), any(), eq(actorUserId)))
+        when(duplicateSearchService.searchDuplicatesForFile(eq(fileId), any(), eq(actorUserId), any()))
                 .thenReturn(new DuplicateSearchResponse(fileId, List.of()));
 
-        controller.findDuplicatesForFile(fileId, "exact,image_phash,audio_fingerprint");
+        controller.findDuplicatesForFile(fileId, "exact,image_phash,audio_fingerprint", 25, null);
 
         verify(duplicateSearchService).searchDuplicatesForFile(
-                fileId,
-                List.of(
+                eq(fileId),
+                eq(List.of(
                         DuplicateSearchMethod.EXACT,
                         DuplicateSearchMethod.IMAGE_PHASH,
-                        DuplicateSearchMethod.AUDIO_FINGERPRINT),
-                actorUserId);
+                        DuplicateSearchMethod.AUDIO_FINGERPRINT)),
+                eq(actorUserId),
+                argThat(request -> request.pageSize().equals(25) && request.cursor() == null));
+    }
+
+    @Test
+    void singleMethodCursorIsForwarded() {
+        UUID actorUserId = UUID.randomUUID();
+        UUID fileId = UUID.randomUUID();
+        when(currentUserService.getCurrentUserId()).thenReturn(actorUserId);
+        when(duplicateSearchService.searchDuplicatesForFile(eq(fileId), any(), eq(actorUserId), any()))
+                .thenReturn(new DuplicateSearchResponse(fileId, List.of()));
+
+        controller.findDuplicatesForFile(fileId, "exact", 25, "cursor");
+
+        verify(duplicateSearchService).searchDuplicatesForFile(
+                eq(fileId),
+                eq(List.of(DuplicateSearchMethod.EXACT)),
+                eq(actorUserId),
+                argThat(request -> request.pageSize().equals(25) && request.cursor().equals("cursor")));
     }
 
     @Test
     void invalidMethodReturnsInvalidRequestException() {
         UUID fileId = UUID.randomUUID();
-        when(currentUserService.getCurrentUserId()).thenReturn(UUID.randomUUID());
 
         IllegalArgumentException exception = assertThrows(
                 IllegalArgumentException.class,
-                () -> controller.findDuplicatesForFile(fileId, "EXACT,NOPE"));
+                () -> controller.findDuplicatesForFile(fileId, "EXACT,NOPE", null, null));
 
         assertThat(exception.getMessage()).contains("Invalid duplicate search method");
+        verify(currentUserService, never()).getCurrentUserId();
+    }
+
+    @Test
+    void cursorWithMultipleMethodsIsRejectedBeforeServiceCall() {
+        UUID fileId = UUID.randomUUID();
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> controller.findDuplicatesForFile(fileId, "EXACT,IMAGE_PHASH", null, "cursor"));
+
+        assertThat(exception.getMessage()).contains("exactly one method");
+        verify(currentUserService, never()).getCurrentUserId();
+        verify(duplicateSearchService, never()).searchDuplicatesForFile(any(), any(), any(), any());
+    }
+
+    @Test
+    void cursorWithoutExplicitMethodIsRejectedBeforeServiceCall() {
+        UUID fileId = UUID.randomUUID();
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> controller.findDuplicatesForFile(fileId, null, null, "cursor"));
+
+        assertThat(exception.getMessage()).contains("exactly one method");
+        verify(currentUserService, never()).getCurrentUserId();
+        verify(duplicateSearchService, never()).searchDuplicatesForFile(any(), any(), any(), any());
     }
 
     @Test
     void removedVideoMethodNamesAreRejected() {
         UUID fileId = UUID.randomUUID();
-        when(currentUserService.getCurrentUserId()).thenReturn(UUID.randomUUID());
 
         for (String removedMethod : List.of(
                 "VIDEO_FRAME_PHASH",
@@ -88,7 +137,7 @@ class DuplicateControllerTest {
                 "VIDEO_AUDIO_FINGERPRINT")) {
             IllegalArgumentException exception = assertThrows(
                     IllegalArgumentException.class,
-                    () -> controller.findDuplicatesForFile(fileId, removedMethod));
+                    () -> controller.findDuplicatesForFile(fileId, removedMethod, null, null));
             assertThat(exception.getMessage()).contains("Invalid duplicate search method");
         }
     }

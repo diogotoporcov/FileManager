@@ -32,10 +32,14 @@ public class DuplicateDetectionProperties {
         private boolean enabled = true;
         @Min(1)
         @Max(1000)
-        private int maxCandidates = 100;
+        private int pageSize = 100;
         @Min(1)
         @Max(500)
         private int maxGroups = 50;
+
+        public void setMaxCandidates(int maxCandidates) {
+            this.pageSize = maxCandidates;
+        }
     }
 
     @Getter
@@ -47,8 +51,12 @@ public class DuplicateDetectionProperties {
         private int maxDistance = 10;
         @Min(1)
         @Max(1000)
-        private int maxCandidates = 100;
+        private int pageSize = 100;
         private boolean groupedEnabled = false;
+
+        public void setMaxCandidates(int maxCandidates) {
+            this.pageSize = maxCandidates;
+        }
     }
 
     @Getter
@@ -60,8 +68,18 @@ public class DuplicateDetectionProperties {
         private double maxDistance = 0.20;
         @Min(1)
         @Max(1000)
-        private int maxCandidates = 100;
+        private int pageSize = 100;
+        @Min(1)
+        @Max(100_000)
+        private int searchWindow = 1000;
+        @Min(1)
+        @Max(100_000)
+        private int maxSearchWindow = 10_000;
         private boolean groupedEnabled = false;
+
+        public void setMaxCandidates(int maxCandidates) {
+            this.pageSize = maxCandidates;
+        }
     }
 
     @Getter
@@ -70,6 +88,10 @@ public class DuplicateDetectionProperties {
         private boolean enabled = true;
         @Min(1)
         @Max(1000)
-        private int maxCandidates = 100;
+        private int pageSize = 100;
+
+        public void setMaxCandidates(int maxCandidates) {
+            this.pageSize = maxCandidates;
+        }
     }
 }

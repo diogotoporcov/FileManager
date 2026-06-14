@@ -17,7 +17,10 @@ public record DuplicateSearchResponse(
     public record DuplicateMethodResultResponse(
             DuplicateSearchMethod method,
             DuplicateMethodStatus status,
-            List<DuplicateMatchResponse> matches
+            List<DuplicateMatchResponse> matches,
+            int pageSize,
+            boolean hasMore,
+            String nextCursor
     ) {
     }
 
