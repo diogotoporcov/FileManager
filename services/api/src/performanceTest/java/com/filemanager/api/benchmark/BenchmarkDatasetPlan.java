@@ -18,9 +18,6 @@ final class BenchmarkDatasetPlan {
     final List<ImageFingerprintRow> imageFingerprints = new ArrayList<>();
     final List<FileEmbeddingRow> fileEmbeddings = new ArrayList<>();
     final List<AudioFingerprintRow> audioFingerprints = new ArrayList<>();
-    final List<FileGrantRow> fileGrants = new ArrayList<>();
-    final List<FolderGrantRow> folderGrants = new ArrayList<>();
-    final List<ProcessingJobRow> processingJobs = new ArrayList<>();
     final List<BenchmarkCase> cases = new ArrayList<>();
     final Map<String, UUID> sources = new LinkedHashMap<>();
     final Map<String, String> hashes = new LinkedHashMap<>();
@@ -111,9 +108,6 @@ final class BenchmarkDatasetPlan {
         counts.put("image_fingerprints", (long) imageFingerprints.size());
         counts.put("file_embeddings", (long) fileEmbeddings.size());
         counts.put("audio_fingerprints", (long) audioFingerprints.size());
-        counts.put("file_grants", (long) fileGrants.size());
-        counts.put("folder_grants", (long) folderGrants.size());
-        counts.put("processing_jobs", (long) processingJobs.size());
 
         return counts;
     }

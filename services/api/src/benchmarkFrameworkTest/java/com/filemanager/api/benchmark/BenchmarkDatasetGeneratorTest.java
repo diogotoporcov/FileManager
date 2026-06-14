@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -37,14 +38,14 @@ class BenchmarkDatasetGeneratorTest {
                 "exact_duplicate_groups",
                 "image_fingerprints",
                 "file_embeddings",
-                "audio_fingerprints",
-                "file_grants",
-                "folder_grants",
-                "processing_jobs");
+                "audio_fingerprints");
         assertThat(dataset.expectedTableCounts()).doesNotContainKeys(
                 "video_embeddings",
                 "duplicate_candidates",
-                "duplicate_candidate_refreshes");
+                "duplicate_candidate_refreshes",
+                "file_grants",
+                "folder_grants",
+                "processing_jobs");
         assertThat(dataset.expectedTableCounts()).contains(
                 Map.entry("users", 5L),
                 Map.entry("folders", 2L),
@@ -175,7 +176,10 @@ class BenchmarkDatasetGeneratorTest {
                     .doesNotContain(
                             "video_embeddings.csv",
                             "duplicate_candidates.csv",
-                            "duplicate_candidate_refreshes.csv");
+                            "duplicate_candidate_refreshes.csv",
+                            "file_grants.csv",
+                            "folder_grants.csv",
+                            "processing_jobs.csv");
         }
     }
 
@@ -190,6 +194,59 @@ class BenchmarkDatasetGeneratorTest {
         assertThatThrownBy(() -> new BenchmarkDatasetArtifactStore().validateDatasetPath(datasetDir, mismatch))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Precomputed dataset mismatch");
+    }
+
+    @Test
+    void sourceTreeDoesNotContainK6Benchmarks() {
+        Path root = repositoryRoot();
+
+        assertThat(root.resolve("benchmarks").resolve("k" + "6")).doesNotExist();
+    }
+
+    @Test
+    void pgbenchDirectoryContainsOnlyDuplicateEngineScripts() throws Exception {
+        Path pgbench = repositoryRoot().resolve("benchmarks/pgbench");
+
+        try (var paths = Files.list(pgbench)) {
+            assertThat(paths.map(path -> path.getFileName().toString()).sorted().toList())
+                    .containsExactly(
+                            "duplicate-audio.sql",
+                            "duplicate-exact.sql",
+                            "duplicate-groups-exact.sql",
+                            "duplicate-image-embedding.sql",
+                            "duplicate-image-phash.sql");
+        }
+    }
+
+    @Test
+    void analyzeSqlExcludesRemovedBenchmarkTables() throws Exception {
+        String analyzeSql = Files.readString(repositoryRoot().resolve("benchmarks/sql/seed/analyze.sql"));
+
+        assertThat(analyzeSql).contains(
+                "ANALYZE users;",
+                "ANALYZE folders;",
+                "ANALYZE folder_closure;",
+                "ANALYZE files;",
+                "ANALYZE file_fingerprints;",
+                "ANALYZE image_fingerprints;",
+                "ANALYZE file_embeddings;",
+                "ANALYZE audio_fingerprints;",
+                "ANALYZE exact_duplicate_groups;");
+        assertThat(analyzeSql).doesNotContain(
+                "file_grants",
+                "folder_grants",
+                "processing_jobs",
+                "video_embeddings",
+                "duplicate_candidates",
+                "duplicate_candidate_refreshes");
+    }
+
+    @Test
+    void generatedReportAndResultRootsContainOnlyPlaceholders() throws Exception {
+        Path root = repositoryRoot();
+
+        assertOnlyGitkeep(root.resolve("benchmarks/reports"));
+        assertOnlyGitkeep(root.resolve("benchmarks/results"));
     }
 
     private BenchmarkOptions options(int records) {
@@ -222,5 +279,23 @@ class BenchmarkDatasetGeneratorTest {
 
         assertThat(dataset.expectedTableCounts().get("files")).isEqualTo(records);
         assertThat(dataset.expectedTableCounts().get(evidenceTable)).isBetween(records - 100L, records + 100L);
+    }
+
+    private Path repositoryRoot() {
+        Path current = Path.of("").toAbsolutePath().normalize();
+
+        if (current.endsWith(Path.of("services", "api"))) {
+            return current.getParent().getParent();
+        }
+
+        return current;
+    }
+
+    private void assertOnlyGitkeep(Path directory) throws Exception {
+        try (var paths = Files.list(directory)) {
+            List<String> names = paths.map(path -> path.getFileName().toString()).sorted().toList();
+
+            assertThat(names).containsExactly(".gitkeep");
+        }
     }
 }

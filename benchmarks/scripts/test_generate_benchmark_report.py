@@ -64,6 +64,29 @@ class GenerateBenchmarkReportTest(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 report.validate_summary_csv(scale_dir)
 
+    def test_rejects_removed_operation_name(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            scale_dir = Path(temp)
+            write_complete_scale(scale_dir, "10k", 10_000)
+            write_scale(
+                scale_dir,
+                [measurement("file." + "search.owner-first-page", "SPRING_SERVICE_REPOSITORY", "WARM")],
+            )
+
+            with self.assertRaises(SystemExit):
+                report.validate_scale_dir(scale_dir)
+
+    def test_rejects_removed_table_dimension(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            scale_dir = Path(temp)
+            write_complete_scale(scale_dir, "10k", 10_000)
+            manifest = report.read_json(scale_dir / "dataset-manifest.json")
+            manifest["actualEvidenceTableCounts"]["file_grants"] = 1
+            (scale_dir / "dataset-manifest.json").write_text(json_text(manifest), encoding="utf-8")
+
+            with self.assertRaises(SystemExit):
+                report.write_report(scale_dir)
+
     def test_validates_scale_comparison_output(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             run_dir = Path(temp)
@@ -128,7 +151,7 @@ def write_complete_scale(
         records: int,
         profile: str = "default",
         baseline_quality: str = "informational") -> None:
-    write_scale(scale_dir, [measurement(f"operation-{scale}", "SPRING_SERVICE_REPOSITORY", "WARM")])
+    write_scale(scale_dir, [measurement("duplicate.search.EXACT", "SPRING_SERVICE_REPOSITORY", "WARM")])
     (scale_dir / "environment.json").write_text(
         json_text({
             "schemaVersion": 3,
@@ -205,7 +228,7 @@ def write_complete_scale(
             "records": records,
             "duplicateDistribution": "default",
             "operations": {
-                "operation-" + scale: {
+                "duplicate.search.EXACT": {
                     "sourceFileIds": ["00000000-0000-0000-0000-000000000000"],
                     "sampleSize": 1,
                     "evidenceTable": "file_fingerprints",
@@ -230,7 +253,6 @@ def write_complete_scale(
             "schemaVersion": 3,
             "components": {
                 "serviceRepositoryBenchmark": {"status": "COMPLETED"},
-                "k6": {"status": "NOT_REQUESTED"},
                 "pgbench": {"status": "NOT_REQUESTED"},
                 "pgStatStatements": {"status": "NOT_REQUESTED"},
                 "queryPlan": {"status": "NOT_REQUESTED"},

@@ -10,6 +10,27 @@ import java.util.Set;
 
 final class BenchmarkRawArtifactValidator {
     private static final int SUPPORTED_SCHEMA_VERSION = 3;
+    private static final Set<String> ALLOWED_OPERATIONS = Set.of(
+            "duplicate.search.EXACT",
+            "duplicate.search.IMAGE_PHASH",
+            "duplicate.search.IMAGE_EMBEDDING",
+            "duplicate.search.AUDIO_FINGERPRINT",
+            "duplicate.groups.EXACT");
+    private static final Set<String> REMOVED_DIMENSIONS = Set.of(
+            "video_embeddings",
+            "duplicate_candidates",
+            "duplicate_candidate_refreshes",
+            "file_grants",
+            "folder_grants",
+            "processing_jobs",
+            "VIDEO_" + "EMBEDDING",
+            "candidate-" + "refresh",
+            "permission." + "evaluate",
+            "processing." + "status",
+            "sharing." + "list",
+            "folder." + "list",
+            "file." + "search",
+            "download-" + "control-plane");
     private static final Set<String> VALID_COMPONENT_STATUSES = Set.of(
             "COMPLETED",
             "NOT_REQUESTED",
@@ -45,7 +66,6 @@ final class BenchmarkRawArtifactValidator {
         rejectPresentationArtifact("scale-comparison.csv");
         rejectPresentationArtifact("scale-comparison.md");
 
-        rejectPlaceholder("api-k6-summary.json");
         rejectPlaceholder("pgbench-summary.txt");
         rejectPlaceholder("pgbench-summary.json");
         rejectPlaceholder("resource-usage.json");
@@ -62,6 +82,7 @@ final class BenchmarkRawArtifactValidator {
         requireObject(datasetManifest, "actualLoadedTableCounts");
         requireObject(datasetManifest, "actualEvidenceTableCounts");
         requireObject(datasetManifest, "sourceRegistrySampleSizes");
+        rejectRemovedDimensions(datasetManifest, "dataset-manifest.json");
     }
 
     private void validateRegistry(JsonNode registry) {
@@ -72,11 +93,19 @@ final class BenchmarkRawArtifactValidator {
         requireNumber(registry, "seed");
         JsonNode operations = requireObject(registry, "operations");
 
+        operations.fieldNames().forEachRemaining(operationName -> {
+            if (!ALLOWED_OPERATIONS.contains(operationName)) {
+                throw new IllegalStateException("Unsupported benchmark operation in registry: " + operationName);
+            }
+        });
+
         for (JsonNode operation : operations) {
             requireArray(operation, "sourceFileIds");
             requireInteger(operation, "sampleSize");
             requireText(operation, "evidenceTable");
         }
+
+        rejectRemovedDimensions(registry, "benchmark-registry.json");
     }
 
     private void validateEnvironment(JsonNode environment) {
@@ -140,6 +169,10 @@ final class BenchmarkRawArtifactValidator {
             String scope = requireText(measurement, "scope");
             String coldOrWarm = requireText(measurement, "coldOrWarm");
 
+            if (!ALLOWED_OPERATIONS.contains(operation)) {
+                throw new IllegalStateException("Unsupported benchmark operation in repository-latency.json: " + operation);
+            }
+
             requireInteger(measurement, "sampleCount");
             requireInteger(measurement, "sourceSampleCount");
             requireInteger(measurement, "successCount");
@@ -163,7 +196,6 @@ final class BenchmarkRawArtifactValidator {
         JsonNode components = requireObject(componentStatus, "components");
         for (String component : List.of(
                 "serviceRepositoryBenchmark",
-                "k6",
                 "pgbench",
                 "pgStatStatements",
                 "queryPlan",
@@ -219,6 +251,7 @@ final class BenchmarkRawArtifactValidator {
 
         for (JsonNode captured : requireArray(manifest, "captured")) {
             requireText(captured, "operation");
+            validateOperation(requireText(captured, "operation"), "query-plan-manifest.json");
             requireText(captured, "scope");
             String status = requireText(captured, "status");
 
@@ -232,6 +265,7 @@ final class BenchmarkRawArtifactValidator {
 
         for (JsonNode notCaptured : requireArray(manifest, "notCaptured")) {
             requireText(notCaptured, "operation");
+            validateOperation(requireText(notCaptured, "operation"), "query-plan-manifest.json");
             requireText(notCaptured, "scope");
             String status = requireText(notCaptured, "status");
 
@@ -397,6 +431,22 @@ final class BenchmarkRawArtifactValidator {
 
         if (Files.exists(path)) {
             throw new IllegalStateException("Unexpected placeholder benchmark artifact exists: " + path);
+        }
+    }
+
+    private void validateOperation(String operation, String artifact) {
+        if (!ALLOWED_OPERATIONS.contains(operation)) {
+            throw new IllegalStateException("Unsupported benchmark operation in " + artifact + ": " + operation);
+        }
+    }
+
+    private void rejectRemovedDimensions(JsonNode node, String artifact) {
+        String content = node.toString();
+
+        for (String removed : REMOVED_DIMENSIONS) {
+            if (content.contains(removed)) {
+                throw new IllegalStateException("Removed benchmark dimension in " + artifact + ": " + removed);
+            }
         }
     }
 }

@@ -27,7 +27,10 @@ final class BenchmarkDatasetArtifactStore {
             "video_frame_fingerprints.csv",
             "video_frame_embeddings.csv",
             "duplicate_candidates.csv",
-            "duplicate_candidate_refreshes.csv");
+            "duplicate_candidate_refreshes.csv",
+            "file_" + "grants.csv",
+            "folder_" + "grants.csv",
+            "processing_" + "jobs.csv");
     private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
 
     Path writeGeneratedDataset(BenchmarkDatasetPlan dataset, Path generatedRoot) throws Exception {

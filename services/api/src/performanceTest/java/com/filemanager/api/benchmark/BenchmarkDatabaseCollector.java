@@ -114,9 +114,6 @@ final class BenchmarkDatabaseCollector {
                 "schemaVersion", BenchmarkSupport.SCHEMA_VERSION,
                 "components", Map.of(
                         "serviceRepositoryBenchmark", Map.of("status", ComponentExecutionStatus.COMPLETED.name()),
-                        "k6", Map.of(
-                                "status", ComponentExecutionStatus.NOT_REQUESTED.name(),
-                                "reason", "Repository benchmark tasks do not start an HTTP target."),
                         "pgbench", Map.of(
                                 "status", ComponentExecutionStatus.NOT_REQUESTED.name(),
                                 "reason", "Repository benchmark tasks do not invoke pgbench."),

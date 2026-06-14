@@ -43,12 +43,6 @@ final class BenchmarkDataLoader {
                     + "audio_stream_index,container_format,fingerprint,fingerprint_hash,fingerprint_algorithm,"
                     + "fingerprint_version,fingerprint_duration_seconds,created_at,updated_at) FROM STDIN WITH CSV",
                     dataset.audioFingerprints);
-            copy(connection, "COPY file_grants (id,file_id,grantee_user_id,permission,created_by_user_id,"
-                    + "created_at,revoked_at) FROM STDIN WITH CSV", dataset.fileGrants);
-            copy(connection, "COPY folder_grants (id,folder_id,grantee_user_id,permission,scope,created_by_user_id,"
-                    + "created_at,revoked_at) FROM STDIN WITH CSV", dataset.folderGrants);
-            copy(connection, "COPY processing_jobs (id,file_id,job_type,status,external_job_id,error_message,"
-                    + "created_at,updated_at) FROM STDIN WITH CSV", dataset.processingJobs);
         }
     }
 
