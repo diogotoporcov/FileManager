@@ -96,10 +96,17 @@ final class BenchmarkConfigurationResolver {
                 instrumentationMode,
                 Path.of(System.getProperty("benchmark.reports-dir", "benchmarks/reports")),
                 Path.of(System.getProperty("benchmark.results-dir", "benchmarks/results")),
+                optionalPath("benchmark.datasetPath"),
                 pythonExecutable,
                 pythonExecutableSource,
                 pythonFallbacksAttempted,
                 Map.copyOf(resolved));
+    }
+
+    private Path optionalPath(String property) {
+        String value = System.getProperty(property);
+
+        return value == null || value.isBlank() ? null : Path.of(value);
     }
 
     private BenchmarkProfileSupport.BaselineMetadata baselineMetadata(
@@ -287,6 +294,7 @@ final class BenchmarkConfigurationResolver {
             case "benchmark.duplicate-distribution" -> "duplicateDistribution";
             case "benchmark.instrumentation-mode" -> "instrumentationMode";
             case "benchmark.run-id" -> "runId";
+            case "benchmark.datasetPath" -> "datasetPath";
             case "benchmark.python-executable" -> "pythonExecutable";
             case "benchmark.baseline.cpu" -> "baselineCpu";
             case "benchmark.baseline.memory" -> "baselineMemory";

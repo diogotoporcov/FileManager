@@ -6,7 +6,6 @@ ANALYZE file_fingerprints;
 ANALYZE image_fingerprints;
 ANALYZE file_embeddings;
 ANALYZE audio_fingerprints;
-ANALYZE video_embeddings;
 ANALYZE file_grants;
 ANALYZE folder_grants;
 ANALYZE processing_jobs;

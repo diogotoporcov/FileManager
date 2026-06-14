@@ -69,7 +69,6 @@ public class ProcessingJob {
         CHECKSUM,
         PHASH,
         EMBEDDING,
-        VIDEO_ANALYSIS,
         AUDIO_ANALYSIS
     }
 

@@ -10,6 +10,7 @@ SUPPORTED_SCHEMA_VERSION = 3
 REQUIRED_SCALE_ARTIFACTS = [
     "environment.json",
     "dataset-manifest.json",
+    "benchmark-registry.json",
     "correctness-results.json",
     "setup-timings.json",
     "repository-latency.json",
@@ -20,6 +21,7 @@ SUMMARY_COLUMNS = [
     "scope",
     "coldOrWarm",
     "sampleCount",
+    "sourceSampleCount",
     "warmupCount",
     "successCount",
     "failureCount",
@@ -33,6 +35,10 @@ SUMMARY_COLUMNS = [
     "p99Status",
     "stddevMs",
     "standardDeviationMethod",
+    "resultCountMin",
+    "resultCountP50",
+    "resultCountP95",
+    "resultCountMax",
 ]
 SCALE_COMPARISON_COLUMNS = ["scale", "records", *SUMMARY_COLUMNS]
 VALID_COMPONENT_STATUSES = {
@@ -254,6 +260,7 @@ def write_report(scale_dir: Path) -> None:
 
     environment = read_json(scale_dir / "environment.json")
     dataset = read_json(scale_dir / "dataset-manifest.json")
+    registry = read_json(scale_dir / "benchmark-registry.json")
     correctness = read_json(scale_dir / "correctness-results.json")
     component_status = read_json(scale_dir / "component-status.json")
 
@@ -280,8 +287,26 @@ def write_report(scale_dir: Path) -> None:
         "",
         "## Dataset",
         "",
+        f"- Dataset ID: {dataset['datasetId']}",
+        f"- Dataset mode: {dataset['datasetMode']}",
+        f"- Scale: {dataset['benchmarkScaleLabel']}",
+        f"- Duplicate distribution: {dataset['duplicateDistribution']}",
         f"- Records: {dataset['recordCount']} synthetic file metadata and fingerprint records",
         f"- Seed: {dataset['seed']}",
+        f"- Files: {dataset['actualEvidenceTableCounts']['files']}",
+        f"- File fingerprints: {dataset['actualEvidenceTableCounts']['file_fingerprints']}",
+        f"- Image fingerprints: {dataset['actualEvidenceTableCounts']['image_fingerprints']}",
+        f"- File embeddings: {dataset['actualEvidenceTableCounts']['file_embeddings']}",
+        f"- Audio fingerprints: {dataset['actualEvidenceTableCounts']['audio_fingerprints']}",
+        f"- Exact duplicate groups: {dataset['actualEvidenceTableCounts']['exact_duplicate_groups']}",
+        f"- Embedding model: {dataset['embeddingModelName']}:{dataset['embeddingModelVersion']} "
+        f"({dataset['embeddingDimension']} dimensions)",
+        f"- Audio fingerprint: {dataset['audioFingerprintAlgorithm']}:{dataset['audioFingerprintVersion']}",
+        "",
+        "## Benchmark Registry",
+        "",
+        f"- Dataset ID: {registry['datasetId']}",
+        f"- Config fingerprint: {registry['configFingerprint']}",
         "",
         "## Correctness Validation",
         "",
@@ -303,16 +328,17 @@ def write_report(scale_dir: Path) -> None:
         "",
         "## Spring Service/Repository Latency",
         "",
-        "| operation | scope | p50 ms | p95 ms | p99 ms | mean ms |",
-        "| --- | --- | ---: | ---: | ---: | ---: |",
+        "| operation | scope | sources | p50 ms | p95 ms | p99 ms | result p50 | result p95 | result max |",
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ])
 
     for row in sorted(rows, key=lambda item: measurement_identity(item)):
         p99 = row["p99Ms"] if row["p99Ms"] else row["p99Status"]
 
         lines.append(
-            f"| {row['operation']} | {row['scope']} | {row['p50Ms']} | "
-            f"{row['p95Ms']} | {p99} | {row['meanMs']} |"
+            f"| {row['operation']} | {row['scope']} | {row['sourceSampleCount']} | {row['p50Ms']} | "
+            f"{row['p95Ms']} | {p99} | {row['resultCountP50']} | {row['resultCountP95']} | "
+            f"{row['resultCountMax']} |"
         )
 
     lines.extend([

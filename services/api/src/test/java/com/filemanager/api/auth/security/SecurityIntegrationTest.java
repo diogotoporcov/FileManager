@@ -3,7 +3,6 @@ package com.filemanager.api.auth.security;
 import com.filemanager.api.web.CursorPageResponse;
 import com.filemanager.api.file.web.FileResponse;
 import com.filemanager.api.processing.web.result.AudioAnalysisResultRequest;
-import com.filemanager.api.processing.web.result.VideoAnalysisResultRequest;
 import com.filemanager.api.identity.domain.User;
 import com.filemanager.api.exception.AccessDeniedException;
 import com.filemanager.api.file.web.search.FileSearchQuery;
@@ -324,44 +323,6 @@ class SecurityIntegrationTest {
                 eq("1"),
                 eq(2),
                 eq(List.of(0.1, 0.2)));
-    }
-
-    @Test
-    void internalVideoAnalysisResult_WithoutToken_Returns401() throws Exception {
-        mockMvc.perform(post("/internal/processing/jobs/" + UUID.randomUUID() + "/video-analysis-result")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{}"))
-                .andExpect(status().isUnauthorized());
-    }
-
-    @Test
-    void internalVideoAnalysisResult_WithValidToken_PermitsAccess() throws Exception {
-        UUID jobId = UUID.randomUUID();
-        UUID fileId = UUID.randomUUID();
-        String content = String.format("""
-                {
-                  "fileId":"%s",
-                  "durationMs":1000,
-                  "width":320,
-                  "height":240,
-                  "frameCount":30,
-                  "codec":"h264",
-                  "sampledFrameCount":1,
-                  "samplingStrategy":"even_interval:min=1,max=32,target_seconds=10",
-                  "modelName":"openai/clip-vit-large-patch14",
-                  "modelVersion":"1",
-                  "dimension":2,
-                  "frames":[{"timestampMs":500,"frameIndex":0,"phash":"fedcba9876543210","embedding":[0.1,0.2]}]
-                }
-                """, fileId);
-
-        mockMvc.perform(post("/internal/processing/jobs/" + jobId + "/video-analysis-result")
-                        .header("Authorization", "Bearer " + VALID_INTERNAL_TOKEN)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(content))
-                .andExpect(status().isOk());
-
-        verify(processingJobService).handleVideoAnalysisResult(eq(jobId), any(VideoAnalysisResultRequest.class));
     }
 
     @Test

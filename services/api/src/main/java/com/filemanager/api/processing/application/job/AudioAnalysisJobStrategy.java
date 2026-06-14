@@ -3,7 +3,6 @@ package com.filemanager.api.processing.application.job;
 import com.filemanager.api.config.AppProperties;
 import com.filemanager.api.processing.domain.ProcessingJob;
 import com.filemanager.api.processing.application.mime.ProcessableAudioMimeTypes;
-import com.filemanager.api.processing.application.mime.ProcessableVideoMimeTypes;
 import com.filemanager.api.processing.application.policy.ProcessingCapability;
 import com.filemanager.api.processing.application.policy.ProcessingPolicyContext;
 import com.filemanager.api.processing.application.policy.ProcessingPolicyResolver;
@@ -28,11 +27,6 @@ public class AudioAnalysisJobStrategy implements JobStrategy {
 
         if (ProcessableAudioMimeTypes.contains(appProperties.getProcessableAudioMimeTypes(), mimeType)
                 && processingPolicyResolver.isEnabled(ProcessingCapability.AUDIO_FINGERPRINT, jobContext)) {
-            return Optional.of(ProcessingJob.JobType.AUDIO_ANALYSIS);
-        }
-
-        if (ProcessableVideoMimeTypes.contains(appProperties.getProcessableVideoMimeTypes(), mimeType)
-                && processingPolicyResolver.isEnabled(ProcessingCapability.VIDEO_AUDIO_ANALYSIS, jobContext)) {
             return Optional.of(ProcessingJob.JobType.AUDIO_ANALYSIS);
         }
 

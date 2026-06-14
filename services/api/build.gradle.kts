@@ -1,3 +1,4 @@
+import java.io.File
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
@@ -45,6 +46,12 @@ val generatedBenchmarkRunId = DateTimeFormatter.ofPattern("yyyyMMddHHmmss")
         .format(OffsetDateTime.now(ZoneOffset.UTC)) + "-" + UUID.randomUUID().toString().substring(0, 8)
 
 data class BenchmarkPythonResolution(val command: String, val source: String, val attemptedFallbacks: List<String>)
+
+fun resolveRepoRelativePath(value: String): String {
+    val file = File(value)
+
+    return if (file.isAbsolute) file.path else rootProject.layout.projectDirectory.file(value).asFile.path
+}
 
 fun benchmarkPythonFallbacks(): List<String> {
     return if (System.getProperty("os.name").lowercase().contains("win")) {
@@ -156,11 +163,20 @@ fun configureBenchmarkSystemProperties(task: Test, taskRecordCount: String?) {
     }
 
     passGradleProperty("benchmarkRecords", "benchmark.records")
+    passGradleProperty("benchmark.records", "benchmark.records")
     passGradleProperty("benchmarkSeed", "benchmark.seed")
+    passGradleProperty("benchmark.seed", "benchmark.seed")
     passGradleProperty("benchmarkWarmupIterations", "benchmark.warmup-iterations")
     passGradleProperty("benchmarkMeasuredIterations", "benchmark.measured-iterations")
     passGradleProperty("benchmarkConcurrency", "benchmark.concurrency")
     passGradleProperty("benchmarkDuplicateDistribution", "benchmark.duplicate-distribution")
+    passGradleProperty("benchmark.duplicateDistribution", "benchmark.duplicate-distribution")
+    val datasetPath = providers.gradleProperty("benchmarkDatasetPath")
+            .orElse(providers.gradleProperty("benchmark.datasetPath"))
+    if (datasetPath.isPresent) {
+        task.systemProperty("benchmark.datasetPath", resolveRepoRelativePath(datasetPath.get()))
+        task.systemProperty("benchmark.datasetPath.source", "GRADLE_PROPERTY")
+    }
     passGradleProperty("benchmarkProfile", "benchmark.profile")
     passGradleProperty("benchmarkProfileFile", "benchmark.profile-file")
     passGradleProperty("benchmarkInstrumentationMode", "benchmark.instrumentation-mode")
@@ -177,6 +193,7 @@ fun configureBenchmarkSystemProperties(task: Test, taskRecordCount: String?) {
     task.systemProperty("benchmark.config-dir", rootProject.layout.projectDirectory.dir("benchmarks/config").asFile.path)
     task.systemProperty("benchmark.reports-dir", rootProject.layout.projectDirectory.dir("benchmarks/reports").asFile.path)
     task.systemProperty("benchmark.results-dir", rootProject.layout.projectDirectory.dir("benchmarks/results").asFile.path)
+    task.systemProperty("benchmark.datasets-dir", rootProject.layout.projectDirectory.dir("benchmarks/datasets/generated").asFile.path)
 
     task.doFirst {
         val python = resolveBenchmarkPythonExecutable()
@@ -271,6 +288,42 @@ fun registerRawBenchmarkTask(taskName: String, recordCount: String) {
 registerRawBenchmarkTask("performanceTest10kRaw", "10000")
 registerRawBenchmarkTask("performanceTest100kRaw", "100000")
 registerRawBenchmarkTask("performanceTest1mRaw", "1000000")
+
+tasks.register<JavaExec>("benchmarkGenerateDataset") {
+    description = "Generates a deterministic precomputed duplicate benchmark dataset artifact."
+    group = "benchmark"
+    dependsOn("performanceTestClasses")
+    classpath = performanceTestSourceSet.runtimeClasspath
+    mainClass.set("com.filemanager.api.benchmark.BenchmarkDatasetArtifactGenerator")
+    maxHeapSize = providers.gradleProperty("benchmarkMaxHeap").getOrElse("4g")
+
+    fun passGradleProperty(propertyName: String, systemPropertyName: String) {
+        val value = providers.gradleProperty(propertyName)
+
+        if (value.isPresent) {
+            systemProperty(systemPropertyName, value.get())
+            systemProperty("$systemPropertyName.source", "GRADLE_PROPERTY")
+        }
+    }
+
+    passGradleProperty("benchmarkRecords", "benchmark.records")
+    passGradleProperty("benchmark.records", "benchmark.records")
+    passGradleProperty("benchmarkSeed", "benchmark.seed")
+    passGradleProperty("benchmark.seed", "benchmark.seed")
+    passGradleProperty("benchmarkDuplicateDistribution", "benchmark.duplicate-distribution")
+    passGradleProperty("benchmark.duplicateDistribution", "benchmark.duplicate-distribution")
+    systemProperty("benchmark.run-id", generatedBenchmarkRunId)
+    systemProperty("benchmark.run-id.source", "TASK_DEFAULT")
+    systemProperty("benchmark.datasets-dir", rootProject.layout.projectDirectory.dir("benchmarks/datasets/generated").asFile.path)
+
+    doFirst {
+        val python = resolveBenchmarkPythonExecutable()
+
+        systemProperty("benchmark.python-executable", python.command)
+        systemProperty("benchmark.python-executable.source", python.source)
+        systemProperty("benchmark.python-executable.fallbacks-attempted", python.attemptedFallbacks.joinToString(","))
+    }
+}
 
 fun registerBenchmarkReportTask(taskName: String, rawTaskName: String?, scales: String) {
     tasks.register<Exec>(taskName) {

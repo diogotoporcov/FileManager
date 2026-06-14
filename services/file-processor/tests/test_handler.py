@@ -74,7 +74,7 @@ async def test_handle_success(handler, flow, mock_msg):
 
 @pytest.mark.asyncio
 async def test_handle_uses_event_job_type_not_kafka_topic(handler, flow, mock_msg):
-    mock_msg.topic = "file.processing.video"
+    mock_msg.topic = "file.processing.audio"
     flow.run = AsyncMock()
 
     result = await handler.handle_message(mock_msg)

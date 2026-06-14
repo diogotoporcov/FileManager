@@ -52,6 +52,9 @@ class GenerateBenchmarkReportTest(unittest.TestCase):
             rows = report.validate_summary_csv(scale_dir)
             self.assertEqual(len(rows), 1)
             self.assertGreater((scale_dir / "report.md").stat().st_size, 0)
+            report_text = (scale_dir / "report.md").read_text(encoding="utf-8")
+            self.assertIn("- File embeddings: 6", report_text)
+            self.assertIn("result p95", report_text)
 
     def test_rejects_empty_generated_summary(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -167,7 +170,48 @@ def write_complete_scale(
     )
 
     (scale_dir / "dataset-manifest.json").write_text(
-        json_text({"schemaVersion": 3, "recordCount": records, "seed": 20260611}),
+        json_text({
+            "schemaVersion": 3,
+            "datasetId": "default-10000-20260611-test",
+            "datasetMode": "inline",
+            "benchmarkScaleLabel": scale,
+            "recordCount": records,
+            "seed": 20260611,
+            "duplicateDistribution": "default",
+            "configFingerprint": "fingerprint",
+            "actualEvidenceTableCounts": {
+                "files": records,
+                "file_fingerprints": records,
+                "image_fingerprints": 6,
+                "file_embeddings": 6,
+                "audio_fingerprints": 6,
+                "exact_duplicate_groups": 2,
+            },
+            "embeddingModelName": "openai/clip-vit-large-patch14",
+            "embeddingModelVersion": "1",
+            "embeddingDimension": 768,
+            "audioFingerprintAlgorithm": "chromaprint",
+            "audioFingerprintVersion": "fpcalc-v1",
+        }),
+        encoding="utf-8",
+    )
+
+    (scale_dir / "benchmark-registry.json").write_text(
+        json_text({
+            "schemaVersion": 3,
+            "datasetId": "default-10000-20260611-test",
+            "configFingerprint": "fingerprint",
+            "seed": 20260611,
+            "records": records,
+            "duplicateDistribution": "default",
+            "operations": {
+                "operation-" + scale: {
+                    "sourceFileIds": ["00000000-0000-0000-0000-000000000000"],
+                    "sampleSize": 1,
+                    "evidenceTable": "file_fingerprints",
+                },
+            },
+        }),
         encoding="utf-8",
     )
 
@@ -204,6 +248,7 @@ def measurement(operation: str, scope: str, cold_or_warm: str) -> dict[str, obje
         "scope": scope,
         "coldOrWarm": cold_or_warm,
         "sampleCount": 100,
+        "sourceSampleCount": 100,
         "warmupCount": 20,
         "successCount": 100,
         "failureCount": 0,
@@ -217,6 +262,10 @@ def measurement(operation: str, scope: str, cold_or_warm: str) -> dict[str, obje
         "p99Status": "INSUFFICIENT_SAMPLES",
         "stddevMs": 0.1,
         "standardDeviationMethod": "population",
+        "resultCountMin": 0,
+        "resultCountP50": 1,
+        "resultCountP95": 2,
+        "resultCountMax": 3,
     }
 
 

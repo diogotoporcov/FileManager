@@ -1,9 +1,7 @@
 package com.filemanager.api.benchmark;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.filemanager.api.duplicate.application.DuplicateCandidateMaintenanceService;
 import com.filemanager.api.duplicate.application.DuplicateSearchService;
-import com.filemanager.api.file.application.FileService;
 import com.filemanager.api.processing.messaging.FileProcessingRequestedEvent;
 import io.minio.MinioClient;
 import jakarta.persistence.EntityManager;
@@ -52,8 +50,6 @@ class BenchmarkSuiteTest {
                     "pg_stat_statements.track=all");
 
     private final DuplicateSearchService duplicateSearchService;
-    private final DuplicateCandidateMaintenanceService duplicateCandidateMaintenanceService;
-    private final FileService fileService;
     private final JdbcTemplate jdbcTemplate;
     private final DataSource dataSource;
     private final EntityManager entityManager;
@@ -69,14 +65,10 @@ class BenchmarkSuiteTest {
 
     BenchmarkSuiteTest(
             DuplicateSearchService duplicateSearchService,
-            DuplicateCandidateMaintenanceService duplicateCandidateMaintenanceService,
-            FileService fileService,
             JdbcTemplate jdbcTemplate,
             DataSource dataSource,
             EntityManager entityManager) {
         this.duplicateSearchService = duplicateSearchService;
-        this.duplicateCandidateMaintenanceService = duplicateCandidateMaintenanceService;
-        this.fileService = fileService;
         this.jdbcTemplate = jdbcTemplate;
         this.dataSource = dataSource;
         this.entityManager = entityManager;
@@ -102,7 +94,15 @@ class BenchmarkSuiteTest {
 
         BenchmarkDatasetPlan dataset = new BenchmarkDatasetGenerator(options).generate();
         long copyStart = System.nanoTime();
-        new BenchmarkDataLoader(dataSource).load(dataset);
+        BenchmarkDataLoader dataLoader = new BenchmarkDataLoader(dataSource);
+        if (options.datasetPath() == null) {
+            dataset.setDatasetMode("inline");
+            dataLoader.load(dataset);
+        } else {
+            dataset.setDatasetMode("precomputed");
+            dataset.setDatasetPath(options.datasetPath().toString());
+            dataLoader.load(dataset, options.datasetPath());
+        }
         setupTimings.record("copyTotalMs", copyStart);
 
         long analyzeStart = System.nanoTime();
@@ -123,9 +123,6 @@ class BenchmarkSuiteTest {
 
         List<BenchmarkMeasurement> measurements = new BenchmarkRunner(
                 duplicateSearchService,
-                duplicateCandidateMaintenanceService,
-                fileService,
-                jdbcTemplate,
                 databaseCollector::resetStatementStats)
                 .run(options, dataset);
 
@@ -144,6 +141,7 @@ class BenchmarkSuiteTest {
                 context.scaleDir().resolve("environment.json"),
                 new BenchmarkEnvironmentCollector(jdbcTemplate).collect(context));
         artifactWriter.writeJson(context.scaleDir().resolve("dataset-manifest.json"), dataset.toManifest());
+        artifactWriter.writeJson(context.scaleDir().resolve("benchmark-registry.json"), dataset.registry().toManifest());
 
         artifactWriter.writeJson(context.scaleDir().resolve("setup-timings.json"), Map.of(
                 "schemaVersion", SCHEMA_VERSION,
@@ -222,6 +220,7 @@ class BenchmarkSuiteTest {
             String operation,
             BenchmarkScope scope,
             int sampleCount,
+            int sourceSampleCount,
             int warmupCount,
             int successCount,
             int failureCount,
@@ -236,21 +235,37 @@ class BenchmarkSuiteTest {
             double p95Ms,
             Double p99Ms,
             String p99Status,
-            double stddevMs) {
+            double stddevMs,
+            int resultCountMin,
+            int resultCountP50,
+            int resultCountP95,
+            int resultCountMax) {
 
-        static BenchmarkMeasurement from(String operation, BenchmarkOptions options, List<BenchmarkSample> samples) {
-            return from(operation, options, BenchmarkStatistics.fromSamples(samples));
+        static BenchmarkMeasurement from(
+                String operation,
+                BenchmarkOptions options,
+                int sourceSampleCount,
+                List<BenchmarkSample> samples) {
+            return from(
+                    operation,
+                    options,
+                    sourceSampleCount,
+                    BenchmarkStatistics.fromSamples(samples),
+                    BenchmarkStatistics.resultCounts(samples));
         }
 
         private static BenchmarkMeasurement from(
                 String operation,
                 BenchmarkOptions options,
-                BenchmarkStatistics statistics) {
+                int sourceSampleCount,
+                BenchmarkStatistics statistics,
+                ResultCountStatistics resultCounts) {
             return new BenchmarkMeasurement(
                     SCHEMA_VERSION,
                     operation,
                     BenchmarkScope.SPRING_SERVICE_REPOSITORY,
                     statistics.sampleCount(),
+                    sourceSampleCount,
                     options.warmupIterations(),
                     statistics.successCount(),
                     statistics.failureCount(),
@@ -265,7 +280,11 @@ class BenchmarkSuiteTest {
                     statistics.p95Ms(),
                     statistics.p99Ms(),
                     statistics.p99Status(),
-                    statistics.standardDeviationMs());
+                    statistics.standardDeviationMs(),
+                    resultCounts.min(),
+                    resultCounts.p50(),
+                    resultCounts.p95(),
+                    resultCounts.max());
         }
     }
 

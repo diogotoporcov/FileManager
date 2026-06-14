@@ -38,14 +38,14 @@ async def test_consumer_subscribes_to_single_configured_topic():
     mock_kafka_consumer.__aiter__.return_value = []
 
     with (
-        patch("app.worker.consumer.settings.worker_topics", ("file.processing.video",)),
+        patch("app.worker.consumer.settings.worker_topics", ("file.processing.audio",)),
         patch("app.worker.consumer.AIOKafkaConsumer", return_value=mock_kafka_consumer) as kafka_consumer,
     ):
         await consumer.start()
 
     kafka_consumer.assert_called_once()
     args, _kwargs = kafka_consumer.call_args
-    assert args == ("file.processing.video",)
+    assert args == ("file.processing.audio",)
 
 
 @pytest.mark.asyncio

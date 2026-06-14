@@ -95,15 +95,11 @@ class FlywayMigrationVersionTest {
                 "CREATE TABLE exact_duplicate_groups",
                 "CONSTRAINT uk_exact_duplicate_groups_owner_algorithm_hash",
                 "UNIQUE(owner_user_id, algorithm, hash_value)",
-                "CREATE INDEX idx_exact_duplicate_groups_owner_count_algorithm_hash",
+                "CREATE INDEX idx_exact_duplicate_groups_owner_count_algorithm_hash");
+        assertThat(migration).doesNotContain(
+                "INSERT INTO exact_duplicate_groups",
                 "CREATE TABLE duplicate_candidates",
-                "CONSTRAINT chk_duplicate_candidates_canonical_pair CHECK (file_id_low < file_id_high)",
-                "CONSTRAINT uk_duplicate_candidates_pair_method_version",
-                "CREATE TABLE duplicate_candidate_refreshes",
-                "CONSTRAINT uk_duplicate_candidate_refreshes_source_method_version",
-                "CREATE INDEX idx_duplicate_candidate_refreshes_source_method",
-                "CREATE INDEX idx_duplicate_candidate_refreshes_method_refreshed");
-        assertThat(migration).doesNotContain("INSERT INTO exact_duplicate_groups");
+                "CREATE TABLE duplicate_candidate_refreshes");
     }
 
     @Test
@@ -116,9 +112,12 @@ class FlywayMigrationVersionTest {
                 "CREATE INDEX idx_audio_fingerprints_hash",
                 "CREATE INDEX idx_file_fingerprints_algorithm_hash",
                 "CREATE INDEX idx_files_owner_deleted_folder",
-                "CREATE INDEX idx_file_embeddings_model_version_dimension",
-                "CREATE TABLE video_embeddings",
-                "CREATE INDEX idx_video_embeddings_model_version_dimension");
+                "CREATE INDEX idx_file_embeddings_model_version_dimension");
+        assertThat(migration).doesNotContain(
+                "CREATE TABLE video_fingerprints",
+                "CREATE TABLE video_frame_fingerprints",
+                "CREATE TABLE video_frame_embeddings",
+                "CREATE TABLE video_embeddings");
     }
 
     private List<String> migrationVersions() throws Exception {

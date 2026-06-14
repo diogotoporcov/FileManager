@@ -60,21 +60,6 @@ public class AppProperties {
             "image/xpm"
     );
     @NotEmpty
-    private Set<@NotBlank String> processableVideoMimeTypes = Set.of(
-            "video/mp4",
-            "video/webm",
-            "video/quicktime",
-            "video/x-msvideo",
-            "video/avi",
-            "video/matroska",
-            "video/x-matroska",
-            "video/x-m4v",
-            "video/mpeg",
-            "video/MP2T",
-            "video/3gpp",
-            "video/3gpp2"
-    );
-    @NotEmpty
     private Set<@NotBlank String> processableAudioMimeTypes = Set.of(
             "audio/mpeg",
             "audio/mp3",
@@ -142,8 +127,6 @@ public class AppProperties {
             private String fileProcessingImage = "file.processing.image";
             @NotBlank
             private String fileProcessingAudio = "file.processing.audio";
-            @NotBlank
-            private String fileProcessingVideo = "file.processing.video";
         }
     }
 
@@ -154,8 +137,6 @@ public class AppProperties {
         private final Checksum checksum = new Checksum();
         @Valid
         private final Image image = new Image();
-        @Valid
-        private final Video video = new Video();
         @Valid
         private final Audio audio = new Audio();
 
@@ -170,15 +151,6 @@ public class AppProperties {
         public static class Image {
             private boolean phashEnabled = true;
             private boolean embeddingEnabled = true;
-        }
-
-        @Getter
-        @Setter
-        public static class Video {
-            private boolean analysisEnabled = true;
-            private boolean framePhashEnabled = true;
-            private boolean frameEmbeddingEnabled = true;
-            private boolean audioAnalysisEnabled = true;
         }
 
         @Getter

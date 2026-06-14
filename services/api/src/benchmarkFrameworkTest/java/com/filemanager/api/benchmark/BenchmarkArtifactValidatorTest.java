@@ -159,7 +159,37 @@ class BenchmarkArtifactValidatorTest {
                 """, StandardCharsets.UTF_8);
 
         Files.writeString(directory.resolve("dataset-manifest.json"), """
-                {"schemaVersion": 3, "recordCount": 10000}
+                {
+                  "schemaVersion": 3,
+                  "datasetId": "default-10000-20260611-test",
+                  "datasetMode": "inline",
+                  "configFingerprint": "fingerprint",
+                  "recordCount": 10000,
+                  "seed": 20260611,
+                  "duplicateDistribution": "default",
+                  "tableCounts": {},
+                  "actualLoadedTableCounts": {},
+                  "actualEvidenceTableCounts": {},
+                  "sourceRegistrySampleSizes": {}
+                }
+                """, StandardCharsets.UTF_8);
+
+        Files.writeString(directory.resolve("benchmark-registry.json"), """
+                {
+                  "schemaVersion": 3,
+                  "datasetId": "default-10000-20260611-test",
+                  "configFingerprint": "fingerprint",
+                  "records": 10000,
+                  "seed": 20260611,
+                  "duplicateDistribution": "default",
+                  "operations": {
+                    "duplicate.search.EXACT": {
+                      "sourceFileIds": ["00000000-0000-0000-0000-000000000000"],
+                      "sampleSize": 1,
+                      "evidenceTable": "file_fingerprints"
+                    }
+                  }
+                }
                 """, StandardCharsets.UTF_8);
 
         Files.writeString(directory.resolve("correctness-results.json"), """
@@ -184,13 +214,18 @@ class BenchmarkArtifactValidatorTest {
                     "operation": "operation",
                     "scope": "SPRING_SERVICE_REPOSITORY",
                     "sampleCount": 100,
+                    "sourceSampleCount": 100,
                     "warmupCount": 20,
                     "successCount": 100,
                     "failureCount": 0,
                     "coldOrWarm": "WARM",
                     "p50Ms": 1.0,
                     "p95Ms": 2.0,
-                    "standardDeviationMethod": "population"
+                    "standardDeviationMethod": "population",
+                    "resultCountMin": 0,
+                    "resultCountP50": 1,
+                    "resultCountP95": 2,
+                    "resultCountMax": 3
                   }]
                 }
                 """, StandardCharsets.UTF_8);

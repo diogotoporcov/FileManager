@@ -1,18 +1,14 @@
 package com.filemanager.api.processing.application.job;
 
-import com.filemanager.api.config.AppProperties;
-import com.filemanager.api.processing.domain.ProcessingJob;
-import com.filemanager.api.processing.application.policy.GlobalProcessingPolicyResolver;
-import com.filemanager.api.processing.application.policy.ProcessingCapability;
-import com.filemanager.api.processing.application.policy.ProcessingPolicyContext;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
 
+import com.filemanager.api.config.AppProperties;
+import com.filemanager.api.processing.application.policy.GlobalProcessingPolicyResolver;
+import com.filemanager.api.processing.domain.ProcessingJob;
 import java.util.List;
 import java.util.Set;
-
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 class ProcessingJobPlannerTest {
 
@@ -20,406 +16,71 @@ class ProcessingJobPlannerTest {
 
     @BeforeEach
     void setUp() {
-        AppProperties appProperties = new AppProperties();
-        planner = new ProcessingJobPlanner(List.of(
-                new ChecksumJobStrategy(new GlobalProcessingPolicyResolver(appProperties)),
-                new PhashJobStrategy(appProperties, new GlobalProcessingPolicyResolver(appProperties)),
-                new EmbeddingJobStrategy(appProperties, new GlobalProcessingPolicyResolver(appProperties)),
-                new VideoAnalysisJobStrategy(appProperties, new GlobalProcessingPolicyResolver(appProperties)),
-                new AudioAnalysisJobStrategy(appProperties, new GlobalProcessingPolicyResolver(appProperties))
-        ));
+        planner = plannerWith(new AppProperties());
     }
 
     @Test
-    void planJobs_ShouldIncludeChecksumForAllFiles() {
-        List<ProcessingJob.JobType> jobs = planner.planJobs("application/pdf");
-        assertTrue(jobs.contains(ProcessingJob.JobType.CHECKSUM));
+    void planJobs_IncludesChecksumForGenericFile() {
+        assertThat(planner.planJobs("application/pdf"))
+                .containsExactly(ProcessingJob.JobType.CHECKSUM);
     }
 
     @Test
-    void planJobs_ShouldIncludePhashForImages() {
-        List<ProcessingJob.JobType> jobs = planner.planJobs("image/png");
-        assertTrue(jobs.contains(ProcessingJob.JobType.PHASH));
+    void planJobs_ImageUploadSchedulesChecksumPhashAndEmbedding() {
+        assertThat(planner.planJobs("image/png"))
+                .containsExactly(
+                        ProcessingJob.JobType.CHECKSUM,
+                        ProcessingJob.JobType.PHASH,
+                        ProcessingJob.JobType.EMBEDDING);
     }
 
     @Test
-    void planJobs_ShouldIncludeEmbeddingForImages() {
-        List<ProcessingJob.JobType> jobs = planner.planJobs("image/png");
-        assertTrue(jobs.contains(ProcessingJob.JobType.EMBEDDING));
+    void planJobs_AudioUploadSchedulesAudioAnalysis() {
+        assertThat(planner.planJobs("audio/mpeg"))
+                .containsExactly(
+                        ProcessingJob.JobType.CHECKSUM,
+                        ProcessingJob.JobType.AUDIO_ANALYSIS);
     }
 
     @Test
-    void planJobs_ShouldHandleUppercaseMimeType() {
-        List<ProcessingJob.JobType> jobs = planner.planJobs("IMAGE/JPEG");
-        assertTrue(jobs.contains(ProcessingJob.JobType.PHASH));
-        assertTrue(jobs.contains(ProcessingJob.JobType.EMBEDDING));
+    void planJobs_VideoUploadSchedulesChecksumOnly() {
+        assertThat(planner.planJobs("video/mp4"))
+                .containsExactly(ProcessingJob.JobType.CHECKSUM);
     }
 
     @Test
-    void planJobs_ShouldIncludeImageJobsForSupportedMimeTypeWithParameters() {
-        List<ProcessingJob.JobType> jobs = planner.planJobs("image/jpeg; charset=binary");
-        assertTrue(jobs.contains(ProcessingJob.JobType.PHASH));
-        assertTrue(jobs.contains(ProcessingJob.JobType.EMBEDDING));
-    }
-
-    @Test
-    void planJobs_ShouldIncludeVideoAnalysisForSupportedVideo() {
-        List<ProcessingJob.JobType> jobs = planner.planJobs("video/mp4");
-
-        assertTrue(jobs.contains(ProcessingJob.JobType.CHECKSUM));
-        assertTrue(jobs.contains(ProcessingJob.JobType.VIDEO_ANALYSIS));
-        assertFalse(jobs.contains(ProcessingJob.JobType.PHASH));
-        assertFalse(jobs.contains(ProcessingJob.JobType.EMBEDDING));
-    }
-
-    @Test
-    void planJobs_ShouldIncludeVideoAnalysisForAdditionalSupportedVideoTypes() {
-        Set<String> processableVideoMimeTypes = Set.of(
-                "video/x-msvideo",
-                "video/matroska",
-                "video/x-matroska",
-                "video/x-m4v",
-                "video/mpeg",
-                "video/MP2T",
-                "video/3gpp"
-        );
-        ProcessingJobPlanner customPlanner = plannerWithProcessableVideoMimeTypes(processableVideoMimeTypes);
-
-        processableVideoMimeTypes.forEach(mimeType -> {
-            List<ProcessingJob.JobType> jobs = customPlanner.planJobs(mimeType);
-
-            assertTrue(jobs.contains(ProcessingJob.JobType.CHECKSUM));
-            assertTrue(jobs.contains(ProcessingJob.JobType.VIDEO_ANALYSIS));
-            assertTrue(jobs.contains(ProcessingJob.JobType.AUDIO_ANALYSIS));
-            assertFalse(jobs.contains(ProcessingJob.JobType.PHASH));
-            assertFalse(jobs.contains(ProcessingJob.JobType.EMBEDDING));
-        });
-    }
-
-    @Test
-    void planJobs_ShouldHandleVideoMimeTypeWithParameters() {
-        List<ProcessingJob.JobType> jobs = planner.planJobs("video/quicktime; charset=binary");
-
-        assertTrue(jobs.contains(ProcessingJob.JobType.VIDEO_ANALYSIS));
-    }
-
-    @Test
-    void planJobs_ShouldNormalizeAdditionalVideoMimeTypes() {
-        ProcessingJobPlanner customPlanner = plannerWithProcessableVideoMimeTypes(Set.of("video/x-matroska"));
-
-        List.of(
-                "VIDEO/X-MATROSKA",
-                "video/x-matroska; charset=binary"
-        ).forEach(mimeType -> {
-            List<ProcessingJob.JobType> jobs = customPlanner.planJobs(mimeType);
-
-            assertTrue(jobs.contains(ProcessingJob.JobType.VIDEO_ANALYSIS));
-            assertTrue(jobs.contains(ProcessingJob.JobType.AUDIO_ANALYSIS));
-        });
-    }
-
-    @Test
-    void planJobs_ShouldNotIncludeVideoAnalysisForUnsupportedVideo() {
-        List<ProcessingJob.JobType> jobs = planner.planJobs("video/x-flv");
-
-        assertTrue(jobs.contains(ProcessingJob.JobType.CHECKSUM));
-        assertFalse(jobs.contains(ProcessingJob.JobType.VIDEO_ANALYSIS));
-    }
-
-    @Test
-    void planJobs_ShouldNotIncludeImageJobsForUnsupportedImageMimeType() {
-        List<ProcessingJob.JobType> jobs = planner.planJobs("image/svg+xml");
-        assertTrue(jobs.contains(ProcessingJob.JobType.CHECKSUM));
-        assertFalse(jobs.contains(ProcessingJob.JobType.PHASH));
-        assertFalse(jobs.contains(ProcessingJob.JobType.EMBEDDING));
-    }
-
-    @Test
-    void planJobs_ShouldUseConfiguredProcessableImageMimeTypes() {
-        AppProperties appProperties = new AppProperties();
-        appProperties.setProcessableImageMimeTypes(Set.of("image/example"));
-        ProcessingJobPlanner customPlanner = new ProcessingJobPlanner(List.of(
-                new ChecksumJobStrategy(new GlobalProcessingPolicyResolver(appProperties)),
-                new PhashJobStrategy(appProperties, new GlobalProcessingPolicyResolver(appProperties)),
-                new EmbeddingJobStrategy(appProperties, new GlobalProcessingPolicyResolver(appProperties)),
-                new VideoAnalysisJobStrategy(appProperties, new GlobalProcessingPolicyResolver(appProperties)),
-                new AudioAnalysisJobStrategy(appProperties, new GlobalProcessingPolicyResolver(appProperties))
-        ));
-
-        List<ProcessingJob.JobType> supportedJobs = customPlanner.planJobs("image/example");
-        List<ProcessingJob.JobType> defaultImageJobs = customPlanner.planJobs("image/png");
-
-        assertTrue(supportedJobs.contains(ProcessingJob.JobType.PHASH));
-        assertTrue(supportedJobs.contains(ProcessingJob.JobType.EMBEDDING));
-        assertFalse(defaultImageJobs.contains(ProcessingJob.JobType.PHASH));
-        assertFalse(defaultImageJobs.contains(ProcessingJob.JobType.EMBEDDING));
-    }
-
-    @Test
-    void planJobs_ShouldUseConfiguredProcessableVideoMimeTypes() {
-        AppProperties appProperties = new AppProperties();
-        appProperties.setProcessableVideoMimeTypes(Set.of("video/example"));
-        ProcessingJobPlanner customPlanner = new ProcessingJobPlanner(List.of(
-                new ChecksumJobStrategy(new GlobalProcessingPolicyResolver(appProperties)),
-                new PhashJobStrategy(appProperties, new GlobalProcessingPolicyResolver(appProperties)),
-                new EmbeddingJobStrategy(appProperties, new GlobalProcessingPolicyResolver(appProperties)),
-                new VideoAnalysisJobStrategy(appProperties, new GlobalProcessingPolicyResolver(appProperties)),
-                new AudioAnalysisJobStrategy(appProperties, new GlobalProcessingPolicyResolver(appProperties))
-        ));
-
-        List<ProcessingJob.JobType> supportedJobs = customPlanner.planJobs("video/example");
-        List<ProcessingJob.JobType> defaultVideoJobs = customPlanner.planJobs("video/mp4");
-
-        assertTrue(supportedJobs.contains(ProcessingJob.JobType.VIDEO_ANALYSIS));
-        assertFalse(defaultVideoJobs.contains(ProcessingJob.JobType.VIDEO_ANALYSIS));
-    }
-
-    @Test
-    void planJobs_ShouldIncludeAudioAnalysisForSupportedAudio() {
-        List<ProcessingJob.JobType> jobs = planner.planJobs("audio/mpeg");
-
-        assertTrue(jobs.contains(ProcessingJob.JobType.CHECKSUM));
-        assertTrue(jobs.contains(ProcessingJob.JobType.AUDIO_ANALYSIS));
-        assertFalse(jobs.contains(ProcessingJob.JobType.PHASH));
-        assertFalse(jobs.contains(ProcessingJob.JobType.EMBEDDING));
-        assertFalse(jobs.contains(ProcessingJob.JobType.VIDEO_ANALYSIS));
-    }
-
-    @Test
-    void planJobs_ShouldIncludeAudioAnalysisForAdditionalSupportedAudioTypes() {
-        Set<String> processableAudioMimeTypes = Set.of(
-                "audio/webm",
-                "audio/opus",
-                "audio/matroska",
-                "audio/vnd.wave",
-                "audio/wave",
-                "audio/x-flac",
-                "audio/ac3",
-                "audio/x-aiff"
-        );
-        ProcessingJobPlanner customPlanner = plannerWithProcessableAudioMimeTypes(processableAudioMimeTypes);
-
-        processableAudioMimeTypes.forEach(mimeType -> {
-            List<ProcessingJob.JobType> jobs = customPlanner.planJobs(mimeType);
-
-            assertTrue(jobs.contains(ProcessingJob.JobType.CHECKSUM));
-            assertTrue(jobs.contains(ProcessingJob.JobType.AUDIO_ANALYSIS));
-            assertFalse(jobs.contains(ProcessingJob.JobType.PHASH));
-            assertFalse(jobs.contains(ProcessingJob.JobType.EMBEDDING));
-            assertFalse(jobs.contains(ProcessingJob.JobType.VIDEO_ANALYSIS));
-        });
-    }
-
-    @Test
-    void planJobs_ShouldIncludeVideoAndAudioAnalysisForSupportedVideo() {
-        List<ProcessingJob.JobType> jobs = planner.planJobs("video/mp4");
-
-        assertTrue(jobs.contains(ProcessingJob.JobType.VIDEO_ANALYSIS));
-        assertTrue(jobs.contains(ProcessingJob.JobType.AUDIO_ANALYSIS));
-    }
-
-    @Test
-    void planJobs_ShouldHandleAudioMimeTypeWithParameters() {
-        List<ProcessingJob.JobType> jobs = planner.planJobs("audio/x-m4a; charset=binary");
-
-        assertTrue(jobs.contains(ProcessingJob.JobType.AUDIO_ANALYSIS));
-    }
-
-    @Test
-    void planJobs_ShouldNormalizeAdditionalAudioMimeTypes() {
-        ProcessingJobPlanner customPlanner = plannerWithProcessableAudioMimeTypes(Set.of("audio/webm", "audio/vnd.wave"));
-
-        List.of(
-                " audio/webm ",
-                "audio/vnd.wave; codecs=1"
-        ).forEach(mimeType -> {
-            List<ProcessingJob.JobType> jobs = customPlanner.planJobs(mimeType);
-
-            assertTrue(jobs.contains(ProcessingJob.JobType.AUDIO_ANALYSIS));
-            assertFalse(jobs.contains(ProcessingJob.JobType.VIDEO_ANALYSIS));
-        });
-    }
-
-    @Test
-    void planJobs_ShouldNotIncludeAudioAnalysisForUnsupportedMimeType() {
-        List<ProcessingJob.JobType> jobs = planner.planJobs("application/pdf");
-
-        assertTrue(jobs.contains(ProcessingJob.JobType.CHECKSUM));
-        assertFalse(jobs.contains(ProcessingJob.JobType.AUDIO_ANALYSIS));
-    }
-
-    @Test
-    void planJobs_ShouldUseConfiguredProcessableAudioMimeTypes() {
+    void planJobs_AudioAnalysisUsesConfiguredAudioMimeTypesOnly() {
         AppProperties appProperties = new AppProperties();
         appProperties.setProcessableAudioMimeTypes(Set.of("audio/example"));
+
         ProcessingJobPlanner customPlanner = plannerWith(appProperties);
 
-        List<ProcessingJob.JobType> supportedJobs = customPlanner.planJobs("audio/example");
-        List<ProcessingJob.JobType> defaultAudioJobs = customPlanner.planJobs("audio/mpeg");
-
-        assertTrue(supportedJobs.contains(ProcessingJob.JobType.AUDIO_ANALYSIS));
-        assertFalse(defaultAudioJobs.contains(ProcessingJob.JobType.AUDIO_ANALYSIS));
+        assertThat(customPlanner.planJobs("audio/example"))
+                .containsExactly(
+                        ProcessingJob.JobType.CHECKSUM,
+                        ProcessingJob.JobType.AUDIO_ANALYSIS);
+        assertThat(customPlanner.planJobs("audio/mpeg"))
+                .containsExactly(ProcessingJob.JobType.CHECKSUM);
+        assertThat(customPlanner.planJobs("video/mp4"))
+                .containsExactly(ProcessingJob.JobType.CHECKSUM);
     }
 
     @Test
-    void planJobs_ChecksumDisabledSkipsChecksumForAllFiles() {
-        AppProperties appProperties = new AppProperties();
-        appProperties.getProcessing().getChecksum().setEnabled(false);
-        ProcessingJobPlanner customPlanner = plannerWith(appProperties);
-
-        List<ProcessingJob.JobType> jobs = customPlanner.planJobs("application/pdf");
-
-        assertFalse(jobs.contains(ProcessingJob.JobType.CHECKSUM));
-    }
-
-    @Test
-    void planJobs_ImagePhashDisabledSkipsOnlyPhash() {
-        AppProperties appProperties = new AppProperties();
-        appProperties.getProcessing().getImage().setPhashEnabled(false);
-        ProcessingJobPlanner customPlanner = plannerWith(appProperties);
-
-        List<ProcessingJob.JobType> jobs = customPlanner.planJobs("image/png");
-
-        assertTrue(jobs.contains(ProcessingJob.JobType.CHECKSUM));
-        assertFalse(jobs.contains(ProcessingJob.JobType.PHASH));
-        assertTrue(jobs.contains(ProcessingJob.JobType.EMBEDDING));
-    }
-
-    @Test
-    void planJobs_ImageEmbeddingDisabledSkipsOnlyEmbedding() {
-        AppProperties appProperties = new AppProperties();
-        appProperties.getProcessing().getImage().setEmbeddingEnabled(false);
-        ProcessingJobPlanner customPlanner = plannerWith(appProperties);
-
-        List<ProcessingJob.JobType> jobs = customPlanner.planJobs("image/png");
-
-        assertTrue(jobs.contains(ProcessingJob.JobType.CHECKSUM));
-        assertTrue(jobs.contains(ProcessingJob.JobType.PHASH));
-        assertFalse(jobs.contains(ProcessingJob.JobType.EMBEDDING));
-    }
-
-    @Test
-    void planJobs_ImageCapabilitiesDisabledLeavesOnlyChecksum() {
-        AppProperties appProperties = new AppProperties();
-        appProperties.getProcessing().getImage().setPhashEnabled(false);
-        appProperties.getProcessing().getImage().setEmbeddingEnabled(false);
-        ProcessingJobPlanner customPlanner = plannerWith(appProperties);
-
-        List<ProcessingJob.JobType> jobs = customPlanner.planJobs("image/png");
-
-        assertTrue(jobs.contains(ProcessingJob.JobType.CHECKSUM));
-        assertFalse(jobs.contains(ProcessingJob.JobType.PHASH));
-        assertFalse(jobs.contains(ProcessingJob.JobType.EMBEDDING));
-    }
-
-    @Test
-    void planJobs_VideoAnalysisDisabledSkipsVideoAnalysis() {
-        AppProperties appProperties = new AppProperties();
-        appProperties.getProcessing().getVideo().setAnalysisEnabled(false);
-        ProcessingJobPlanner customPlanner = plannerWith(appProperties);
-
-        List<ProcessingJob.JobType> jobs = customPlanner.planJobs("video/mp4");
-
-        assertTrue(jobs.contains(ProcessingJob.JobType.CHECKSUM));
-        assertFalse(jobs.contains(ProcessingJob.JobType.VIDEO_ANALYSIS));
-        assertTrue(jobs.contains(ProcessingJob.JobType.AUDIO_ANALYSIS));
-    }
-
-    @Test
-    void planJobs_VideoFramePhashDisabledStillCreatesVideoAnalysisForEmbedding() {
-        AppProperties appProperties = new AppProperties();
-        appProperties.getProcessing().getVideo().setFramePhashEnabled(false);
-        ProcessingJobPlanner customPlanner = plannerWith(appProperties);
-
-        List<ProcessingJob.JobType> jobs = customPlanner.planJobs("video/mp4");
-
-        assertTrue(jobs.contains(ProcessingJob.JobType.VIDEO_ANALYSIS));
-    }
-
-    @Test
-    void planJobs_VideoFrameEmbeddingDisabledStillCreatesVideoAnalysisForPhash() {
-        AppProperties appProperties = new AppProperties();
-        appProperties.getProcessing().getVideo().setFrameEmbeddingEnabled(false);
-        ProcessingJobPlanner customPlanner = plannerWith(appProperties);
-
-        List<ProcessingJob.JobType> jobs = customPlanner.planJobs("video/mp4");
-
-        assertTrue(jobs.contains(ProcessingJob.JobType.VIDEO_ANALYSIS));
-    }
-
-    @Test
-    void planJobs_VideoFrameSignalsDisabledSkipsVideoAnalysis() {
-        AppProperties appProperties = new AppProperties();
-        appProperties.getProcessing().getVideo().setFramePhashEnabled(false);
-        appProperties.getProcessing().getVideo().setFrameEmbeddingEnabled(false);
-        ProcessingJobPlanner customPlanner = plannerWith(appProperties);
-
-        List<ProcessingJob.JobType> jobs = customPlanner.planJobs("video/mp4");
-
-        assertTrue(jobs.contains(ProcessingJob.JobType.CHECKSUM));
-        assertFalse(jobs.contains(ProcessingJob.JobType.VIDEO_ANALYSIS));
-        assertTrue(jobs.contains(ProcessingJob.JobType.AUDIO_ANALYSIS));
-    }
-
-    @Test
-    void planJobs_VideoAudioAnalysisDisabledSkipsVideoAudioOnly() {
-        AppProperties appProperties = new AppProperties();
-        appProperties.getProcessing().getVideo().setAudioAnalysisEnabled(false);
-        ProcessingJobPlanner customPlanner = plannerWith(appProperties);
-
-        List<ProcessingJob.JobType> videoJobs = customPlanner.planJobs("video/mp4");
-        List<ProcessingJob.JobType> audioJobs = customPlanner.planJobs("audio/mpeg");
-
-        assertTrue(videoJobs.contains(ProcessingJob.JobType.VIDEO_ANALYSIS));
-        assertFalse(videoJobs.contains(ProcessingJob.JobType.AUDIO_ANALYSIS));
-        assertTrue(audioJobs.contains(ProcessingJob.JobType.AUDIO_ANALYSIS));
-    }
-
-    @Test
-    void planJobs_StandaloneAudioFingerprintDisabledSkipsAudioOnly() {
+    void planJobs_DisabledAudioFingerprintSkipsAudioAnalysis() {
         AppProperties appProperties = new AppProperties();
         appProperties.getProcessing().getAudio().setFingerprintEnabled(false);
-        ProcessingJobPlanner customPlanner = plannerWith(appProperties);
 
-        List<ProcessingJob.JobType> audioJobs = customPlanner.planJobs("audio/mpeg");
-        List<ProcessingJob.JobType> videoJobs = customPlanner.planJobs("video/mp4");
-
-        assertFalse(audioJobs.contains(ProcessingJob.JobType.AUDIO_ANALYSIS));
-        assertTrue(videoJobs.contains(ProcessingJob.JobType.AUDIO_ANALYSIS));
-    }
-
-    @Test
-    void processingPolicyResolver_UsesGlobalProcessingDefaults() {
-        AppProperties appProperties = new AppProperties();
-        appProperties.getProcessing().getVideo().setFrameEmbeddingEnabled(false);
-        GlobalProcessingPolicyResolver resolver = new GlobalProcessingPolicyResolver(appProperties);
-        ProcessingPolicyContext context = ProcessingPolicyContext.forMimeType("video/mp4");
-
-        assertTrue(resolver.isEnabled(ProcessingCapability.CHECKSUM, context));
-        assertFalse(resolver.isEnabled(ProcessingCapability.VIDEO_FRAME_EMBEDDING, context));
-    }
-
-    private static ProcessingJobPlanner plannerWithProcessableVideoMimeTypes(Set<String> processableVideoMimeTypes) {
-        AppProperties appProperties = new AppProperties();
-        appProperties.setProcessableVideoMimeTypes(processableVideoMimeTypes);
-
-        return plannerWith(appProperties);
-    }
-
-    private static ProcessingJobPlanner plannerWithProcessableAudioMimeTypes(Set<String> processableAudioMimeTypes) {
-        AppProperties appProperties = new AppProperties();
-        appProperties.setProcessableAudioMimeTypes(processableAudioMimeTypes);
-
-        return plannerWith(appProperties);
+        assertThat(plannerWith(appProperties).planJobs("audio/mpeg"))
+                .containsExactly(ProcessingJob.JobType.CHECKSUM);
     }
 
     private static ProcessingJobPlanner plannerWith(AppProperties appProperties) {
+        GlobalProcessingPolicyResolver resolver = new GlobalProcessingPolicyResolver(appProperties);
         return new ProcessingJobPlanner(List.of(
-                new ChecksumJobStrategy(new GlobalProcessingPolicyResolver(appProperties)),
-                new PhashJobStrategy(appProperties, new GlobalProcessingPolicyResolver(appProperties)),
-                new EmbeddingJobStrategy(appProperties, new GlobalProcessingPolicyResolver(appProperties)),
-                new VideoAnalysisJobStrategy(appProperties, new GlobalProcessingPolicyResolver(appProperties)),
-                new AudioAnalysisJobStrategy(appProperties, new GlobalProcessingPolicyResolver(appProperties))
+                new ChecksumJobStrategy(resolver),
+                new PhashJobStrategy(appProperties, resolver),
+                new EmbeddingJobStrategy(appProperties, resolver),
+                new AudioAnalysisJobStrategy(appProperties, resolver)
         ));
     }
 }

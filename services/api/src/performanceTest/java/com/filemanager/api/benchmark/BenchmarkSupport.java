@@ -42,6 +42,15 @@ final class BenchmarkSupport {
         }
     }
 
+    static String datasetFingerprint(int records, long seed, String duplicateDistribution) {
+        return sha256(SCHEMA_VERSION + ":" + records + ":" + seed + ":" + duplicateDistribution);
+    }
+
+    static String datasetId(int records, long seed, String duplicateDistribution) {
+        return duplicateDistribution + "-" + records + "-" + seed + "-"
+                + datasetFingerprint(records, seed, duplicateDistribution).substring(0, 12);
+    }
+
     static UUID id(long seed, String label) {
         return UUID.nameUUIDFromBytes((seed + ":" + label).getBytes(StandardCharsets.UTF_8));
     }

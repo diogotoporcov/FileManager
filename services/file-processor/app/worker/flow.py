@@ -123,14 +123,6 @@ class ProcessingFlow:
                     embedding_result["embedding"],
                 )
 
-            elif job_type == "VIDEO_ANALYSIS":
-                video_result = self._extract_video_analysis_result(result, processor.name)
-                await self.result_sink.report_video_analysis_success(
-                    event.processing_job_id,
-                    event.file_id,
-                    video_result,
-                )
-
             elif job_type == "AUDIO_ANALYSIS":
                 audio_result = self._extract_audio_analysis_result(result, processor.name)
                 await self.result_sink.report_audio_analysis_success(
@@ -207,109 +199,6 @@ class ProcessingFlow:
             "dimension": dimension,
             "embedding": [float(value) for value in embedding],
         }
-
-    @staticmethod
-    def _extract_video_analysis_result(result: ProcessorResult, processor_name: str) -> dict[str, JsonValue]:
-        required_keys = {
-            "durationMs",
-            "sampledFrameCount",
-            "samplingStrategy",
-            "frames",
-        }
-        missing = required_keys - result.keys()
-        if missing:
-            missing_keys = ", ".join(sorted(missing))
-            raise NonRetryableProcessingError(
-                f"Processor {processor_name} did not produce required video analysis output: {missing_keys}"
-            )
-
-        duration_ms = result["durationMs"]
-        sampled_frame_count = result["sampledFrameCount"]
-        sampling_strategy = result["samplingStrategy"]
-        model_name = result.get("modelName")
-        model_version = result.get("modelVersion")
-        dimension = result.get("dimension")
-        frames = result["frames"]
-
-        if not isinstance(duration_ms, int) or duration_ms <= 0:
-            raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid video duration")
-
-        if not isinstance(sampled_frame_count, int) or sampled_frame_count <= 0:
-            raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid sampled frame count")
-
-        if not isinstance(sampling_strategy, str) or not sampling_strategy.strip():
-            raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid sampling strategy")
-
-        if not isinstance(frames, list) or len(frames) != sampled_frame_count:
-            raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid video frame list")
-
-        normalized_frames: list[JsonValue] = []
-        has_embedding = any(
-            isinstance(frame, dict) and isinstance(frame.get("embedding"), list) and len(frame["embedding"]) > 0
-            for frame in frames
-        )
-        if has_embedding:
-            if not isinstance(model_name, str) or not model_name.strip():
-                raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid embedding model name")
-
-            if not isinstance(model_version, str) or not model_version.strip():
-                raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid embedding model version")
-
-            if not isinstance(dimension, int) or dimension <= 0:
-                raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid embedding dimension")
-
-        for frame in frames:
-            if not isinstance(frame, dict):
-                raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid video frame item")
-
-            timestamp_ms = frame.get("timestampMs")
-            frame_index = frame.get("frameIndex")
-            phash = frame.get("phash")
-            embedding = frame.get("embedding")
-
-            if not isinstance(timestamp_ms, int) or timestamp_ms < 0:
-                raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid video frame timestamp")
-
-            if not isinstance(frame_index, int) or frame_index < 0:
-                raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid video frame index")
-
-            if phash is None and embedding is None:
-                raise NonRetryableProcessingError(f"Processor {processor_name} produced video frame without signals")
-
-            normalized_frame: dict[str, JsonValue] = {
-                "timestampMs": timestamp_ms,
-                "frameIndex": frame_index,
-            }
-            if phash is not None:
-                if not isinstance(phash, str) or len(phash) != 16 or not all(c in "0123456789abcdef" for c in phash.lower()):
-                    raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid video frame pHash")
-                normalized_frame["phash"] = phash.lower()
-            if embedding is not None:
-                if not has_embedding or not isinstance(embedding, list) or len(embedding) != dimension:
-                    raise NonRetryableProcessingError(f"Processor {processor_name} produced invalid video frame embedding")
-
-                if not all(isinstance(value, (int, float)) and math.isfinite(float(value)) for value in embedding):
-                    raise NonRetryableProcessingError(f"Processor {processor_name} produced non-finite video embedding values")
-                normalized_frame["embedding"] = [float(value) for value in embedding]
-
-            normalized_frames.append(normalized_frame)
-
-        payload: dict[str, JsonValue] = {
-            "durationMs": duration_ms,
-            "width": ProcessingFlow._optional_positive_int(result.get("width"), processor_name, "video width"),
-            "height": ProcessingFlow._optional_positive_int(result.get("height"), processor_name, "video height"),
-            "frameCount": ProcessingFlow._optional_non_negative_int(result.get("frameCount"), processor_name, "frame count"),
-            "codec": ProcessingFlow._optional_string(result.get("codec")),
-            "sampledFrameCount": sampled_frame_count,
-            "samplingStrategy": sampling_strategy,
-            "frames": normalized_frames,
-        }
-        if has_embedding:
-            payload["modelName"] = model_name
-            payload["modelVersion"] = model_version
-            payload["dimension"] = dimension
-
-        return payload
 
     @staticmethod
     def _extract_audio_analysis_result(result: ProcessorResult, processor_name: str) -> dict[str, JsonValue]:

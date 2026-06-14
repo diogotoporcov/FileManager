@@ -18,9 +18,6 @@ final class BenchmarkDatasetPlan {
     final List<ImageFingerprintRow> imageFingerprints = new ArrayList<>();
     final List<FileEmbeddingRow> fileEmbeddings = new ArrayList<>();
     final List<AudioFingerprintRow> audioFingerprints = new ArrayList<>();
-    final List<VideoEmbeddingRow> videoEmbeddings = new ArrayList<>();
-    final List<DuplicateCandidateRow> duplicateCandidates = new ArrayList<>();
-    final List<DuplicateCandidateRefreshRow> duplicateCandidateRefreshes = new ArrayList<>();
     final List<FileGrantRow> fileGrants = new ArrayList<>();
     final List<FolderGrantRow> folderGrants = new ArrayList<>();
     final List<ProcessingJobRow> processingJobs = new ArrayList<>();
@@ -28,6 +25,9 @@ final class BenchmarkDatasetPlan {
     final Map<String, UUID> sources = new LinkedHashMap<>();
     final Map<String, String> hashes = new LinkedHashMap<>();
     private Map<String, Long> actualLoadedCounts = Map.of();
+    private BenchmarkRegistry registry;
+    private String datasetMode = "inline";
+    private String datasetPath;
     private long databaseBytes;
     private long indexBytes;
 
@@ -40,6 +40,26 @@ final class BenchmarkDatasetPlan {
         return actorUserId;
     }
 
+    int recordCount() {
+        return options.records();
+    }
+
+    long seed() {
+        return options.seed();
+    }
+
+    String duplicateDistribution() {
+        return options.duplicateDistribution();
+    }
+
+    String datasetId() {
+        return options.datasetId();
+    }
+
+    String configFingerprint() {
+        return options.datasetFingerprint();
+    }
+
     List<BenchmarkCase> cases() {
         return cases;
     }
@@ -50,6 +70,22 @@ final class BenchmarkDatasetPlan {
 
     String hash(String name) {
         return hashes.get(name);
+    }
+
+    BenchmarkRegistry registry() {
+        return registry;
+    }
+
+    void setRegistry(BenchmarkRegistry registry) {
+        this.registry = registry;
+    }
+
+    void setDatasetMode(String datasetMode) {
+        this.datasetMode = datasetMode;
+    }
+
+    void setDatasetPath(String datasetPath) {
+        this.datasetPath = datasetPath;
     }
 
     void setDatabaseBytes(long databaseBytes) {
@@ -75,9 +111,6 @@ final class BenchmarkDatasetPlan {
         counts.put("image_fingerprints", (long) imageFingerprints.size());
         counts.put("file_embeddings", (long) fileEmbeddings.size());
         counts.put("audio_fingerprints", (long) audioFingerprints.size());
-        counts.put("video_embeddings", (long) videoEmbeddings.size());
-        counts.put("duplicate_candidates", (long) duplicateCandidates.size());
-        counts.put("duplicate_candidate_refreshes", (long) duplicateCandidateRefreshes.size());
         counts.put("file_grants", (long) fileGrants.size());
         counts.put("folder_grants", (long) folderGrants.size());
         counts.put("processing_jobs", (long) processingJobs.size());
@@ -89,9 +122,17 @@ final class BenchmarkDatasetPlan {
         Map<String, Object> manifest = new LinkedHashMap<>();
 
         manifest.put("schemaVersion", BenchmarkSupport.SCHEMA_VERSION);
+        manifest.put("datasetId", options.datasetId());
+        manifest.put("datasetMode", datasetMode);
+        manifest.put("datasetPath", datasetPath);
+        manifest.put("configFingerprint", options.datasetFingerprint());
         manifest.put("seed", options.seed());
+        manifest.put("benchmarkScaleLabel", options.scaleLabel());
         manifest.put("recordCount", options.records());
+        manifest.put("duplicateDistribution", options.duplicateDistribution());
+        manifest.put("tableCounts", expectedTableCounts());
         manifest.put("actualLoadedTableCounts", actualLoadedCounts);
+        manifest.put("actualEvidenceTableCounts", actualEvidenceTableCounts());
         manifest.put("recordsByMimeFamily", recordsByMimeFamily());
         manifest.put("recordsByOwner", recordsByOwner());
 
@@ -99,31 +140,70 @@ final class BenchmarkDatasetPlan {
                 "EXACT", fileFingerprints.size(),
                 "IMAGE_PHASH", imageFingerprints.size(),
                 "IMAGE_EMBEDDING", fileEmbeddings.size(),
-                "AUDIO_FINGERPRINT", audioFingerprints.size(),
-                "VIDEO_EMBEDDING", videoEmbeddings.size()));
+                "AUDIO_FINGERPRINT", audioFingerprints.size()));
         manifest.put("readModelRows", Map.of(
-                "exact_duplicate_groups", exactDuplicateGroups.size(),
-                "duplicate_candidates", duplicateCandidates.size(),
-                "duplicate_candidate_refreshes", duplicateCandidateRefreshes.size()));
+                "exact_duplicate_groups", exactDuplicateGroups.size()));
 
         manifest.put("duplicateGroupsByMethod", Map.of(
-                "EXACT", 2,
-                "IMAGE_PHASH", 1,
-                "IMAGE_EMBEDDING", 1,
-                "AUDIO_FINGERPRINT", 2,
-                "VIDEO_EMBEDDING", 1));
+                "EXACT", 2));
 
         manifest.put("selectedBenchmarkSources", sources);
+        manifest.put("benchmarkRegistry", registry.toManifest());
+        manifest.put("sourceRegistrySampleSizes", sourceRegistrySampleSizes());
         manifest.put("expectedMatchesBySourceAndMethod", expectedMatchesBySourceAndMethod());
         manifest.put("deletedFiles", files.stream().filter(file -> file.deletedAt() != null).count());
         manifest.put("deletedFolders", folders.stream().filter(folder -> folder.deletedAt() != null).count());
-        manifest.put("foreignOwnerMatches", 5);
-        manifest.put("sharedForeignOwnerMatches", 1);
+        manifest.put("foreignOwnerMatches", 4);
+        manifest.put("sharedForeignOwnerMatches", 0);
         manifest.put("embeddingModels", Map.of(BenchmarkDatasetGenerator.MODEL_NAME, BenchmarkDatasetGenerator.MODEL_VERSION));
+        manifest.put("embeddingDimension", 768);
+        manifest.put("embeddingModelName", BenchmarkDatasetGenerator.MODEL_NAME);
+        manifest.put("embeddingModelVersion", BenchmarkDatasetGenerator.MODEL_VERSION);
+        manifest.put("audioFingerprintAlgorithm", "chromaprint");
+        manifest.put("audioFingerprintVersion", "fpcalc-v1");
         manifest.put("databaseBytes", databaseBytes);
         manifest.put("indexBytes", indexBytes);
 
         return manifest;
+    }
+
+    boolean activeFolder(UUID folderId) {
+        if (folderId == null) {
+            return true;
+        }
+
+        for (FolderRow folder : folders) {
+            if (folder.id().equals(folderId)) {
+                return folder.deletedAt() == null;
+            }
+        }
+
+        return true;
+    }
+
+    private Map<String, Long> actualEvidenceTableCounts() {
+        Map<String, Long> counts = new LinkedHashMap<>();
+
+        counts.put("files", actualLoadedCounts.getOrDefault("files", (long) files.size()));
+        counts.put("file_fingerprints", actualLoadedCounts.getOrDefault("file_fingerprints", (long) fileFingerprints.size()));
+        counts.put("image_fingerprints", actualLoadedCounts.getOrDefault("image_fingerprints", (long) imageFingerprints.size()));
+        counts.put("file_embeddings", actualLoadedCounts.getOrDefault("file_embeddings", (long) fileEmbeddings.size()));
+        counts.put("audio_fingerprints", actualLoadedCounts.getOrDefault("audio_fingerprints", (long) audioFingerprints.size()));
+        counts.put("exact_duplicate_groups", actualLoadedCounts.getOrDefault(
+                "exact_duplicate_groups",
+                (long) exactDuplicateGroups.size()));
+
+        return counts;
+    }
+
+    private Map<String, Integer> sourceRegistrySampleSizes() {
+        Map<String, Integer> sampleSizes = new LinkedHashMap<>();
+
+        for (BenchmarkRegistryOperation operation : registry.operations().values()) {
+            sampleSizes.put(operation.operation(), operation.sampleSize());
+        }
+
+        return sampleSizes;
     }
 
     private Map<String, Long> recordsByMimeFamily() {

@@ -5,7 +5,6 @@ import com.filemanager.api.processing.web.result.ChecksumResultRequest;
 import com.filemanager.api.processing.web.result.EmbeddingResultRequest;
 import com.filemanager.api.processing.web.result.PhashResultRequest;
 import com.filemanager.api.processing.web.result.ProcessingFailureRequest;
-import com.filemanager.api.processing.web.result.VideoAnalysisResultRequest;
 import com.filemanager.api.processing.application.ProcessingJobService;
 import io.swagger.v3.oas.annotations.Hidden;
 import jakarta.validation.Valid;
@@ -55,15 +54,6 @@ public class InternalProcessingController {
                 request.getModelVersion(),
                 request.getDimension(),
                 request.getEmbedding());
-
-        return ResponseEntity.ok().build();
-    }
-
-    @PostMapping("/{jobId}/video-analysis-result")
-    public ResponseEntity<Void> reportVideoAnalysisResult(
-            @PathVariable UUID jobId,
-            @RequestBody @Valid VideoAnalysisResultRequest request) {
-        processingJobService.handleVideoAnalysisResult(jobId, request);
 
         return ResponseEntity.ok().build();
     }

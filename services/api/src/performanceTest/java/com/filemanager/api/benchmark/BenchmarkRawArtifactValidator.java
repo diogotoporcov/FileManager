@@ -29,10 +29,13 @@ final class BenchmarkRawArtifactValidator {
         JsonNode correctness = readObject("correctness-results.json");
         JsonNode latency = readObject("repository-latency.json");
         JsonNode componentStatus = readObject("component-status.json");
-        readObject("dataset-manifest.json");
+        JsonNode datasetManifest = readObject("dataset-manifest.json");
+        JsonNode registry = readObject("benchmark-registry.json");
         readObject("setup-timings.json");
 
         validateEnvironment(environment);
+        validateDatasetManifest(datasetManifest);
+        validateRegistry(registry);
         validateCorrectness(correctness);
         validateLatency(latency);
         validateComponentStatus(componentStatus);
@@ -46,6 +49,34 @@ final class BenchmarkRawArtifactValidator {
         rejectPlaceholder("pgbench-summary.txt");
         rejectPlaceholder("pgbench-summary.json");
         rejectPlaceholder("resource-usage.json");
+    }
+
+    private void validateDatasetManifest(JsonNode datasetManifest) {
+        requireText(datasetManifest, "datasetId");
+        requireText(datasetManifest, "datasetMode");
+        requireText(datasetManifest, "configFingerprint");
+        requireText(datasetManifest, "duplicateDistribution");
+        requireInteger(datasetManifest, "recordCount");
+        requireNumber(datasetManifest, "seed");
+        requireObject(datasetManifest, "tableCounts");
+        requireObject(datasetManifest, "actualLoadedTableCounts");
+        requireObject(datasetManifest, "actualEvidenceTableCounts");
+        requireObject(datasetManifest, "sourceRegistrySampleSizes");
+    }
+
+    private void validateRegistry(JsonNode registry) {
+        requireText(registry, "datasetId");
+        requireText(registry, "configFingerprint");
+        requireText(registry, "duplicateDistribution");
+        requireInteger(registry, "records");
+        requireNumber(registry, "seed");
+        JsonNode operations = requireObject(registry, "operations");
+
+        for (JsonNode operation : operations) {
+            requireArray(operation, "sourceFileIds");
+            requireInteger(operation, "sampleSize");
+            requireText(operation, "evidenceTable");
+        }
     }
 
     private void validateEnvironment(JsonNode environment) {
@@ -110,11 +141,16 @@ final class BenchmarkRawArtifactValidator {
             String coldOrWarm = requireText(measurement, "coldOrWarm");
 
             requireInteger(measurement, "sampleCount");
+            requireInteger(measurement, "sourceSampleCount");
             requireInteger(measurement, "successCount");
             requireInteger(measurement, "failureCount");
             requireNumber(measurement, "p50Ms");
             requireNumber(measurement, "p95Ms");
             requireText(measurement, "standardDeviationMethod");
+            requireInteger(measurement, "resultCountMin");
+            requireInteger(measurement, "resultCountP50");
+            requireInteger(measurement, "resultCountP95");
+            requireInteger(measurement, "resultCountMax");
 
             String identity = operation + "\u0000" + scope + "\u0000" + coldOrWarm;
             if (!identities.add(identity)) {

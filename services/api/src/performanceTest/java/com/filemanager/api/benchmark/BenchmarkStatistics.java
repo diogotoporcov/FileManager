@@ -48,6 +48,24 @@ final class BenchmarkStatistics {
         this.standardDeviationMs = standardDeviationMs;
     }
 
+    static ResultCountStatistics resultCounts(List<BenchmarkSample> samples) {
+        List<Integer> successfulResultCounts = samples.stream()
+                .filter(BenchmarkSample::success)
+                .map(BenchmarkSample::resultCount)
+                .sorted()
+                .toList();
+
+        if (successfulResultCounts.isEmpty()) {
+            throw new IllegalArgumentException("Benchmark samples must contain at least one success");
+        }
+
+        return new ResultCountStatistics(
+                successfulResultCounts.getFirst(),
+                intPercentile(successfulResultCounts, 50),
+                intPercentile(successfulResultCounts, 95),
+                successfulResultCounts.getLast());
+    }
+
     static BenchmarkStatistics fromSamples(List<BenchmarkSample> samples) {
         if (samples.isEmpty()) {
             throw new IllegalArgumentException("Benchmark samples must not be empty");
@@ -108,6 +126,12 @@ final class BenchmarkStatistics {
         return sorted.get(Math.clamp(index, 0, sorted.size() - 1));
     }
 
+    private static int intPercentile(List<Integer> sorted, int percentile) {
+        int index = (int) Math.ceil((percentile / 100.0) * sorted.size()) - 1;
+
+        return sorted.get(Math.clamp(index, 0, sorted.size() - 1));
+    }
+
     int sampleCount() {
         return sampleCount;
     }
@@ -158,5 +182,11 @@ final class BenchmarkStatistics {
 
 }
 
-record BenchmarkSample(boolean success, double durationMs) {
+record ResultCountStatistics(int min, int p50, int p95, int max) {
+}
+
+record BenchmarkSample(boolean success, double durationMs, int resultCount) {
+    BenchmarkSample(boolean success, double durationMs) {
+        this(success, durationMs, 0);
+    }
 }

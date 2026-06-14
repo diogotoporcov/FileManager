@@ -16,7 +16,6 @@ class Settings(BaseSettings):
             "file.processing.checksum",
             "file.processing.image",
             "file.processing.audio",
-            "file.processing.video",
         ),
     )
     kafka_topic_dlq: NonBlankString = Field(default="file.processing.requested.dlq")
@@ -31,22 +30,6 @@ class Settings(BaseSettings):
     worker_image_phash_enabled: bool = True
     worker_image_embedding_enabled: bool = True
     worker_phash_max_image_bytes: int = Field(default=25 * 1024 * 1024, gt=0)
-    worker_video_enabled: bool = True
-    worker_video_analysis_enabled: bool = True
-    worker_video_frame_phash_enabled: bool = True
-    worker_video_frame_embedding_enabled: bool = True
-    worker_video_audio_analysis_enabled: bool = True
-    worker_video_max_file_bytes: int = Field(default=512 * 1024 * 1024, gt=0)
-    worker_video_max_duration_seconds: float = Field(default=30 * 60, gt=0)
-    worker_video_max_sampled_frames: int = Field(default=32, ge=1)
-    worker_video_min_sampled_frames: int = Field(default=4, ge=1)
-    worker_video_target_interval_seconds: float = Field(default=10.0, gt=0)
-    worker_video_frame_timeout_seconds: float = Field(default=15.0, gt=0)
-    worker_video_max_frame_bytes: int = Field(default=25 * 1024 * 1024, gt=0)
-    worker_video_supported_mime_types: NonBlankString = (
-        "video/mp4,video/webm,video/quicktime,video/x-msvideo,video/avi,video/matroska,"
-        "video/x-matroska,video/x-m4v,video/mpeg,video/MP2T,video/3gpp,video/3gpp2"
-    )
     worker_audio_enabled: bool = True
     worker_audio_fingerprint_enabled: bool = True
     worker_audio_supported_mime_types: NonBlankString = (

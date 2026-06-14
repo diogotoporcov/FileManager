@@ -120,7 +120,6 @@ def test_worker_topics_default_subscribes_to_all_workload_topics():
         "file.processing.checksum",
         "file.processing.image",
         "file.processing.audio",
-        "file.processing.video",
     )
 
 
@@ -130,10 +129,6 @@ def test_processing_capability_toggles_default_enabled():
     assert settings.worker_checksum_enabled is True
     assert settings.worker_image_phash_enabled is True
     assert settings.worker_image_embedding_enabled is True
-    assert settings.worker_video_analysis_enabled is True
-    assert settings.worker_video_frame_phash_enabled is True
-    assert settings.worker_video_frame_embedding_enabled is True
-    assert settings.worker_video_audio_analysis_enabled is True
     assert settings.worker_audio_fingerprint_enabled is True
 
 
@@ -141,10 +136,6 @@ def test_processing_capability_toggles_bind_from_environment(monkeypatch):
     monkeypatch.setenv("WORKER_CHECKSUM_ENABLED", "false")
     monkeypatch.setenv("WORKER_IMAGE_PHASH_ENABLED", "false")
     monkeypatch.setenv("WORKER_IMAGE_EMBEDDING_ENABLED", "false")
-    monkeypatch.setenv("WORKER_VIDEO_ANALYSIS_ENABLED", "false")
-    monkeypatch.setenv("WORKER_VIDEO_FRAME_PHASH_ENABLED", "false")
-    monkeypatch.setenv("WORKER_VIDEO_FRAME_EMBEDDING_ENABLED", "false")
-    monkeypatch.setenv("WORKER_VIDEO_AUDIO_ANALYSIS_ENABLED", "false")
     monkeypatch.setenv("WORKER_AUDIO_FINGERPRINT_ENABLED", "false")
 
     settings = Settings(internal_api_token="test-token-1234567890123456789012")
@@ -152,18 +143,14 @@ def test_processing_capability_toggles_bind_from_environment(monkeypatch):
     assert settings.worker_checksum_enabled is False
     assert settings.worker_image_phash_enabled is False
     assert settings.worker_image_embedding_enabled is False
-    assert settings.worker_video_analysis_enabled is False
-    assert settings.worker_video_frame_phash_enabled is False
-    assert settings.worker_video_frame_embedding_enabled is False
-    assert settings.worker_video_audio_analysis_enabled is False
     assert settings.worker_audio_fingerprint_enabled is False
 
 def test_worker_topics_accepts_one_topic(monkeypatch):
-    monkeypatch.setenv("WORKER_TOPICS", "file.processing.video")
+    monkeypatch.setenv("WORKER_TOPICS", "file.processing.audio")
 
     settings = Settings(internal_api_token="test-token-1234567890123456789012")
 
-    assert settings.worker_topics == ("file.processing.video",)
+    assert settings.worker_topics == ("file.processing.audio",)
 
 def test_worker_topics_accepts_multiple_topics(monkeypatch):
     monkeypatch.setenv("WORKER_TOPICS", "file.processing.checksum, file.processing.image")
@@ -224,37 +211,6 @@ def test_embedding_settings_validation():
         Settings(internal_api_token="test-token-1234567890123456789012", embedding_model_name="")
     with pytest.raises(ValidationError):
         Settings(internal_api_token="test-token-1234567890123456789012", triton_grpc_url="")
-
-def test_video_settings_validation():
-    settings = Settings(
-        internal_api_token="test-token-1234567890123456789012",
-        worker_video_enabled=True,
-        worker_video_max_file_bytes=1024,
-        worker_video_max_duration_seconds=60,
-        worker_video_max_sampled_frames=8,
-        worker_video_min_sampled_frames=2,
-        worker_video_target_interval_seconds=5,
-        worker_video_frame_timeout_seconds=2,
-        worker_video_max_frame_bytes=1024,
-        worker_video_supported_mime_types="video/mp4,video/webm",
-    )
-
-    assert settings.worker_video_supported_mime_types == "video/mp4,video/webm"
-
-    with pytest.raises(ValidationError):
-        Settings(internal_api_token="test-token-1234567890123456789012", worker_video_max_file_bytes=0)
-    with pytest.raises(ValidationError):
-        Settings(internal_api_token="test-token-1234567890123456789012", worker_video_max_duration_seconds=0)
-    with pytest.raises(ValidationError):
-        Settings(internal_api_token="test-token-1234567890123456789012", worker_video_max_sampled_frames=0)
-    with pytest.raises(ValidationError):
-        Settings(internal_api_token="test-token-1234567890123456789012", worker_video_min_sampled_frames=0)
-    with pytest.raises(ValidationError):
-        Settings(internal_api_token="test-token-1234567890123456789012", worker_video_target_interval_seconds=0)
-    with pytest.raises(ValidationError):
-        Settings(internal_api_token="test-token-1234567890123456789012", worker_video_frame_timeout_seconds=0)
-    with pytest.raises(ValidationError):
-        Settings(internal_api_token="test-token-1234567890123456789012", worker_video_supported_mime_types="")
 
 def test_audio_settings_validation():
     settings = Settings(

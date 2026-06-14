@@ -17,10 +17,48 @@ record BenchmarkOptions(
         String instrumentationMode,
         Path reportsDir,
         Path resultsDir,
+        Path datasetPath,
         String pythonExecutable,
         String pythonExecutableSource,
         String pythonFallbacksAttempted,
         Map<String, BenchmarkConfigurationResolver.ResolvedValue<?>> resolvedConfiguration) {
+
+    BenchmarkOptions(
+            int records,
+            long seed,
+            int warmupIterations,
+            int measuredIterations,
+            String concurrency,
+            String duplicateDistribution,
+            String benchmarkProfile,
+            BenchmarkProfileSupport.BaselineMetadata baselineMetadata,
+            String runId,
+            String instrumentationMode,
+            Path reportsDir,
+            Path resultsDir,
+            String pythonExecutable,
+            String pythonExecutableSource,
+            String pythonFallbacksAttempted,
+            Map<String, BenchmarkConfigurationResolver.ResolvedValue<?>> resolvedConfiguration) {
+        this(
+                records,
+                seed,
+                warmupIterations,
+                measuredIterations,
+                concurrency,
+                duplicateDistribution,
+                benchmarkProfile,
+                baselineMetadata,
+                runId,
+                instrumentationMode,
+                reportsDir,
+                resultsDir,
+                null,
+                pythonExecutable,
+                pythonExecutableSource,
+                pythonFallbacksAttempted,
+                resolvedConfiguration);
+    }
 
     static BenchmarkOptions fromSystemProperties() {
         BenchmarkOptions options = new BenchmarkConfigurationResolver().resolve();
@@ -62,6 +100,16 @@ record BenchmarkOptions(
             throw new IllegalArgumentException("benchmark.instrumentation-mode must be metrics or tracing");
         }
 
+        if (!Set.of(
+                "default",
+                "exact-heavy",
+                "image-phash-heavy",
+                "image-embedding-heavy",
+                "audio-fingerprint-heavy",
+                "mixed-image-audio-heavy").contains(duplicateDistribution)) {
+            throw new IllegalArgumentException("benchmark.duplicate-distribution is not supported: " + duplicateDistribution);
+        }
+
         BenchmarkProfileSupport.validateProfile(benchmarkProfile);
         BenchmarkProfileSupport.validateBaselineMetadata(benchmarkProfile, baselineMetadata);
 
@@ -76,5 +124,13 @@ record BenchmarkOptions(
         if (pythonExecutableSource == null || pythonExecutableSource.isBlank()) {
             throw new IllegalArgumentException("benchmark.python-executable.source is required");
         }
+    }
+
+    String datasetId() {
+        return BenchmarkSupport.datasetId(records, seed, duplicateDistribution);
+    }
+
+    String datasetFingerprint() {
+        return BenchmarkSupport.datasetFingerprint(records, seed, duplicateDistribution);
     }
 }

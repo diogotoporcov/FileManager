@@ -4,6 +4,5 @@ public enum DuplicateSearchMethod {
     EXACT,
     IMAGE_PHASH,
     IMAGE_EMBEDDING,
-    AUDIO_FINGERPRINT,
-    VIDEO_EMBEDDING
+    AUDIO_FINGERPRINT
 }

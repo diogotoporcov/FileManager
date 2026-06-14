@@ -34,6 +34,7 @@ final class BenchmarkDatasetGenerator {
         addDuplicateFixtures();
         addFillerRecords();
         addDuplicateReadModels();
+        dataset.setRegistry(BenchmarkRegistry.generate(options, dataset));
 
         return dataset;
     }
@@ -77,8 +78,6 @@ final class BenchmarkDatasetGenerator {
         addImagePhashFixtures();
         addImageEmbeddingFixtures();
         addAudioFixtures();
-        addVideoFixtures();
-        addProcessingFixture();
     }
 
     private void addExactFixtures() {
@@ -96,15 +95,6 @@ final class BenchmarkDatasetGenerator {
         for (FileRow file : List.of(source, match, deleted, inDeletedFolder, foreign, foreignShared)) {
             addExactFingerprint(file.id(), hash);
         }
-
-        dataset.fileGrants.add(new FileGrantRow(
-                id(options.seed(), "grant-foreign-shared-exact"),
-                foreignShared.id(),
-                actor,
-                "FILE_VIEW",
-                other,
-                CREATED_AT,
-                null));
 
         dataset.sources.put("exact-one-match", source.id());
         dataset.sources.put("foreign-shared-exact", foreignShared.id());
@@ -195,10 +185,9 @@ final class BenchmarkDatasetGenerator {
         String fingerprint = "audio-fixture-" + options.seed();
         FileRow source = addFile("audio-source", actor, null, "audio/mpeg", null);
         FileRow match = addFile("audio-match", actor, null, "audio/wav", null);
-        FileRow videoWithAudio = addFile("video-with-audio", actor, null, "video/mp4", null);
         FileRow foreign = addFile("audio-foreign", other, null, "audio/mpeg", null);
 
-        for (FileRow file : List.of(source, match, videoWithAudio, foreign)) {
+        for (FileRow file : List.of(source, match, foreign)) {
             addAudioFingerprint(file.id(), fingerprint, "chromaprint", "fpcalc-v1");
         }
 
@@ -221,69 +210,81 @@ final class BenchmarkDatasetGenerator {
         }
     }
 
-    private void addVideoFixtures() {
-        UUID actor = dataset.actorUserId();
-        UUID other = id(options.seed(), "user-1");
-        FileRow source = addFile("video-source", actor, null, "video/mp4", null);
-        FileRow inside = addFile("video-inside", actor, null, "video/mp4", null);
-        FileRow outside = addFile("video-outside", actor, null, "video/mp4", null);
-        FileRow foreign = addFile("video-foreign", other, null, "video/mp4", null);
-
-        addVideoEmbedding(source.id(), vectorAtDistance(0.0), MODEL_NAME, MODEL_VERSION);
-        addVideoEmbedding(inside.id(), vectorAtDistance(0.10), MODEL_NAME, MODEL_VERSION);
-        addVideoEmbedding(outside.id(), vectorAtDistance(0.21), MODEL_NAME, MODEL_VERSION);
-        addVideoEmbedding(foreign.id(), vectorAtDistance(0.0), MODEL_NAME, MODEL_VERSION);
-
-        dataset.sources.put("video-embedding-one-match", source.id());
-        dataset.cases.add(new BenchmarkCase(
-                "duplicate.search.VIDEO_EMBEDDING.one-match",
-                source.id(),
-                DuplicateSearchMethod.VIDEO_EMBEDDING,
-                null,
-                List.of(inside.id())));
-    }
-
-    private void addProcessingFixture() {
-        UUID actor = dataset.actorUserId();
-        FileRow file = addFile("processing-status", actor, null, "image/png", null);
-
-        dataset.sources.put("processing-status", file.id());
-
-        for (String jobType : List.of("CHECKSUM", "PHASH", "EMBEDDING")) {
-            dataset.processingJobs.add(new ProcessingJobRow(
-                    id(options.seed(), "processing-" + jobType),
-                    file.id(),
-                    jobType,
-                    "COMPLETED",
-                    null,
-                    null,
-                    CREATED_AT,
-                    CREATED_AT));
-        }
-    }
-
     private void addFillerRecords() {
         int index = 0;
 
         while (dataset.files.size() < options.records()) {
             UUID owner = index % 10 == 0 ? id(options.seed(), "user-1") : dataset.actorUserId();
-            String mimeType = switch (index % 10) {
-                case 0, 1 -> "image/png";
-                case 2, 3 -> "audio/mpeg";
-                case 4, 5 -> "video/mp4";
-                default -> "text/plain";
-            };
-            FileRow file = addFile("filler-" + index, owner, id(options.seed(), "folder-active"), mimeType, null);
-
-            addExactFingerprint(file.id(), sha256("filler-" + options.seed() + "-" + index));
+            FileRow file = addDistributionFile(index, owner);
+            addDistributionEvidence(index, file);
 
             index++;
         }
     }
 
+    private FileRow addDistributionFile(int index, UUID owner) {
+        String mimeType = switch (options.duplicateDistribution()) {
+            case "image-phash-heavy" -> "image/png";
+            case "image-embedding-heavy" -> "image/jpeg";
+            case "audio-fingerprint-heavy" -> "audio/mpeg";
+            case "mixed-image-audio-heavy" -> switch (index % 3) {
+                case 0 -> "image/png";
+                case 1 -> "image/jpeg";
+                default -> "audio/mpeg";
+            };
+            case "exact-heavy", "default" -> switch (index % 10) {
+                case 0, 1 -> "image/png";
+                case 2, 3 -> "audio/mpeg";
+                case 4, 5 -> "video/mp4";
+                default -> "text/plain";
+            };
+            default -> throw new IllegalArgumentException(
+                    "Unsupported duplicate distribution: " + options.duplicateDistribution());
+        };
+
+        return addFile("filler-" + index, owner, id(options.seed(), "folder-active"), mimeType, null);
+    }
+
+    private void addDistributionEvidence(int index, FileRow file) {
+        switch (options.duplicateDistribution()) {
+            case "image-phash-heavy" -> addImageFingerprint(file.id(), phashWithDistance(index % 64));
+            case "image-embedding-heavy" -> addFileEmbedding(
+                    file.id(),
+                    vectorAtDistance((index % 20) / 100.0),
+                    MODEL_NAME,
+                    MODEL_VERSION);
+            case "audio-fingerprint-heavy" -> addAudioFingerprint(
+                    file.id(),
+                    "audio-filler-" + options.seed() + "-" + (index / 2),
+                    "chromaprint",
+                    "fpcalc-v1");
+            case "mixed-image-audio-heavy" -> {
+                if ("image/png".equals(file.mimeType())) {
+                    addImageFingerprint(file.id(), phashWithDistance(index % 64));
+                } else if ("image/jpeg".equals(file.mimeType())) {
+                    addFileEmbedding(
+                            file.id(),
+                            vectorAtDistance((index % 20) / 100.0),
+                            MODEL_NAME,
+                            MODEL_VERSION);
+                } else {
+                    addAudioFingerprint(
+                            file.id(),
+                            "audio-filler-" + options.seed() + "-" + (index / 2),
+                            "chromaprint",
+                            "fpcalc-v1");
+                }
+            }
+            case "exact-heavy", "default" -> addExactFingerprint(
+                    file.id(),
+                    sha256("filler-" + options.seed() + "-" + index));
+            default -> throw new IllegalArgumentException(
+                    "Unsupported duplicate distribution: " + options.duplicateDistribution());
+        }
+    }
+
     private void addDuplicateReadModels() {
         addExactDuplicateGroups();
-        addNearDuplicateCandidates();
     }
 
     private void addExactDuplicateGroups() {
@@ -315,180 +316,6 @@ final class BenchmarkDatasetGenerator {
                     CREATED_AT,
                     CREATED_AT));
         });
-    }
-
-    private void addNearDuplicateCandidates() {
-        UUID actor = dataset.actorUserId();
-        addDuplicateCandidate(
-                actor,
-                dataset.source("image-phash-threshold"),
-                id(options.seed(), "file-image-phash-identical"),
-                "IMAGE_PHASH",
-                "NEAR_DUPLICATE",
-                0.0,
-                1.0,
-                "IMAGE_PHASH",
-                "none",
-                "none",
-                "maxDistance=10;topN=100");
-        addDuplicateCandidate(
-                actor,
-                dataset.source("image-phash-threshold"),
-                id(options.seed(), "file-image-phash-inside"),
-                "IMAGE_PHASH",
-                "NEAR_DUPLICATE",
-                5.0,
-                1.0 - 5.0 / 64.0,
-                "IMAGE_PHASH",
-                "none",
-                "none",
-                "maxDistance=10;topN=100");
-        addDuplicateCandidate(
-                actor,
-                dataset.source("image-phash-threshold"),
-                id(options.seed(), "file-image-phash-at-threshold"),
-                "IMAGE_PHASH",
-                "NEAR_DUPLICATE",
-                10.0,
-                1.0 - 10.0 / 64.0,
-                "IMAGE_PHASH",
-                "none",
-                "none",
-                "maxDistance=10;topN=100");
-        addDuplicateCandidateRefresh(
-                actor,
-                dataset.source("image-phash-threshold"),
-                "IMAGE_PHASH",
-                "none",
-                "none",
-                "maxDistance=10;topN=100",
-                3);
-        addDuplicateCandidate(
-                actor,
-                dataset.source("image-embedding-threshold"),
-                id(options.seed(), "file-image-embedding-inside"),
-                "IMAGE_EMBEDDING",
-                "NEAR_DUPLICATE",
-                0.10,
-                0.95,
-                "IMAGE_EMBEDDING",
-                MODEL_NAME,
-                MODEL_VERSION,
-                "maxDistance=0.200000");
-        addDuplicateCandidate(
-                actor,
-                dataset.source("image-embedding-threshold"),
-                id(options.seed(), "file-image-embedding-at-threshold"),
-                "IMAGE_EMBEDDING",
-                "NEAR_DUPLICATE",
-                0.20,
-                0.90,
-                "IMAGE_EMBEDDING",
-                MODEL_NAME,
-                MODEL_VERSION,
-                "maxDistance=0.200000");
-        addDuplicateCandidateRefresh(
-                actor,
-                dataset.source("image-embedding-threshold"),
-                "IMAGE_EMBEDDING",
-                MODEL_NAME,
-                MODEL_VERSION,
-                "maxDistance=0.200000",
-                2);
-        addDuplicateCandidate(
-                actor,
-                dataset.source("audio-one-match"),
-                id(options.seed(), "file-audio-match"),
-                "AUDIO_FINGERPRINT",
-                "EXACT",
-                0.0,
-                1.0,
-                "AUDIO_FINGERPRINT",
-                "none",
-                "none",
-                "topN=100");
-        addDuplicateCandidateRefresh(
-                actor,
-                dataset.source("audio-one-match"),
-                "AUDIO_FINGERPRINT",
-                "none",
-                "none",
-                "topN=100",
-                1);
-        addDuplicateCandidate(
-                actor,
-                dataset.source("video-embedding-one-match"),
-                id(options.seed(), "file-video-inside"),
-                "VIDEO_EMBEDDING",
-                "NEAR_DUPLICATE",
-                0.10,
-                0.95,
-                "VIDEO_EMBEDDING",
-                MODEL_NAME,
-                MODEL_VERSION,
-                "maxDistance=0.200000");
-        addDuplicateCandidateRefresh(
-                actor,
-                dataset.source("video-embedding-one-match"),
-                "VIDEO_EMBEDDING",
-                MODEL_NAME,
-                MODEL_VERSION,
-                "maxDistance=0.200000",
-                1);
-    }
-
-    private void addDuplicateCandidate(
-            UUID ownerUserId,
-            UUID firstFileId,
-            UUID secondFileId,
-            String method,
-            String confidence,
-            Double distance,
-            double score,
-            String evidenceType,
-            String modelName,
-            String modelVersion,
-            String thresholdVersion) {
-        UUID low = firstFileId.compareTo(secondFileId) < 0 ? firstFileId : secondFileId;
-        UUID high = firstFileId.compareTo(secondFileId) < 0 ? secondFileId : firstFileId;
-        dataset.duplicateCandidates.add(new DuplicateCandidateRow(
-                id(options.seed(), "duplicate-candidate-" + method + "-" + low + "-" + high),
-                ownerUserId,
-                low,
-                high,
-                method,
-                confidence,
-                distance,
-                score,
-                evidenceType,
-                modelName,
-                modelVersion,
-                thresholdVersion,
-                "ACTIVE",
-                CREATED_AT,
-                CREATED_AT));
-    }
-
-    private void addDuplicateCandidateRefresh(
-            UUID ownerUserId,
-            UUID sourceFileId,
-            String method,
-            String modelName,
-            String modelVersion,
-            String thresholdVersion,
-            int candidateCount) {
-        dataset.duplicateCandidateRefreshes.add(new DuplicateCandidateRefreshRow(
-                id(options.seed(), "duplicate-candidate-refresh-" + method + "-" + sourceFileId + "-" + thresholdVersion),
-                ownerUserId,
-                sourceFileId,
-                method,
-                modelName,
-                modelVersion,
-                thresholdVersion,
-                candidateCount,
-                CREATED_AT,
-                CREATED_AT,
-                CREATED_AT));
     }
 
     private Map<UUID, FileRow> filesById() {
@@ -569,20 +396,6 @@ final class BenchmarkDatasetGenerator {
                 modelVersion,
                 EMBEDDING_DIMENSION,
                 vectorLiteral(embedding),
-                CREATED_AT));
-    }
-
-    private void addVideoEmbedding(UUID fileId, float[] embedding, String modelName, String modelVersion) {
-        dataset.videoEmbeddings.add(new VideoEmbeddingRow(
-                id(options.seed(), "video-embedding-" + fileId + modelVersion),
-                fileId,
-                modelName,
-                modelVersion,
-                EMBEDDING_DIMENSION,
-                vectorLiteral(embedding),
-                "mean",
-                10,
-                CREATED_AT,
                 CREATED_AT));
     }
 
