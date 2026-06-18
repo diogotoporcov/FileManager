@@ -8,6 +8,8 @@ import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
 import jakarta.validation.ValidatorFactory;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Set;
@@ -16,6 +18,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.context.properties.bind.Bindable;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.boot.context.properties.source.MapConfigurationPropertySource;
+import org.springframework.core.io.ClassPathResource;
 
 class ConfigurationValidationTest {
     private Validator validator;
@@ -43,6 +46,27 @@ class ConfigurationValidationTest {
         MinioProperties properties = new MinioProperties();
 
         assertThat(validator.validate(properties)).hasSize(4);
+    }
+
+    @Test
+    void applicationYaml_RequiredSecretPlaceholdersDoNotUseBlankFallbacks() throws IOException {
+        String applicationYaml = new ClassPathResource("application.yml")
+                .getContentAsString(StandardCharsets.UTF_8);
+
+        assertThat(applicationYaml).contains(
+                "username: ${POSTGRES_USER}",
+                "password: ${POSTGRES_PASSWORD}",
+                "api-token: ${INTERNAL_API_TOKEN}",
+                "access-key: ${MINIO_ROOT_USER}",
+                "secret-key: ${MINIO_ROOT_PASSWORD}"
+        );
+        assertThat(applicationYaml).doesNotContain(
+                "${POSTGRES_USER:}",
+                "${POSTGRES_PASSWORD:}",
+                "${INTERNAL_API_TOKEN:}",
+                "${MINIO_ROOT_USER:}",
+                "${MINIO_ROOT_PASSWORD:}"
+        );
     }
 
     @Test

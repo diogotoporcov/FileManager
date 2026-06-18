@@ -9,7 +9,7 @@ WorkerTopics = Annotated[tuple[NonBlankString, ...], NoDecode]
 
 
 class Settings(BaseSettings):
-    # Kafka/Redpanda
+    # Kafka
     kafka_bootstrap_servers: NonBlankString = Field(default=...)
     worker_topics: WorkerTopics = Field(
         default=(

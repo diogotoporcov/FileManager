@@ -5,14 +5,14 @@ services:
     image: ${POSTGRES_IMAGE:-pgvector/pgvector:pg18}
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-filemanager}
-      POSTGRES_USER: ${POSTGRES_USER:-filemanager}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
     ports:
       - "${PORT_POSTGRES:-5432}:5432"
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      - postgres-data:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-filemanager} -d $${POSTGRES_DB:-filemanager}"]
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB:-filemanager}\""]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -24,8 +24,8 @@ services:
     image: ${MINIO_IMAGE:-minio/minio:RELEASE.2025-09-07T16-13-09Z}
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-admin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
     ports:
       - "${PORT_MINIO:-9000}:9000"
       - "${PORT_MINIO_CONSOLE:-9001}:9001"
@@ -46,8 +46,8 @@ services:
       minio:
         condition: service_healthy
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-admin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
       MINIO_BUCKET_NAME: ${MINIO_BUCKET_NAME:-filemanager}
     entrypoint:
       - /bin/sh
@@ -59,31 +59,33 @@ services:
       - filemanager-network
     restart: "no"
 
-  redpanda:
-    image: ${REDPANDA_IMAGE:-docker.redpanda.com/redpandadata/redpanda:v25.3.11}
-    command:
-      - redpanda
-      - start
-      - --overprovisioned
-      - --smp
-      - "1"
-      - --memory
-      - "1G"
-      - --reserve-memory
-      - "0M"
-      - --node-id
-      - "0"
-      - --check=false
-      - --kafka-addr
-      - PLAINTEXT://0.0.0.0:29092,OUTSIDE://0.0.0.0:9092
-      - --advertise-kafka-addr
-      - PLAINTEXT://redpanda:29092,OUTSIDE://localhost:${PORT_REDPANDA:-9092}
+  kafka:
+    image: ${KAFKA_IMAGE:-apache/kafka:4.3.0}
+    hostname: kafka
     ports:
-      - "${PORT_REDPANDA:-9092}:9092"
+      - "${PORT_KAFKA:-9092}:9092"
+    environment:
+      CLUSTER_ID: ${KAFKA_CLUSTER_ID:?KAFKA_CLUSTER_ID is required}
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
+      KAFKA_LISTENERS: CONTROLLER://:29093,PLAINTEXT://:19092,PLAINTEXT_HOST://:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:19092,PLAINTEXT_HOST://localhost:${PORT_KAFKA:-9092}
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_SHARE_COORDINATOR_STATE_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_SHARE_COORDINATOR_STATE_TOPIC_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
     volumes:
-      - redpanda-data:/var/lib/redpanda/data
+      - kafka-data:/var/lib/kafka/data
     healthcheck:
-      test: ["CMD-SHELL", "rpk cluster info -X brokers=localhost:29092 >/dev/null"]
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null"]
       interval: 10s
       timeout: 5s
       retries: 12
@@ -91,12 +93,42 @@ services:
       - filemanager-network
     restart: unless-stopped
 
+  kafka-init:
+    image: ${KAFKA_IMAGE:-apache/kafka:4.3.0}
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:19092
+      KAFKA_TOPIC_PARTITIONS: ${KAFKA_TOPIC_PARTITIONS:-3}
+      FILE_PROCESSING_CHECKSUM_TOPIC: ${FILE_PROCESSING_CHECKSUM_TOPIC:-file.processing.checksum}
+      FILE_PROCESSING_IMAGE_TOPIC: ${FILE_PROCESSING_IMAGE_TOPIC:-file.processing.image}
+      FILE_PROCESSING_AUDIO_TOPIC: ${FILE_PROCESSING_AUDIO_TOPIC:-file.processing.audio}
+      KAFKA_TOPIC_DLQ: ${KAFKA_TOPIC_DLQ:-file.processing.requested.dlq}
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -eu
+        for topic in "$${FILE_PROCESSING_CHECKSUM_TOPIC}" "$${FILE_PROCESSING_IMAGE_TOPIC}" "$${FILE_PROCESSING_AUDIO_TOPIC}" "$${KAFKA_TOPIC_DLQ}"; do
+          /opt/kafka/bin/kafka-topics.sh \
+            --bootstrap-server "$${KAFKA_BOOTSTRAP_SERVERS}" \
+            --create \
+            --if-not-exists \
+            --topic "$${topic}" \
+            --partitions "$${KAFKA_TOPIC_PARTITIONS}" \
+            --replication-factor 1
+        done
+    networks:
+      - filemanager-network
+    restart: "no"
+
   keycloak:
     image: ${KEYCLOAK_IMAGE:-quay.io/keycloak/keycloak:26.4}
     command: start-dev --health-enabled=true
     environment:
-      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
-      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:?KEYCLOAK_ADMIN is required}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?KEYCLOAK_ADMIN_PASSWORD is required}
       KC_HEALTH_ENABLED: "true"
     ports:
       - "${PORT_KEYCLOAK:-8082}:8080"
@@ -122,16 +154,16 @@ services:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       POSTGRES_DB: ${POSTGRES_DB:-filemanager}
-      POSTGRES_USER: ${POSTGRES_USER:-filemanager}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       MINIO_ENDPOINT: http://minio:9000
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-admin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
       MINIO_BUCKET_NAME: ${MINIO_BUCKET_NAME:-filemanager}
-      KAFKA_BOOTSTRAP_SERVERS: redpanda:29092
+      KAFKA_BOOTSTRAP_SERVERS: kafka:19092
       KEYCLOAK_ISSUER_URI: ${KEYCLOAK_ISSUER_URI:-http://keycloak:8080/realms/filemanager}
       AUTH_REQUIRED_AUDIENCES: ${AUTH_REQUIRED_AUDIENCES:-filemanager-api}
-      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN}
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:?INTERNAL_API_TOKEN is required}
       PROCESSING_IMAGE_EMBEDDING_ENABLED: ${PROCESSING_IMAGE_EMBEDDING_ENABLED:-false}
       DUPLICATE_DETECTION_IMAGE_EMBEDDING_ENABLED: ${DUPLICATE_DETECTION_IMAGE_EMBEDDING_ENABLED:-false}
       SPRING_JPA_SHOW_SQL: ${SPRING_JPA_SHOW_SQL:-false}
@@ -143,8 +175,8 @@ services:
         condition: service_healthy
       minio-init:
         condition: service_completed_successfully
-      redpanda:
-        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
       keycloak:
         condition: service_healthy
     healthcheck:
@@ -192,16 +224,16 @@ services:
       - worker
     environment:
       WORKER_CONSUMER_ENABLED: ${WORKER_CONSUMER_ENABLED:-true}
-      KAFKA_BOOTSTRAP_SERVERS: redpanda:29092
+      KAFKA_BOOTSTRAP_SERVERS: kafka:19092
       WORKER_TOPICS: ${WORKER_TOPICS:-file.processing.checksum,file.processing.image,file.processing.audio}
       KAFKA_TOPIC_DLQ: ${KAFKA_TOPIC_DLQ:-file.processing.requested.dlq}
       KAFKA_CONSUMER_GROUP_ID: ${KAFKA_CONSUMER_GROUP_ID:-filemanager-worker-group}
       S3_ENDPOINT: http://minio:9000
-      S3_ACCESS_KEY: ${MINIO_ROOT_USER:-admin}
-      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
       S3_BUCKET_NAME: ${MINIO_BUCKET_NAME:-filemanager}
       METADATA_API_BASE_URL: http://api:8081
-      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN}
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:?INTERNAL_API_TOKEN is required}
       WORKER_IMAGE_EMBEDDING_ENABLED: ${WORKER_IMAGE_EMBEDDING_ENABLED:-false}
       EMBEDDING_PROCESSOR_ENABLED: ${EMBEDDING_PROCESSOR_ENABLED:-false}
       TRITON_GRPC_URL: embedding-inference:8001
@@ -214,8 +246,8 @@ services:
         condition: service_healthy
       minio-init:
         condition: service_completed_successfully
-      redpanda:
-        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8080/health >/dev/null"]
       interval: 10s
@@ -262,5 +294,5 @@ networks:
 volumes:
   postgres-data:
   minio-data:
-  redpanda-data:
+  kafka-data:
   keycloak-data:
