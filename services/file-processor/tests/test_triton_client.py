@@ -16,7 +16,7 @@ from app.embeddings.triton import (
     _normalize_triton_grpc_url,
 )
 
-FakeInferCallValue: TypeAlias = str | Sequence[TritonInferInput] | Sequence[TritonInferRequestedOutput]
+FakeInferCallValue: TypeAlias = str | float | None | Sequence[TritonInferInput] | Sequence[TritonInferRequestedOutput]
 
 
 class FakeInferInput:
@@ -56,6 +56,7 @@ class FakeInferenceServerClient:
         inputs: Sequence[TritonInferInput],
         model_version: str,
         outputs: Sequence[TritonInferRequestedOutput],
+        client_timeout: float | None = None,
     ) -> FakeResponse:
         self.infer_calls.append(
             {
@@ -63,6 +64,7 @@ class FakeInferenceServerClient:
                 "inputs": inputs,
                 "model_version": model_version,
                 "outputs": outputs,
+                "client_timeout": client_timeout,
             }
         )
 
@@ -106,6 +108,7 @@ def make_client(fake_server: FakeInferenceServerClient) -> ClientFixture:
         model_version="1",
         input_tensor_name="pixel_values",
         output_tensor_name="image_embeds",
+        inference_timeout_seconds=7.5,
     )
     client._grpcclient = FakeGrpcClientModule(create_server)
 
@@ -132,6 +135,7 @@ async def test_embed_image_sends_expected_triton_request():
     call = fake_server.infer_calls[0]
     assert call["model_name"] == "image_embedding"
     assert call["model_version"] == "1"
+    assert call["client_timeout"] == 7.5
 
     inputs = call["inputs"]
     assert isinstance(inputs, Sequence)

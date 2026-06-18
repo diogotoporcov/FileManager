@@ -86,6 +86,7 @@ class FileServiceTest {
     private ExactDuplicateGroupMaintenanceService exactDuplicateGroupMaintenanceService;
 
     private FileService fileService;
+    private AppProperties appProperties;
     private FileTransferProperties fileTransferProperties;
     private User user;
     private UUID userId;
@@ -95,6 +96,7 @@ class FileServiceTest {
         userId = UUID.randomUUID();
         user = User.builder().id(userId).email("user@example.com").build();
         FileSortMapper fileSortMapper = new FileSortMapper();
+        appProperties = new AppProperties();
         fileTransferProperties = new FileTransferProperties();
         fileService = new FileService(
                 fileRepository,
@@ -107,7 +109,7 @@ class FileServiceTest {
                 applicationEventPublisher,
                 accessControlService,
                 fileManagerMetrics,
-                new AppProperties(),
+                appProperties,
                 fileTransferProperties,
                 new FileSearchCriteriaMapper(fileSortMapper),
                 new FileSearchSpecificationBuilder(),
@@ -120,6 +122,7 @@ class FileServiceTest {
     @Test
     void uploadFileUsesAuthenticatedUserAsOwnerAndPublishesProcessingEvent() throws Exception {
         when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(userRepository.findByIdForUpdate(userId)).thenReturn(Optional.of(user));
         when(fileRepository.save(any(FileEntity.class))).thenAnswer(invocation -> {
             FileEntity file = invocation.getArgument(0);
             file.setId(UUID.randomUUID());
@@ -158,6 +161,7 @@ class FileServiceTest {
     @Test
     void uploadFilePlansMultipleJobs() throws Exception {
         when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(userRepository.findByIdForUpdate(userId)).thenReturn(Optional.of(user));
         when(fileRepository.save(any(FileEntity.class))).thenAnswer(invocation -> {
             FileEntity file = invocation.getArgument(0);
             file.setId(UUID.randomUUID());
@@ -185,6 +189,7 @@ class FileServiceTest {
         User folderOwner = User.builder().id(UUID.randomUUID()).email("owner@example.com").build();
         FolderEntity folder = FolderEntity.builder().id(folderId).ownerUser(folderOwner).build();
         when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(userRepository.findByIdForUpdate(userId)).thenReturn(Optional.of(user));
         when(folderRepository.findByIdAndDeletedAtIsNull(folderId)).thenReturn(Optional.of(folder));
         when(fileRepository.save(any(FileEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(objectStoragePort.putObject(any())).thenReturn(StoreObjectResponse.builder().etag("etag").build());
@@ -205,6 +210,7 @@ class FileServiceTest {
     @Test
     void uploadFileNormalizesFilenameAndContentType() throws Exception {
         when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(userRepository.findByIdForUpdate(userId)).thenReturn(Optional.of(user));
         when(fileRepository.save(any(FileEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(objectStoragePort.putObject(any())).thenReturn(StoreObjectResponse.builder().etag("etag").build());
         when(processingJobPlanner.planJobs(any(ProcessingPolicyContext.class))).thenReturn(List.of());
@@ -217,6 +223,23 @@ class FileServiceTest {
         verify(fileRepository).save(fileCaptor.capture());
         assertEquals("report.txt", fileCaptor.getValue().getName());
         assertEquals(FileTransferPolicy.DEFAULT_CONTENT_TYPE, fileCaptor.getValue().getMimeType());
+    }
+
+    @Test
+    void uploadFileCleansStorageObjectWhenLockedQuotaCheckFails() throws Exception {
+        appProperties.getQuota().setUserBytes(10);
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(userRepository.findByIdForUpdate(userId)).thenReturn(Optional.of(user));
+        when(fileRepository.sumActiveSizeByOwnerUser(user)).thenReturn(9L);
+        when(objectStoragePort.putObject(any())).thenReturn(StoreObjectResponse.builder().etag("etag").build());
+
+        try (ByteArrayInputStream content = new ByteArrayInputStream("ab".getBytes())) {
+            assertThrows(IllegalStateException.class, () -> fileService.uploadFile("test.txt", "text/plain", 2L, content, userId));
+        }
+
+        verify(objectStoragePort).deleteObject(org.mockito.ArgumentMatchers.anyString());
+        verify(fileRepository, never()).save(any(FileEntity.class));
+        verify(processingJobRepository, never()).save(any(ProcessingJob.class));
     }
 
     @Test

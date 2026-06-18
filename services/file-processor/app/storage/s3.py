@@ -3,6 +3,7 @@ from collections.abc import AsyncIterator
 from typing import Protocol
 
 import boto3
+from botocore.config import Config
 
 from app.config import settings
 from app.storage.base import StorageObjectReader, StorageObjectReference
@@ -23,6 +24,10 @@ class S3ObjectStorageReader(StorageObjectReader):
             endpoint_url=str(settings.s3_endpoint),
             aws_access_key_id=settings.s3_access_key,
             aws_secret_access_key=settings.s3_secret_key,
+            config=Config(
+                connect_timeout=settings.s3_connect_timeout_seconds,
+                read_timeout=settings.s3_read_timeout_seconds,
+            ),
         )
         self.bucket_name = settings.s3_bucket_name
 

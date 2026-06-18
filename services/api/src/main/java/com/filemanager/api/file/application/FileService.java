@@ -105,7 +105,6 @@ public class FileService {
         if (folderId == null) {
             accessControlService.assertCanUploadToOwner(actorUserId, actorUserId);
         }
-        enforceUserQuota(ownerUser, size);
 
         String effectiveContentType = FileTransferPolicy.safeContentType(contentType);
         String storagePath = UUID.randomUUID().toString();
@@ -118,15 +117,18 @@ public class FileService {
                 .build());
 
         try {
+            User lockedOwnerUser = lockUser(ownerUser.getId());
+            enforceUserQuota(lockedOwnerUser, size);
+
             FileEntity fileEntity = FileEntity.builder()
                     .name(normalizedFileName)
                     .storagePath(storagePath)
                     .etag(response.getEtag())
                     .mimeType(effectiveContentType)
                     .size(size)
-                    .ownerUser(ownerUser)
+                    .ownerUser(lockedOwnerUser)
                     .folder(folder)
-                    .createdByUser(ownerUser)
+                    .createdByUser(lockedOwnerUser)
                     .build();
 
             FileEntity savedFile = fileRepository.save(fileEntity);
@@ -232,6 +234,11 @@ public class FileService {
 
     private User findUser(UUID userId) {
         return userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
+    }
+
+    private User lockUser(UUID userId) {
+        return userRepository.findByIdForUpdate(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
     }
 

@@ -62,6 +62,7 @@ class Settings(BaseSettings):
     triton_model_version: NonBlankString = "1"
     triton_input_tensor_name: NonBlankString = "pixel_values"
     triton_output_tensor_name: NonBlankString = "image_embeds"
+    triton_inference_timeout_seconds: float = Field(default=10.0, gt=0)
 
     # MinIO/S3
     s3_endpoint: AnyHttpUrl = Field(  # type: ignore
@@ -80,9 +81,12 @@ class Settings(BaseSettings):
         default="filemanager",
         validation_alias=AliasChoices("s3_bucket_name", "MINIO_BUCKET_NAME"),
     )
+    s3_connect_timeout_seconds: float = Field(default=5.0, gt=0)
+    s3_read_timeout_seconds: float = Field(default=60.0, gt=0)
 
     # API
     metadata_api_base_url: AnyHttpUrl = Field(default="http://localhost:8081")  # type: ignore
+    metadata_api_timeout_seconds: float = Field(default=10.0, gt=0)
     internal_api_token: InternalApiToken = Field(
         default=...,
         validation_alias=AliasChoices("internal_api_token", "INTERNAL_API_TOKEN"),

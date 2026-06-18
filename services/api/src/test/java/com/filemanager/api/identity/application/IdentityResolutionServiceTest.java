@@ -106,7 +106,7 @@ class IdentityResolutionServiceTest {
         String subject = "sub-123";
         String email = "new@example.com";
         Jwt jwt = mock(Jwt.class);
-        when(identityProviderPort.extractIdentity(jwt)).thenReturn(identity(subject, email, "First", "Last", null));
+        when(identityProviderPort.extractIdentity(jwt)).thenReturn(identity(subject, email, "First", "Last", true));
 
         when(userIdentityRepository.findByProviderAndProviderSubject("keycloak", subject))
                 .thenReturn(Optional.empty());
@@ -151,18 +151,52 @@ class IdentityResolutionServiceTest {
         Jwt jwt = mock(Jwt.class);
         when(identityProviderPort.extractIdentity(jwt)).thenReturn(identity(subject, email, null, null, false));
 
-        User user = User.builder().id(UUID.randomUUID()).email(email).build();
-
         when(userIdentityRepository.findByProviderAndProviderSubject("keycloak", subject))
                 .thenReturn(Optional.empty());
-        when(userRepository.findByEmail(email)).thenReturn(Optional.of(user));
 
         appProperties.getAuth().setAutoLinkExistingUsers(true);
         appProperties.getAuth().getTrustedAutoLinkProviders().add("keycloak");
 
         assertThatThrownBy(() -> identityResolutionService.resolveUser(jwt))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("Cannot link identity to existing user with unverified email");
+                .hasMessageContaining("Cannot provision identity with unverified email");
+    }
+
+    @Test
+    void resolveUser_UnverifiedEmailForNewUser_ThrowsExceptionByDefault() {
+        String subject = "sub-123";
+        String email = "new@example.com";
+        Jwt jwt = mock(Jwt.class);
+        when(identityProviderPort.extractIdentity(jwt)).thenReturn(identity(subject, email, "First", "Last", false));
+
+        when(userIdentityRepository.findByProviderAndProviderSubject("keycloak", subject))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> identityResolutionService.resolveUser(jwt))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Cannot provision identity with unverified email");
+        verify(userRepository, never()).save(any(User.class));
+        verify(userIdentityRepository, never()).save(any(UserIdentity.class));
+    }
+
+    @Test
+    void resolveUser_UnverifiedEmailForNewUser_CanBeAllowedExplicitly() {
+        appProperties.getAuth().setRequireVerifiedEmail(false);
+        String subject = "sub-123";
+        String email = "new@example.com";
+        Jwt jwt = mock(Jwt.class);
+        when(identityProviderPort.extractIdentity(jwt)).thenReturn(identity(subject, email, "First", "Last", false));
+
+        when(userIdentityRepository.findByProviderAndProviderSubject("keycloak", subject))
+                .thenReturn(Optional.empty());
+        when(userRepository.findByEmail(email)).thenReturn(Optional.empty());
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        User result = identityResolutionService.resolveUser(jwt);
+
+        assertThat(result.getEmail()).isEqualTo(email);
+        verify(userRepository).save(any(User.class));
+        verify(userIdentityRepository).save(any(UserIdentity.class));
     }
 
     @Test

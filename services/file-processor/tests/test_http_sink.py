@@ -151,7 +151,7 @@ async def test_reuses_http_client_between_reports():
         await sink.report_phash_success(job_id, file_id, phash)
         await sink.close()
 
-    client_factory.assert_called_once()
+    client_factory.assert_called_once_with(timeout=10.0)
     assert mock_client.post.await_count == 2
     mock_client.aclose.assert_awaited_once()
 

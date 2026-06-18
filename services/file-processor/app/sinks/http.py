@@ -27,7 +27,7 @@ class HttpProcessingResultSink(ProcessingResultSink):
         client = self._client
 
         if client is None:
-            client = httpx.AsyncClient()
+            client = httpx.AsyncClient(timeout=settings.metadata_api_timeout_seconds)
             self._client = client
 
         return client

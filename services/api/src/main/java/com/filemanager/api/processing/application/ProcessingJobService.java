@@ -35,6 +35,9 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 @Slf4j
 public class ProcessingJobService {
+    private static final int MAX_ERROR_MESSAGE_LENGTH = 1024;
+    private static final String DEFAULT_ERROR_MESSAGE = "Processing failed";
+
     private final ProcessingJobRepository processingJobRepository;
     private final FileRepository fileRepository;
     private final FileFingerprintRepository fileFingerprintRepository;
@@ -57,8 +60,6 @@ public class ProcessingJobService {
 
     @Transactional
     public void handleProcessingFailure(UUID jobId, UUID fileId, String errorMessage) {
-        log.info("Handling processing failure for job {} (file {}): {}", jobId, fileId, errorMessage);
-
         ProcessingJob job = processingJobRepository.findById(jobId)
                 .orElseThrow(() -> new ResourceNotFoundException("Processing job not found: " + jobId));
 
@@ -66,8 +67,22 @@ public class ProcessingJobService {
             throw new IllegalArgumentException("Job file ID mismatch");
         }
 
+        if (job.getStatus() == ProcessingJob.JobStatus.COMPLETED) {
+            log.info("Ignoring failure callback for already completed job {}", jobId);
+            return;
+        }
+
+        String safeErrorMessage = safeErrorMessage(errorMessage);
+        log.info("Handling processing failure for job {} (file {}): {}", jobId, fileId, safeErrorMessage);
+
+        if (job.getStatus() == ProcessingJob.JobStatus.FAILED) {
+            job.setErrorMessage(safeErrorMessage);
+            processingJobRepository.save(job);
+            return;
+        }
+
         job.setStatus(ProcessingJob.JobStatus.FAILED);
-        job.setErrorMessage(errorMessage);
+        job.setErrorMessage(safeErrorMessage);
         processingJobRepository.save(job);
 
         fileManagerMetrics.recordJobFailed(job.getJobType().name());
@@ -81,6 +96,9 @@ public class ProcessingJobService {
         String normalizedSha256 = sha256.toLowerCase(Locale.ROOT);
 
         ProcessingJob job = getAndValidateJob(jobId, fileId, ProcessingJob.JobType.CHECKSUM);
+        if (shouldIgnoreSuccessfulTerminalCallback(job)) {
+            return;
+        }
         FileEntity file = getActiveFile(fileId);
 
         String oldHashValue = updateFileFingerprint(file, normalizedSha256);
@@ -99,6 +117,9 @@ public class ProcessingJobService {
         String normalizedPhash = PhashMih.normalize(phash);
 
         ProcessingJob job = getAndValidateJob(jobId, fileId, ProcessingJob.JobType.PHASH);
+        if (shouldIgnoreSuccessfulTerminalCallback(job)) {
+            return;
+        }
         FileEntity file = getActiveFile(fileId);
 
         updateImageFingerprint(file, normalizedPhash);
@@ -119,6 +140,9 @@ public class ProcessingJobService {
         validateEmbeddingRequest(modelName, modelVersion, dimension, embedding, embeddingProperties);
 
         ProcessingJob job = getAndValidateJob(jobId, fileId, ProcessingJob.JobType.EMBEDDING);
+        if (shouldIgnoreSuccessfulTerminalCallback(job)) {
+            return;
+        }
         FileEntity file = getActiveFile(fileId);
 
         float[] normalizedEmbedding = normalizeEmbedding(embedding);
@@ -136,6 +160,9 @@ public class ProcessingJobService {
         validateAudioAnalysisRequest(request);
 
         ProcessingJob job = getAndValidateJob(jobId, request.getFileId(), ProcessingJob.JobType.AUDIO_ANALYSIS);
+        if (shouldIgnoreSuccessfulTerminalCallback(job)) {
+            return;
+        }
         FileEntity file = getActiveFile(request.getFileId());
 
         updateAudioFingerprint(file, request);
@@ -264,6 +291,31 @@ public class ProcessingJobService {
         }
 
         return job;
+    }
+
+    private boolean shouldIgnoreSuccessfulTerminalCallback(ProcessingJob job) {
+        if (job.getStatus() == ProcessingJob.JobStatus.COMPLETED) {
+            log.info("Ignoring duplicate success callback for already completed job {}", job.getId());
+            return true;
+        }
+
+        if (job.getStatus() == ProcessingJob.JobStatus.FAILED) {
+            throw new IllegalStateException("Processing job is already failed");
+        }
+
+        return false;
+    }
+
+    private String safeErrorMessage(String errorMessage) {
+        String normalized = errorMessage == null || errorMessage.isBlank()
+                ? DEFAULT_ERROR_MESSAGE
+                : errorMessage.strip().replaceAll("[\\r\\n\\t]+", " ");
+
+        if (normalized.length() <= MAX_ERROR_MESSAGE_LENGTH) {
+            return normalized;
+        }
+
+        return normalized.substring(0, MAX_ERROR_MESSAGE_LENGTH);
     }
 
     private FileEntity getActiveFile(UUID fileId) {
