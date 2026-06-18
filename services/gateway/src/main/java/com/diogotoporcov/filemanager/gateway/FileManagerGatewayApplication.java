@@ -1,0 +1,11 @@
+package com.diogotoporcov.filemanager.gateway;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class FileManagerGatewayApplication {
+    static void main(String[] args) {
+        SpringApplication.run(FileManagerGatewayApplication.class, args);
+    }
+}
