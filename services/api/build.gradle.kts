@@ -6,7 +6,7 @@ plugins {
     checkstyle
 }
 
-group = "com.filemanager"
+group = "com.diogotoporcov.filemanager"
 version = "0.0.1-SNAPSHOT"
 
 base {

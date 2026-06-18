@@ -20,6 +20,14 @@ dependencies = [
 ]
 requires-python = ">=3.11"
 
+[build-system]
+requires = ["setuptools>=80"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
+
 [project.optional-dependencies]
 test = [
     "pytest>=8.4.2",
