@@ -26,7 +26,7 @@ public class FileProcessingEventListener {
             processingJobService.updateExternalJobId(event.processingJobId(), response.getMessageId());
         } catch (Exception e) {
             log.error("Failed to publish event to Kafka after commit. Marking job {} as FAILED", event.processingJobId(), e);
-            processingJobService.handleProcessingFailure(event.processingJobId(), event.fileId(), e.getMessage());
+            processingJobService.handleProcessingFailure(event.processingJobId(), event.fileId(), "Event publication failed");
         }
     }
 }

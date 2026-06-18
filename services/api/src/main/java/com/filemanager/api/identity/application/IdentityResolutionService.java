@@ -31,6 +31,8 @@ public class IdentityResolutionService {
     }
 
     private User provisionUser(AuthenticatedIdentity identity) {
+        assertVerifiedEmailIfRequired(identity);
+
         return userRepository.findByEmail(identity.email())
                 .map(user -> {
                     if (!canAutoLinkExistingUser(identity)) {
@@ -53,6 +55,12 @@ public class IdentityResolutionService {
 
                     return createIdentity(savedUser, identity.provider(), identity.subject());
                 });
+    }
+
+    private void assertVerifiedEmailIfRequired(AuthenticatedIdentity identity) {
+        if (appProperties.getAuth().isRequireVerifiedEmail() && !Boolean.TRUE.equals(identity.emailVerified())) {
+            throw new IllegalStateException("Cannot provision identity with unverified email");
+        }
     }
 
     private boolean canAutoLinkExistingUser(AuthenticatedIdentity identity) {

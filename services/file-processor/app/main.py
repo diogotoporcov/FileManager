@@ -43,6 +43,7 @@ if needs_embedding_client:
         model_version=settings.triton_model_version,
         input_tensor_name=settings.triton_input_tensor_name,
         output_tensor_name=settings.triton_output_tensor_name,
+        inference_timeout_seconds=settings.triton_inference_timeout_seconds,
     )
 
 if settings.worker_image_embedding_enabled and embedding_client is not None:

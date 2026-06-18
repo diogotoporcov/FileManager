@@ -75,6 +75,23 @@ class ConfigurationValidationTest {
     }
 
     @Test
+    void appProperties_AuthHardeningBindsCorrectly() {
+        MapConfigurationPropertySource source = new MapConfigurationPropertySource(Map.of(
+                "app.auth.require-verified-email", "false",
+                "app.auth.auto-link-existing-users", "true",
+                "app.auth.trusted-auto-link-providers", "keycloak,entra"
+        ));
+
+        AppProperties properties = new Binder(source)
+                .bind("app", Bindable.of(AppProperties.class))
+                .get();
+
+        assertThat(properties.getAuth().isRequireVerifiedEmail()).isFalse();
+        assertThat(properties.getAuth().isAutoLinkExistingUsers()).isTrue();
+        assertThat(properties.getAuth().getTrustedAutoLinkProviders()).containsExactlyInAnyOrder("keycloak", "entra");
+    }
+
+    @Test
     void appProperties_InvalidProcessableImageMimeTypes_Fail() {
         AppProperties properties = new AppProperties();
         properties.setProcessableImageMimeTypes(Set.of());

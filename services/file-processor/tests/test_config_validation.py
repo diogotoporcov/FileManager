@@ -84,6 +84,10 @@ def test_s3_validation():
         Settings(internal_api_token="test-token-1234567890123456789012", s3_secret_key="")
     with pytest.raises(ValidationError):
         Settings(internal_api_token="test-token-1234567890123456789012", s3_secret_key="   ")
+    with pytest.raises(ValidationError):
+        Settings(internal_api_token="test-token-1234567890123456789012", s3_connect_timeout_seconds=0)
+    with pytest.raises(ValidationError):
+        Settings(internal_api_token="test-token-1234567890123456789012", s3_read_timeout_seconds=0)
 
 def test_kafka_validation(monkeypatch):
     # Blank Kafka bootstrap servers
@@ -172,6 +176,8 @@ def test_metadata_api_validation():
     # Blank metadata API URL
     with pytest.raises(ValidationError):
         Settings(internal_api_token="test-token-1234567890123456789012", metadata_api_base_url=" ")  # type: ignore
+    with pytest.raises(ValidationError):
+        Settings(internal_api_token="test-token-1234567890123456789012", metadata_api_timeout_seconds=0)
 
 def test_embedding_settings_validation():
     settings = Settings(
@@ -190,6 +196,7 @@ def test_embedding_settings_validation():
         triton_model_version="1",
         triton_input_tensor_name="pixel_values",
         triton_output_tensor_name="image_embeds",
+        triton_inference_timeout_seconds=10,
     )
 
     assert settings.embedding_dimension == 768
@@ -211,6 +218,8 @@ def test_embedding_settings_validation():
         Settings(internal_api_token="test-token-1234567890123456789012", embedding_model_name="")
     with pytest.raises(ValidationError):
         Settings(internal_api_token="test-token-1234567890123456789012", triton_grpc_url="")
+    with pytest.raises(ValidationError):
+        Settings(internal_api_token="test-token-1234567890123456789012", triton_inference_timeout_seconds=0)
 
 def test_audio_settings_validation():
     settings = Settings(

@@ -32,12 +32,14 @@ spring:
       resourceserver:
         jwt:
           issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8082/realms/filemanager}
+          audiences: ${AUTH_REQUIRED_AUDIENCES:filemanager-api}
 
 app:
   processable-image-mime-types: ${PROCESSABLE_IMAGE_MIME_TYPES:image/apng,image/avif,image/bmp,image/gif,image/icns,image/jp2,image/jpeg,image/mpo,image/palm,image/png,image/sgi,image/tiff,image/vnd.adobe.photoshop,image/webp,image/x-icon,image/x-pcx,image/x-portable-anymap,image/x-tga,image/xbm,image/xpm}
   processable-audio-mime-types: ${PROCESSABLE_AUDIO_MIME_TYPES:audio/mpeg,audio/mp3,audio/wav,audio/x-wav,audio/wave,audio/vnd.wave,audio/flac,audio/x-flac,audio/ogg,audio/aac,audio/mp4,audio/x-m4a,audio/webm,audio/opus,audio/matroska,audio/x-matroska,audio/ac3,audio/3gpp,audio/3gpp2,audio/x-aiff,audio/aiff}
   auth:
     provider-name: ${AUTH_PROVIDER_NAME:keycloak}
+    require-verified-email: ${AUTH_REQUIRE_VERIFIED_EMAIL:true}
     auto-link-existing-users: ${AUTH_AUTO_LINK_EXISTING_USERS:false}
     trusted-auto-link-providers: ${AUTH_TRUSTED_AUTO_LINK_PROVIDERS:}
     claims:

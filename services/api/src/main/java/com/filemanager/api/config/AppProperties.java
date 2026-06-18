@@ -90,6 +90,8 @@ public class AppProperties {
         @NotBlank
         private String providerName = "keycloak";
 
+        private boolean requireVerifiedEmail = true;
+
         @Valid
         private final Claims claims = new Claims();
 

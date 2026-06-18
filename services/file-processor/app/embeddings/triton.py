@@ -34,6 +34,7 @@ class TritonInferenceServerClient(Protocol):
         inputs: Sequence[TritonInferInput],
         model_version: str,
         outputs: Sequence[TritonInferRequestedOutput],
+        client_timeout: float | None = None,
     ) -> TritonInferResponse:
         pass
 
@@ -57,12 +58,14 @@ class TritonImageEmbeddingClient(ImageEmbeddingInferenceClient):
         model_version: str,
         input_tensor_name: str,
         output_tensor_name: str,
+        inference_timeout_seconds: float | None = None,
     ):
         self.grpc_url = _normalize_triton_grpc_url(grpc_url)
         self.model_name = model_name
         self.model_version = model_version
         self.input_tensor_name = input_tensor_name
         self.output_tensor_name = output_tensor_name
+        self.inference_timeout_seconds = inference_timeout_seconds
         self._client: TritonInferenceServerClient | None = None
         self._grpcclient: TritonGrpcClientModule | None = None
 
@@ -85,6 +88,7 @@ class TritonImageEmbeddingClient(ImageEmbeddingInferenceClient):
                 inputs=[infer_input],
                 model_version=self.model_version,
                 outputs=[requested_output],
+                client_timeout=self.inference_timeout_seconds,
             )
             output = response.as_numpy(self.output_tensor_name)
 

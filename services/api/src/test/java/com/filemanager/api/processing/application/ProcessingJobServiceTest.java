@@ -226,6 +226,51 @@ class ProcessingJobServiceTest {
         verify(audioFingerprintRepository, never()).save(org.mockito.ArgumentMatchers.any());
     }
 
+    @Test
+    void handlePhashResult_IgnoresDuplicateCompletedCallback() {
+        UUID jobId = UUID.randomUUID();
+        UUID fileId = UUID.randomUUID();
+        ProcessingJob job = job(jobId, file(fileId), ProcessingJob.JobType.PHASH);
+        job.setStatus(ProcessingJob.JobStatus.COMPLETED);
+        when(processingJobRepository.findById(jobId)).thenReturn(Optional.of(job));
+
+        service.handlePhashResult(jobId, fileId, "fedcba9876543210");
+
+        verify(fileRepository, never()).findByIdAndDeletedAtIsNull(fileId);
+        verify(imageFingerprintRepository, never()).save(org.mockito.ArgumentMatchers.any());
+        verify(fileManagerMetrics, never()).recordJobCompleted("PHASH");
+    }
+
+    @Test
+    void handleProcessingFailure_IgnoresStaleFailureForCompletedJob() {
+        UUID jobId = UUID.randomUUID();
+        UUID fileId = UUID.randomUUID();
+        ProcessingJob job = job(jobId, file(fileId), ProcessingJob.JobType.CHECKSUM);
+        job.setStatus(ProcessingJob.JobStatus.COMPLETED);
+        when(processingJobRepository.findById(jobId)).thenReturn(Optional.of(job));
+
+        service.handleProcessingFailure(jobId, fileId, "late failure");
+
+        assertThat(job.getStatus()).isEqualTo(ProcessingJob.JobStatus.COMPLETED);
+        verify(processingJobRepository, never()).save(job);
+        verify(fileManagerMetrics, never()).recordJobFailed("CHECKSUM");
+    }
+
+    @Test
+    void handleProcessingFailure_NormalizesAndCapsUserVisibleErrorMessage() {
+        UUID jobId = UUID.randomUUID();
+        UUID fileId = UUID.randomUUID();
+        ProcessingJob job = job(jobId, file(fileId), ProcessingJob.JobType.CHECKSUM);
+        when(processingJobRepository.findById(jobId)).thenReturn(Optional.of(job));
+
+        service.handleProcessingFailure(jobId, fileId, "failed\n" + "x".repeat(2_000));
+
+        assertThat(job.getStatus()).isEqualTo(ProcessingJob.JobStatus.FAILED);
+        assertThat(job.getErrorMessage()).doesNotContain("\n");
+        assertThat(job.getErrorMessage()).hasSize(1024);
+        verify(fileManagerMetrics).recordJobFailed("CHECKSUM");
+    }
+
     private FileEntity file(UUID fileId) {
         return FileEntity.builder()
                 .id(fileId)
