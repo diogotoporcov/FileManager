@@ -18,11 +18,13 @@ import com.filemanager.api.processing.domain.result.AudioFingerprint;
 import com.filemanager.api.processing.domain.result.FileEmbedding;
 import com.filemanager.api.processing.domain.result.FileFingerprint;
 import com.filemanager.api.processing.domain.result.ImageFingerprint;
+import com.filemanager.api.processing.domain.result.ImagePhashMihChunk;
 import com.filemanager.api.processing.persistence.ProcessingJobRepository;
 import com.filemanager.api.processing.persistence.result.AudioFingerprintRepository;
 import com.filemanager.api.processing.persistence.result.FileEmbeddingRepository;
 import com.filemanager.api.processing.persistence.result.FileFingerprintRepository;
 import com.filemanager.api.processing.persistence.result.ImageFingerprintRepository;
+import com.filemanager.api.processing.persistence.result.ImagePhashMihChunkRepository;
 import com.filemanager.api.processing.web.result.AudioAnalysisResultRequest;
 import java.util.List;
 import java.util.Optional;
@@ -32,6 +34,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
@@ -44,6 +47,8 @@ class ProcessingJobServiceTest {
     private FileFingerprintRepository fileFingerprintRepository;
     @Mock
     private ImageFingerprintRepository imageFingerprintRepository;
+    @Mock
+    private ImagePhashMihChunkRepository imagePhashMihChunkRepository;
     @Mock
     private FileEmbeddingRepository fileEmbeddingRepository;
     @Mock
@@ -65,6 +70,7 @@ class ProcessingJobServiceTest {
                 fileRepository,
                 fileFingerprintRepository,
                 imageFingerprintRepository,
+                imagePhashMihChunkRepository,
                 fileEmbeddingRepository,
                 audioFingerprintRepository,
                 fileManagerMetrics,
@@ -113,7 +119,53 @@ class ProcessingJobServiceTest {
         ArgumentCaptor<ImageFingerprint> captor = ArgumentCaptor.forClass(ImageFingerprint.class);
         verify(imageFingerprintRepository).save(captor.capture());
         assertThat(captor.getValue().getPhash()).isEqualTo("fedcba9876543210");
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<ImagePhashMihChunk>> chunksCaptor = ArgumentCaptor.forClass(List.class);
+        verify(imagePhashMihChunkRepository).deleteByIdFileId(fileId);
+        verify(imagePhashMihChunkRepository).saveAll(chunksCaptor.capture());
+        assertThat(chunksCaptor.getValue())
+                .hasSize(3)
+                .extracting(chunk -> chunk.getId().getChunkIndex())
+                .containsExactly((short) 0, (short) 1, (short) 2);
         verify(fileManagerMetrics).recordJobCompleted("PHASH");
+    }
+
+    @Test
+    void handlePhashResult_ReplacesExistingChunksWhenFingerprintIsRewritten() {
+        UUID jobId = UUID.randomUUID();
+        UUID fileId = UUID.randomUUID();
+        FileEntity file = file(fileId);
+        ProcessingJob job = job(jobId, file, ProcessingJob.JobType.PHASH);
+        ImageFingerprint existing = ImageFingerprint.builder().file(file).phash("0000000000000000").build();
+        when(processingJobRepository.findById(jobId)).thenReturn(Optional.of(job));
+        when(fileRepository.findByIdAndDeletedAtIsNull(fileId)).thenReturn(Optional.of(file));
+        when(imageFingerprintRepository.findByFileId(fileId)).thenReturn(Optional.of(existing));
+
+        service.handlePhashResult(jobId, fileId, "ffffffffffffffff");
+
+        assertThat(existing.getPhash()).isEqualTo("ffffffffffffffff");
+        verify(imagePhashMihChunkRepository).deleteByIdFileId(fileId);
+        verify(imagePhashMihChunkRepository).saveAll(org.mockito.ArgumentMatchers.anyList());
+    }
+
+    @Test
+    void handlePhashResult_PropagatesChunkWriteFailureBeforeCompletingJob() {
+        UUID jobId = UUID.randomUUID();
+        UUID fileId = UUID.randomUUID();
+        FileEntity file = file(fileId);
+        ProcessingJob job = job(jobId, file, ProcessingJob.JobType.PHASH);
+        when(processingJobRepository.findById(jobId)).thenReturn(Optional.of(job));
+        when(fileRepository.findByIdAndDeletedAtIsNull(fileId)).thenReturn(Optional.of(file));
+        when(imageFingerprintRepository.findByFileId(fileId)).thenReturn(Optional.empty());
+        Mockito.doThrow(new IllegalStateException("chunk write failed"))
+                .when(imagePhashMihChunkRepository)
+                .saveAll(org.mockito.ArgumentMatchers.anyList());
+
+        assertThrows(IllegalStateException.class, () -> service.handlePhashResult(jobId, fileId, "0123456789abcdef"));
+
+        verify(imageFingerprintRepository).save(org.mockito.ArgumentMatchers.any(ImageFingerprint.class));
+        verify(fileManagerMetrics, never()).recordJobCompleted("PHASH");
+        assertThat(job.getStatus()).isEqualTo(ProcessingJob.JobStatus.PENDING);
     }
 
     @Test
