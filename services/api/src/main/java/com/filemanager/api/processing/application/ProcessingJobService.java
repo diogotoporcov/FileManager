@@ -2,6 +2,7 @@ package com.filemanager.api.processing.application;
 
 import com.filemanager.api.config.AppProperties;
 import com.filemanager.api.duplicate.application.ExactDuplicateGroupMaintenanceService;
+import com.filemanager.api.duplicate.phash.PhashMih;
 import com.filemanager.api.exception.ResourceNotFoundException;
 import com.filemanager.api.file.domain.FileEntity;
 import com.filemanager.api.file.persistence.FileRepository;
@@ -12,11 +13,14 @@ import com.filemanager.api.processing.domain.result.AudioFingerprint;
 import com.filemanager.api.processing.domain.result.FileEmbedding;
 import com.filemanager.api.processing.domain.result.FileFingerprint;
 import com.filemanager.api.processing.domain.result.ImageFingerprint;
+import com.filemanager.api.processing.domain.result.ImagePhashMihChunk;
+import com.filemanager.api.processing.domain.result.ImagePhashMihChunkId;
 import com.filemanager.api.processing.persistence.ProcessingJobRepository;
 import com.filemanager.api.processing.persistence.result.AudioFingerprintRepository;
 import com.filemanager.api.processing.persistence.result.FileEmbeddingRepository;
 import com.filemanager.api.processing.persistence.result.FileFingerprintRepository;
 import com.filemanager.api.processing.persistence.result.ImageFingerprintRepository;
+import com.filemanager.api.processing.persistence.result.ImagePhashMihChunkRepository;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -35,6 +39,7 @@ public class ProcessingJobService {
     private final FileRepository fileRepository;
     private final FileFingerprintRepository fileFingerprintRepository;
     private final ImageFingerprintRepository imageFingerprintRepository;
+    private final ImagePhashMihChunkRepository imagePhashMihChunkRepository;
     private final FileEmbeddingRepository fileEmbeddingRepository;
     private final AudioFingerprintRepository audioFingerprintRepository;
     private final FileManagerMetrics fileManagerMetrics;
@@ -91,8 +96,7 @@ public class ProcessingJobService {
     public void handlePhashResult(UUID jobId, UUID fileId, String phash) {
         log.info("Handling pHash result for job {}: {}", jobId, phash);
 
-        validatePhashFormat(phash);
-        String normalizedPhash = phash.toLowerCase(Locale.ROOT);
+        String normalizedPhash = PhashMih.normalize(phash);
 
         ProcessingJob job = getAndValidateJob(jobId, fileId, ProcessingJob.JobType.PHASH);
         FileEntity file = getActiveFile(fileId);
@@ -141,12 +145,6 @@ public class ProcessingJobService {
     private void validateChecksumFormat(String sha256) {
         if (sha256 == null || !sha256.matches("^[a-fA-F0-9]{64}$")) {
             throw new IllegalArgumentException("Invalid SHA-256 format");
-        }
-    }
-
-    private void validatePhashFormat(String phash) {
-        if (phash == null || !phash.matches("^[a-fA-F0-9]{16}$")) {
-            throw new IllegalArgumentException("Invalid pHash format");
         }
     }
 
@@ -307,6 +305,14 @@ public class ProcessingJobService {
                             imageFingerprintRepository.save(fingerprint);
                         }
                 );
+        imagePhashMihChunkRepository.deleteByIdFileId(file.getId());
+        imagePhashMihChunkRepository.saveAll(PhashMih.chunks(phash).stream()
+                .map(chunk -> ImagePhashMihChunk.builder()
+                        .id(new ImagePhashMihChunkId(file.getId(), (short) chunk.index()))
+                        .file(file)
+                        .chunkValue(chunk.value())
+                        .build())
+                .toList());
     }
 
     private void updateFileEmbedding(
@@ -382,15 +388,8 @@ public class ProcessingJobService {
         for (Double value : embedding) {
             squaredNorm += value * value;
         }
-        return normalizeVector(embedding, squaredNorm);
-    }
 
-    private float[] normalizeVector(double[] values) {
-        double squaredNorm = 0.0;
-        for (double value : values) {
-            squaredNorm += value * value;
-        }
-        return normalizeVector(values, squaredNorm);
+        return normalizeVector(embedding, squaredNorm);
     }
 
     private float[] normalizeVector(List<Double> values, double squaredNorm) {
@@ -402,20 +401,6 @@ public class ProcessingJobService {
         float[] normalized = new float[values.size()];
         for (int i = 0; i < values.size(); i++) {
             normalized[i] = (float) (values.get(i) / norm);
-        }
-
-        return normalized;
-    }
-
-    private float[] normalizeVector(double[] values, double squaredNorm) {
-        double norm = Math.sqrt(squaredNorm);
-        if (!Double.isFinite(norm) || norm == 0.0) {
-            throw new IllegalArgumentException("Embedding norm must be finite and non-zero");
-        }
-
-        float[] normalized = new float[values.length];
-        for (int i = 0; i < values.length; i++) {
-            normalized[i] = (float) (values[i] / norm);
         }
 
         return normalized;

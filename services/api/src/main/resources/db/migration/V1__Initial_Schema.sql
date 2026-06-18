@@ -162,6 +162,34 @@ CREATE TABLE image_fingerprints (
 
 CREATE INDEX idx_image_fingerprints_phash ON image_fingerprints(phash);
 
+CREATE TABLE image_phash_mih_chunks (
+    file_id UUID NOT NULL,
+    chunk_index SMALLINT NOT NULL,
+    chunk_value INTEGER NOT NULL,
+    PRIMARY KEY (file_id, chunk_index),
+    CONSTRAINT fk_image_phash_mih_chunks_file
+        FOREIGN KEY (file_id)
+        REFERENCES files(id)
+        ON DELETE CASCADE,
+    CONSTRAINT chk_image_phash_mih_chunk_index
+        CHECK (chunk_index BETWEEN 0 AND 2),
+    CONSTRAINT chk_image_phash_mih_chunk_value
+        CHECK (
+            (
+                chunk_index = 0
+                AND chunk_value BETWEEN 0 AND 4194303
+            )
+            OR
+            (
+                chunk_index IN (1, 2)
+                AND chunk_value BETWEEN 0 AND 2097151
+            )
+        )
+);
+
+CREATE INDEX idx_image_phash_mih_chunks_lookup
+    ON image_phash_mih_chunks(chunk_index, chunk_value, file_id);
+
 CREATE TABLE file_embeddings (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
     file_id UUID NOT NULL REFERENCES files(id),
