@@ -44,6 +44,8 @@ class GatewayRoutingTest {
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry registry) {
         registry.add("filemanager.api.base-url", () -> "http://localhost:" + wireMockServer.port());
+        registry.add("filemanager.gateway.rate-limit.enabled", () -> "false");
+        registry.add("management.health.redis.enabled", () -> "false");
         registry.add("GATEWAY_MAX_REQUEST_SIZE", () -> "1KB");
         registry.add("GATEWAY_RESPONSE_TIMEOUT", () -> "1s");
     }
@@ -70,7 +72,7 @@ class GatewayRoutingTest {
                 .isEqualTo("1s");
 
         // Max request size
-        assertThat(env.getProperty("spring.cloud.gateway.server.webflux.default-filters[0].args.maxSize"))
+        assertThat(env.getProperty("filemanager.gateway.max-request-size"))
                 .isEqualTo("1KB");
     }
 

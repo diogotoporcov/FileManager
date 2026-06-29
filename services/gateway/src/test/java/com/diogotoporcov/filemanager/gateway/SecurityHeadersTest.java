@@ -40,6 +40,8 @@ class SecurityHeadersTest {
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry registry) {
         registry.add("filemanager.api.base-url", () -> "http://localhost:" + wireMockServer.port());
+        registry.add("filemanager.gateway.rate-limit.enabled", () -> "false");
+        registry.add("management.health.redis.enabled", () -> "false");
     }
 
     @BeforeEach
