@@ -7,6 +7,7 @@
 [![MinIO](https://img.shields.io/badge/MinIO-RELEASE.2025--09--07T16--13--09Z-C72E49.svg)](https://min.io/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![Kafka](https://img.shields.io/badge/Apache_Kafka-4.3.0-231F20?logo=apachekafka&logoColor=white)](https://kafka.apache.org/)
+[![Redis](https://img.shields.io/badge/Redis-8.8.0-DC382D?logo=redis&logoColor=white)](https://redis.io/)
 [![License: GPLv3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
 FileManager is a **file management backend system** designed to **store, organize, search, and share files**.
@@ -55,16 +56,17 @@ It features a highly optimized **multi-method duplicate detection engine** capab
 
 ## Technology Stack
 
-| Component           | Technology                 |
-| ------------------- | -------------------------- |
-| API Gateway         | Java, Spring Cloud Gateway |
-| API                 | Java 25, Spring Boot       |
-| File processor      | Python 3.11, FastAPI       |
-| Database            | PostgreSQL, pgvector       |
-| Object storage      | MinIO                      |
-| Authentication      | Keycloak                   |
-| Messaging           | Apache Kafka               |
-| Embedding inference | NVIDIA Triton              |
+| Component           | Technology                  |
+|---------------------|-----------------------------|
+| API Gateway         | Java, Spring Cloud Gateway  |
+| API                 | Java 25, Spring Boot        |
+| File processor      | Python 3.11, FastAPI        |
+| Database            | PostgreSQL, pgvector        |
+| Object storage      | MinIO                       |
+| Authentication      | Keycloak                    |
+| Messaging           | Apache Kafka                |
+| Rate limiting       | Redis                       |
+| Embedding inference | NVIDIA Triton               |
 
 ---
 
