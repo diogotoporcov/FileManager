@@ -1,8 +1,11 @@
 package com.diogotoporcov.filemanager.api.processing.web.status;
 
+import com.diogotoporcov.filemanager.api.application.CursorPage;
 import com.diogotoporcov.filemanager.api.auth.application.CurrentUserService;
+import com.diogotoporcov.filemanager.api.processing.application.status.FileProcessingStatus;
 import com.diogotoporcov.filemanager.api.processing.application.status.FileProcessingStatusService;
 import com.diogotoporcov.filemanager.api.web.CursorPageResponse;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.Test;
@@ -32,7 +35,7 @@ class ProcessingStatusControllerTest {
 
         when(currentUserService.getCurrentUserId()).thenReturn(actorUserId);
         when(fileProcessingStatusService.getProcessingJobs(eq(actorUserId), eq(fileId), org.mockito.ArgumentMatchers.any()))
-                .thenReturn(CursorPageResponse.<ProcessingJobResponse>builder().items(java.util.List.of()).build());
+                .thenReturn(new CursorPage<>(List.of(), null, false, 0));
 
         CursorPageResponse<ProcessingJobResponse> result = processingStatusController.getProcessingJobs(fileId, null, null);
 
@@ -46,7 +49,11 @@ class ProcessingStatusControllerTest {
 
         when(currentUserService.getCurrentUserId()).thenReturn(actorUserId);
         when(fileProcessingStatusService.getFileProcessingStatus(eq(actorUserId), eq(fileId)))
-                .thenReturn(FileProcessingStatusResponse.builder().build());
+                .thenReturn(FileProcessingStatus.builder()
+                        .fileId(fileId)
+                        .overallStatus(FileProcessingStatus.AggregateStatus.NOT_STARTED)
+                        .jobs(List.of())
+                        .build());
 
         FileProcessingStatusResponse result = processingStatusController.getFileProcessingStatus(fileId);
 

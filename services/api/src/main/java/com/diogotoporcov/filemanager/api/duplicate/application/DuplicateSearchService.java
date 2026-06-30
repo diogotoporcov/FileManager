@@ -12,17 +12,13 @@ import com.diogotoporcov.filemanager.api.duplicate.persistence.ExactDuplicateGro
 import com.diogotoporcov.filemanager.api.duplicate.persistence.ExactDuplicateGroupRepository;
 import com.diogotoporcov.filemanager.api.duplicate.persistence.ImageEmbeddingDuplicateCandidateRepository;
 import com.diogotoporcov.filemanager.api.duplicate.persistence.ImagePhashDuplicateCandidateRepository;
-import com.diogotoporcov.filemanager.api.duplicate.web.DuplicateGroupSearchRequest;
-import com.diogotoporcov.filemanager.api.duplicate.web.DuplicateGroupSearchResponse;
-import com.diogotoporcov.filemanager.api.duplicate.web.DuplicateGroupSearchResponse.DuplicateGroupEvidenceResponse;
-import com.diogotoporcov.filemanager.api.duplicate.web.DuplicateGroupSearchResponse.DuplicateGroupFileResponse;
-import com.diogotoporcov.filemanager.api.duplicate.web.DuplicateGroupSearchResponse.DuplicateGroupMethodResultResponse;
-import com.diogotoporcov.filemanager.api.duplicate.web.DuplicateGroupSearchResponse.DuplicateGroupResponse;
-import com.diogotoporcov.filemanager.api.duplicate.web.DuplicateSearchPageRequest;
-import com.diogotoporcov.filemanager.api.duplicate.web.DuplicateSearchResponse;
-import com.diogotoporcov.filemanager.api.duplicate.web.DuplicateSearchResponse.DuplicateEvidenceResponse;
-import com.diogotoporcov.filemanager.api.duplicate.web.DuplicateSearchResponse.DuplicateMatchResponse;
-import com.diogotoporcov.filemanager.api.duplicate.web.DuplicateSearchResponse.DuplicateMethodResultResponse;
+import com.diogotoporcov.filemanager.api.duplicate.application.DuplicateGroupSearchResult.DuplicateGroupEvidenceResult;
+import com.diogotoporcov.filemanager.api.duplicate.application.DuplicateGroupSearchResult.DuplicateGroupFileResult;
+import com.diogotoporcov.filemanager.api.duplicate.application.DuplicateGroupSearchResult.DuplicateGroupMethodResult;
+import com.diogotoporcov.filemanager.api.duplicate.application.DuplicateGroupSearchResult.DuplicateGroupResult;
+import com.diogotoporcov.filemanager.api.duplicate.application.DuplicateSearchResult.DuplicateEvidenceResult;
+import com.diogotoporcov.filemanager.api.duplicate.application.DuplicateSearchResult.DuplicateMatchResult;
+import com.diogotoporcov.filemanager.api.duplicate.application.DuplicateSearchResult.DuplicateMethodResult;
 import com.diogotoporcov.filemanager.api.exception.AccessDeniedException;
 import com.diogotoporcov.filemanager.api.exception.ResourceNotFoundException;
 import com.diogotoporcov.filemanager.api.file.domain.FileEntity;
@@ -79,19 +75,19 @@ public class DuplicateSearchService {
     private final FileManagerMetrics fileManagerMetrics;
 
     @Transactional(readOnly = true)
-    public DuplicateSearchResponse searchDuplicatesForFile(
+    public DuplicateSearchResult searchDuplicatesForFile(
             UUID sourceFileId,
             Collection<DuplicateSearchMethod> requestedMethods,
             UUID actorUserId) {
-        return searchDuplicatesForFile(sourceFileId, requestedMethods, actorUserId, DuplicateSearchPageRequest.defaults());
+        return searchDuplicatesForFile(sourceFileId, requestedMethods, actorUserId, DuplicateSearchPage.defaults());
     }
 
     @Transactional(readOnly = true)
-    public DuplicateSearchResponse searchDuplicatesForFile(
+    public DuplicateSearchResult searchDuplicatesForFile(
             UUID sourceFileId,
             Collection<DuplicateSearchMethod> requestedMethods,
             UUID actorUserId,
-            DuplicateSearchPageRequest pageRequest) {
+            DuplicateSearchPage pageRequest) {
         long started = System.nanoTime();
         String status = "success";
         try {
@@ -100,11 +96,11 @@ public class DuplicateSearchService {
             FileEntity sourceFile = loadOwnedSourceFile(sourceFileId, actorUserId);
             fileManagerMetrics.recordDuplicateSearchRequested();
 
-            List<DuplicateMethodResultResponse> methodResponses = methods.stream()
+            List<DuplicateMethodResult> methodResponses = methods.stream()
                     .map(method -> searchByMethod(method, sourceFile, actorUserId, pageRequest, cursor))
                     .toList();
 
-            return new DuplicateSearchResponse(sourceFileId, methodResponses);
+            return new DuplicateSearchResult(sourceFileId, methodResponses);
         } catch (RuntimeException ex) {
             status = "failure";
             throw ex;
@@ -117,26 +113,26 @@ public class DuplicateSearchService {
     }
 
     @Transactional(readOnly = true)
-    public DuplicateGroupSearchResponse searchGroups(DuplicateGroupSearchRequest request, UUID actorUserId) {
+    public DuplicateGroupSearchResult searchGroups(DuplicateGroupSearchQuery query, UUID actorUserId) {
         long started = System.nanoTime();
         String status = "success";
         try {
-            List<DuplicateSearchMethod> methods = normalizeMethods(request == null ? null : request.methods());
-            int requestedLimit = request == null || request.limit() == null
+            List<DuplicateSearchMethod> methods = normalizeMethods(query == null ? null : query.methods());
+            int requestedLimit = query == null || query.limit() == null
                     ? properties.getExact().getMaxGroups()
-                    : request.limit();
-            UUID folderId = request == null ? null : request.folderId();
-            String mimeType = normalizeOptionalText(request == null ? null : request.mimeType());
-            DuplicateConfidence minConfidence = request == null || request.minConfidence() == null
+                    : query.limit();
+            UUID folderId = query == null ? null : query.folderId();
+            String mimeType = normalizeOptionalText(query == null ? null : query.mimeType());
+            DuplicateConfidence minConfidence = query == null || query.minConfidence() == null
                     ? DuplicateConfidence.SIMILAR
-                    : request.minConfidence();
+                    : query.minConfidence();
             fileManagerMetrics.recordDuplicateGroupsRequested();
 
-            List<DuplicateGroupMethodResultResponse> methodResponses = methods.stream()
+            List<DuplicateGroupMethodResult> methodResponses = methods.stream()
                     .map(method -> searchGroupsByMethod(method, actorUserId, requestedLimit, folderId, mimeType, minConfidence))
                     .toList();
 
-            return new DuplicateGroupSearchResponse(methodResponses, null);
+            return new DuplicateGroupSearchResult(methodResponses, null);
         } catch (RuntimeException ex) {
             status = "failure";
             throw ex;
@@ -148,13 +144,13 @@ public class DuplicateSearchService {
         }
     }
 
-    private DuplicateMethodResultResponse searchByMethod(
+    private DuplicateMethodResult searchByMethod(
             DuplicateSearchMethod method,
             FileEntity sourceFile,
             UUID actorUserId,
-            DuplicateSearchPageRequest pageRequest,
+            DuplicateSearchPage pageRequest,
             SearchCursor cursor) {
-        DuplicateMethodResultResponse response = switch (method) {
+        DuplicateMethodResult response = switch (method) {
             case EXACT -> searchExact(sourceFile, actorUserId, pageRequest, cursor);
             case IMAGE_PHASH -> searchImagePhash(sourceFile, actorUserId, pageRequest, cursor);
             case IMAGE_EMBEDDING -> searchImageEmbedding(sourceFile, actorUserId, pageRequest, cursor);
@@ -165,14 +161,14 @@ public class DuplicateSearchService {
         return response;
     }
 
-    private DuplicateGroupMethodResultResponse searchGroupsByMethod(
+    private DuplicateGroupMethodResult searchGroupsByMethod(
             DuplicateSearchMethod method,
             UUID actorUserId,
             int requestedLimit,
             UUID folderId,
             String mimeType,
             DuplicateConfidence minConfidence) {
-        DuplicateGroupMethodResultResponse response = switch (method) {
+        DuplicateGroupMethodResult response = switch (method) {
             case EXACT -> searchExactGroups(actorUserId, requestedLimit, folderId, mimeType, minConfidence);
             case IMAGE_PHASH, IMAGE_EMBEDDING, AUDIO_FINGERPRINT -> groupMethodResult(
                     method,
@@ -184,10 +180,10 @@ public class DuplicateSearchService {
         return response;
     }
 
-    private DuplicateMethodResultResponse searchExact(
+    private DuplicateMethodResult searchExact(
             FileEntity sourceFile,
             UUID actorUserId,
-            DuplicateSearchPageRequest pageRequest,
+            DuplicateSearchPage pageRequest,
             SearchCursor cursor) {
         int pageSize = pageSize(pageRequest, properties.getExact().getPageSize());
         SearchCursor methodCursor = methodCursor(cursor, DuplicateSearchMethod.EXACT);
@@ -206,7 +202,7 @@ public class DuplicateSearchService {
                                     methodCursor == null ? null : methodCursor.createdAt(),
                                     methodCursor == null ? null : methodCursor.fileId(),
                                     PageRequest.of(0, pageSize + 1));
-                    List<DuplicateMatchResponse> matches = candidates.stream()
+                    List<DuplicateMatchResult> matches = candidates.stream()
                             .map(candidate -> exactMatch(candidate.fileId(), candidate.algorithm().name()))
                             .toList();
                     return pagedMethodResult(
@@ -223,10 +219,10 @@ public class DuplicateSearchService {
                         pageSize));
     }
 
-    private DuplicateMethodResultResponse searchImagePhash(
+    private DuplicateMethodResult searchImagePhash(
             FileEntity sourceFile,
             UUID actorUserId,
-            DuplicateSearchPageRequest pageRequest,
+            DuplicateSearchPage pageRequest,
             SearchCursor cursor) {
         int pageSize = pageSize(pageRequest, properties.getImagePhash().getPageSize());
         SearchCursor methodCursor = methodCursor(cursor, DuplicateSearchMethod.IMAGE_PHASH);
@@ -254,7 +250,7 @@ public class DuplicateSearchService {
                                     methodCursor == null ? null : methodCursor.createdAt().toString(),
                                     methodCursor == null ? null : methodCursor.fileId().toString(),
                                     pageSize + 1);
-                    List<DuplicateMatchResponse> matches = candidates.stream()
+                    List<DuplicateMatchResult> matches = candidates.stream()
                             .map(candidate -> phashMatch(candidate.getFileId(), candidate.getDistance()))
                             .toList();
                     return pagedMethodResult(
@@ -271,10 +267,10 @@ public class DuplicateSearchService {
                         pageSize));
     }
 
-    private DuplicateMethodResultResponse searchImageEmbedding(
+    private DuplicateMethodResult searchImageEmbedding(
             FileEntity sourceFile,
             UUID actorUserId,
-            DuplicateSearchPageRequest pageRequest,
+            DuplicateSearchPage pageRequest,
             SearchCursor cursor) {
         int pageSize = pageSize(pageRequest, properties.getImageEmbedding().getPageSize());
         SearchCursor methodCursor = methodCursor(cursor, DuplicateSearchMethod.IMAGE_EMBEDDING);
@@ -306,7 +302,7 @@ public class DuplicateSearchService {
                             vectorLiteral(sourceEmbedding.getEmbedding()),
                             methodCursor,
                             pageSize);
-                    List<DuplicateMatchResponse> matches = candidates.stream()
+                    List<DuplicateMatchResult> matches = candidates.stream()
                             .map(candidate -> embeddingMatch(
                                     candidate.getFileId(),
                                     candidate.getDistance(),
@@ -327,10 +323,10 @@ public class DuplicateSearchService {
                         pageSize));
     }
 
-    private DuplicateMethodResultResponse searchAudioFingerprint(
+    private DuplicateMethodResult searchAudioFingerprint(
             FileEntity sourceFile,
             UUID actorUserId,
-            DuplicateSearchPageRequest pageRequest,
+            DuplicateSearchPage pageRequest,
             SearchCursor cursor) {
         int pageSize = pageSize(pageRequest, properties.getAudioFingerprint().getPageSize());
         SearchCursor methodCursor = methodCursor(cursor, DuplicateSearchMethod.AUDIO_FINGERPRINT);
@@ -358,7 +354,7 @@ public class DuplicateSearchService {
                                     methodCursor == null ? null : methodCursor.createdAt(),
                                     methodCursor == null ? null : methodCursor.fileId(),
                                     PageRequest.of(0, pageSize + 1));
-                    List<DuplicateMatchResponse> matches = candidates.stream()
+                    List<DuplicateMatchResult> matches = candidates.stream()
                             .map(candidate -> audioMatch(candidate.fileId()))
                             .toList();
                     return pagedMethodResult(
@@ -375,7 +371,7 @@ public class DuplicateSearchService {
                         pageSize));
     }
 
-    private DuplicateGroupMethodResultResponse searchExactGroups(
+    private DuplicateGroupMethodResult searchExactGroups(
             UUID actorUserId,
             int requestedLimit,
             UUID folderId,
@@ -412,7 +408,7 @@ public class DuplicateSearchService {
                         file -> new ExactGroupKey(file.algorithm(), file.hashValue()),
                         LinkedHashMap::new,
                         Collectors.toList()));
-        List<DuplicateGroupResponse> groups = keys.stream()
+        List<DuplicateGroupResult> groups = keys.stream()
                 .map(key -> exactGroup(key, filesByKey.getOrDefault(
                         new ExactGroupKey(key.algorithm(), key.hashValue()),
                         List.of())))
@@ -449,12 +445,12 @@ public class DuplicateSearchService {
         return normalized.isEmpty() ? DEFAULT_METHODS : normalized;
     }
 
-    private DuplicateMethodResultResponse methodResult(
+    private DuplicateMethodResult methodResult(
             DuplicateSearchMethod method,
             DuplicateMethodStatus status,
-            List<DuplicateMatchResponse> matches,
+            List<DuplicateMatchResult> matches,
             int pageSize) {
-        return DuplicateMethodResultResponse.builder()
+        return DuplicateMethodResult.builder()
                 .method(method)
                 .status(status)
                 .matches(matches)
@@ -463,28 +459,28 @@ public class DuplicateSearchService {
                 .build();
     }
 
-    private DuplicateMethodResultResponse pagedMethodResult(
+    private DuplicateMethodResult pagedMethodResult(
             DuplicateSearchMethod method,
             DuplicateMethodStatus status,
-            List<DuplicateMatchResponse> fetchedMatches,
+            List<DuplicateMatchResult> fetchedMatches,
             int pageSize,
             SearchCursor nextCursor) {
         return pagedMethodResult(method, status, fetchedMatches, pageSize, nextCursor, false);
     }
 
-    private DuplicateMethodResultResponse pagedMethodResult(
+    private DuplicateMethodResult pagedMethodResult(
             DuplicateSearchMethod method,
             DuplicateMethodStatus status,
-            List<DuplicateMatchResponse> fetchedMatches,
+            List<DuplicateMatchResult> fetchedMatches,
             int pageSize,
             SearchCursor nextCursor,
             boolean forceHasMore) {
         boolean hasMore = fetchedMatches.size() > pageSize || forceHasMore;
-        List<DuplicateMatchResponse> matches = hasMore
+        List<DuplicateMatchResult> matches = hasMore
                 ? fetchedMatches.subList(0, pageSize)
                 : fetchedMatches;
 
-        return DuplicateMethodResultResponse.builder()
+        return DuplicateMethodResult.builder()
                 .method(method)
                 .status(status)
                 .matches(matches)
@@ -494,23 +490,23 @@ public class DuplicateSearchService {
                 .build();
     }
 
-    private DuplicateGroupMethodResultResponse groupMethodResult(
+    private DuplicateGroupMethodResult groupMethodResult(
             DuplicateSearchMethod method,
             DuplicateMethodStatus status,
-            List<DuplicateGroupResponse> groups) {
-        return DuplicateGroupMethodResultResponse.builder()
+            List<DuplicateGroupResult> groups) {
+        return DuplicateGroupMethodResult.builder()
                 .method(method)
                 .status(status)
                 .groups(groups)
                 .build();
     }
 
-    private DuplicateMatchResponse exactMatch(UUID fileId, String algorithm) {
-        return DuplicateMatchResponse.builder()
+    private DuplicateMatchResult exactMatch(UUID fileId, String algorithm) {
+        return DuplicateMatchResult.builder()
                 .fileId(fileId)
                 .confidence(DuplicateConfidence.EXACT)
                 .score(1.0)
-                .evidence(List.of(DuplicateEvidenceResponse.builder()
+                .evidence(List.of(DuplicateEvidenceResult.builder()
                         .type(DuplicateEvidenceType.CHECKSUM)
                         .score(1.0)
                         .details(Map.of("algorithm", algorithm))
@@ -518,14 +514,14 @@ public class DuplicateSearchService {
                 .build();
     }
 
-    private DuplicateMatchResponse phashMatch(UUID fileId, int distance) {
+    private DuplicateMatchResult phashMatch(UUID fileId, int distance) {
         double score = Math.max(0.0, 1.0 - distance / 64.0);
 
-        return DuplicateMatchResponse.builder()
+        return DuplicateMatchResult.builder()
                 .fileId(fileId)
                 .confidence(DuplicateConfidence.NEAR_DUPLICATE)
                 .score(score)
-                .evidence(List.of(DuplicateEvidenceResponse.builder()
+                .evidence(List.of(DuplicateEvidenceResult.builder()
                         .type(DuplicateEvidenceType.IMAGE_PHASH)
                         .score(score)
                         .details(Map.of("distance", distance))
@@ -533,14 +529,14 @@ public class DuplicateSearchService {
                 .build();
     }
 
-    private DuplicateMatchResponse embeddingMatch(UUID fileId, double distance, DuplicateEvidenceType evidenceType) {
+    private DuplicateMatchResult embeddingMatch(UUID fileId, double distance, DuplicateEvidenceType evidenceType) {
         double score = Math.max(0.0, 1.0 - distance / 2.0);
 
-        return DuplicateMatchResponse.builder()
+        return DuplicateMatchResult.builder()
                 .fileId(fileId)
                 .confidence(DuplicateConfidence.NEAR_DUPLICATE)
                 .score(score)
-                .evidence(List.of(DuplicateEvidenceResponse.builder()
+                .evidence(List.of(DuplicateEvidenceResult.builder()
                         .type(evidenceType)
                         .score(score)
                         .details(Map.of("distance", distance))
@@ -548,12 +544,12 @@ public class DuplicateSearchService {
                 .build();
     }
 
-    private DuplicateMatchResponse audioMatch(UUID fileId) {
-        return DuplicateMatchResponse.builder()
+    private DuplicateMatchResult audioMatch(UUID fileId) {
+        return DuplicateMatchResult.builder()
                 .fileId(fileId)
                 .confidence(DuplicateConfidence.EXACT)
                 .score(1.0)
-                .evidence(List.of(DuplicateEvidenceResponse.builder()
+                .evidence(List.of(DuplicateEvidenceResult.builder()
                         .type(DuplicateEvidenceType.AUDIO_FINGERPRINT)
                         .score(1.0)
                         .details(Map.of("match", "exact fingerprint"))
@@ -561,11 +557,11 @@ public class DuplicateSearchService {
                 .build();
     }
 
-    private DuplicateGroupResponse exactGroup(
+    private DuplicateGroupResult exactGroup(
             ExactDuplicateGroupKeyProjection key,
             List<ExactDuplicateGroupFileProjection> files) {
-        List<DuplicateGroupFileResponse> summaries = files.stream()
-                .map(file -> DuplicateGroupFileResponse.builder()
+        List<DuplicateGroupFileResult> summaries = files.stream()
+                .map(file -> DuplicateGroupFileResult.builder()
                         .fileId(file.fileId())
                         .name(file.name())
                         .mimeType(file.mimeType())
@@ -573,12 +569,12 @@ public class DuplicateSearchService {
                         .build())
                 .toList();
 
-        return DuplicateGroupResponse.builder()
+        return DuplicateGroupResult.builder()
                 .groupId(stableGroupId(DuplicateSearchMethod.EXACT.name(), key.algorithm().name(), key.hashValue()))
                 .confidence(DuplicateConfidence.EXACT)
                 .representativeFileId(representativeFileId(summaries))
                 .files(summaries)
-                .evidence(List.of(DuplicateGroupEvidenceResponse.builder()
+                .evidence(List.of(DuplicateGroupEvidenceResult.builder()
                         .type(DuplicateEvidenceType.CHECKSUM)
                         .score(1.0)
                         .details(Map.of("algorithm", key.algorithm().name()))
@@ -586,9 +582,9 @@ public class DuplicateSearchService {
                 .build();
     }
 
-    private UUID representativeFileId(List<DuplicateGroupFileResponse> files) {
+    private UUID representativeFileId(List<DuplicateGroupFileResult> files) {
         return files.stream()
-                .map(DuplicateGroupFileResponse::fileId)
+                .map(DuplicateGroupFileResult::fileId)
                 .min(Comparator.naturalOrder())
                 .orElse(null);
     }
@@ -621,7 +617,7 @@ public class DuplicateSearchService {
         return folderId == null && mimeType == null;
     }
 
-    private int pageSize(DuplicateSearchPageRequest pageRequest, int defaultPageSize) {
+    private int pageSize(DuplicateSearchPage pageRequest, int defaultPageSize) {
         Integer requested = pageRequest == null ? null : pageRequest.pageSize();
         int pageSize = requested == null ? defaultPageSize : requested;
 
@@ -635,7 +631,7 @@ public class DuplicateSearchService {
     private SearchCursor validateAndDecodeCursor(
             Collection<DuplicateSearchMethod> requestedMethods,
             List<DuplicateSearchMethod> methods,
-            DuplicateSearchPageRequest pageRequest) {
+            DuplicateSearchPage pageRequest) {
         String rawCursor = pageRequest == null ? null : pageRequest.cursor();
         if (rawCursor == null || rawCursor.isBlank()) {
             return null;

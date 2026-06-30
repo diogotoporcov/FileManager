@@ -7,9 +7,7 @@ import com.diogotoporcov.filemanager.api.config.FileTransferProperties;
 import com.diogotoporcov.filemanager.api.duplicate.application.ExactDuplicateGroupMaintenanceService;
 import com.diogotoporcov.filemanager.api.exception.FileTransferDisabledException;
 import com.diogotoporcov.filemanager.api.exception.ResourceNotFoundException;
-import com.diogotoporcov.filemanager.api.file.web.FileResponse;
-import com.diogotoporcov.filemanager.api.file.web.FileResponseMapper;
-import com.diogotoporcov.filemanager.api.file.web.search.FileSearchQuery;
+import com.diogotoporcov.filemanager.api.application.CursorPage;
 import com.diogotoporcov.filemanager.api.file.application.search.FileSearchCriteria;
 import com.diogotoporcov.filemanager.api.file.application.search.FileSearchCriteriaMapper;
 import com.diogotoporcov.filemanager.api.file.application.search.FileSearchCursor;
@@ -38,7 +36,6 @@ import com.diogotoporcov.filemanager.api.storage.port.ObjectStoragePort;
 import com.diogotoporcov.filemanager.api.storage.port.StoreObjectRequest;
 import com.diogotoporcov.filemanager.api.storage.port.StoreObjectResponse;
 import com.diogotoporcov.filemanager.api.tag.application.TagService;
-import com.diogotoporcov.filemanager.api.web.CursorPageResponse;
 import java.io.IOException;
 import java.io.InputStream;
 import java.time.OffsetDateTime;
@@ -73,7 +70,6 @@ public class FileService {
     private final FileSearchCriteriaMapper fileSearchCriteriaMapper;
     private final FileSearchSpecificationBuilder fileSearchSpecificationBuilder;
     private final FileSortMapper fileSortMapper;
-    private final FileResponseMapper fileResponseMapper;
     private final TagService tagService;
     private final ExactDuplicateGroupMaintenanceService exactDuplicateGroupMaintenanceService;
 
@@ -180,7 +176,7 @@ public class FileService {
     }
 
     @Transactional(readOnly = true)
-    public CursorPageResponse<FileResponse> searchFiles(FileSearchQuery query, UUID actorUserId) {
+    public CursorPage<FileEntity> searchFiles(FindFilesQuery query, UUID actorUserId) {
         findUser(actorUserId);
         if (query.getFolderId() != null) {
             accessControlService.assertCanAccessFolder(actorUserId, query.getFolderId(), Permission.FOLDER_VIEW);
@@ -193,24 +189,23 @@ public class FileService {
         Specification<FileEntity> specification = fileSearchSpecificationBuilder.build(criteria);
         Pageable pageable = PageRequest.of(
                 0,
-                criteria.pageRequest().fetchSize(),
+                criteria.pageSize() + 1,
                 fileSortMapper.toSort(criteria.sort()));
         List<FileEntity> rows = fileRepository.findAll(specification, pageable).getContent();
 
         return toFilePage(rows, criteria);
     }
 
-    private CursorPageResponse<FileResponse> toFilePage(List<FileEntity> rows, FileSearchCriteria criteria) {
-        boolean hasMore = rows.size() > criteria.pageRequest().size();
-        List<FileEntity> pageRows = hasMore ? rows.subList(0, criteria.pageRequest().size()) : rows;
+    private CursorPage<FileEntity> toFilePage(List<FileEntity> rows, FileSearchCriteria criteria) {
+        boolean hasMore = rows.size() > criteria.pageSize();
+        List<FileEntity> pageRows = hasMore ? rows.subList(0, criteria.pageSize()) : rows;
         FileEntity last = pageRows.isEmpty() ? null : pageRows.getLast();
 
-        return CursorPageResponse.<FileResponse>builder()
-                .items(pageRows.stream().map(fileResponseMapper::toResponse).toList())
-                .hasMore(hasMore)
-                .nextCursor(nextFileCursor(hasMore, last, criteria))
-                .pageSize(criteria.pageRequest().size())
-                .build();
+        return new CursorPage<>(
+                pageRows,
+                nextFileCursor(hasMore, last, criteria),
+                hasMore,
+                criteria.pageSize());
     }
 
     private String nextFileCursor(boolean hasMore, FileEntity last, FileSearchCriteria criteria) {

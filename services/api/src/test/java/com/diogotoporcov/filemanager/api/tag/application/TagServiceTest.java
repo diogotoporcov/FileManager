@@ -10,8 +10,6 @@ import com.diogotoporcov.filemanager.api.folder.domain.FolderEntity;
 import com.diogotoporcov.filemanager.api.folder.persistence.FolderRepository;
 import com.diogotoporcov.filemanager.api.identity.domain.User;
 import com.diogotoporcov.filemanager.api.identity.persistence.UserRepository;
-import com.diogotoporcov.filemanager.api.tag.web.CreateTagRequest;
-import com.diogotoporcov.filemanager.api.tag.web.TagResponseMapper;
 import com.diogotoporcov.filemanager.api.tag.domain.FileTagEntity;
 import com.diogotoporcov.filemanager.api.tag.domain.FileTagId;
 import com.diogotoporcov.filemanager.api.tag.domain.FolderTagEntity;
@@ -76,7 +74,6 @@ class TagServiceTest {
                 folderRepository,
                 userRepository,
                 accessControlService,
-                new TagResponseMapper(),
                 transactionTemplate);
         org.mockito.Mockito.lenient().when(transactionTemplate.execute(any())).thenAnswer(invocation -> {
             TransactionCallback<?> callback = invocation.getArgument(0);
@@ -87,7 +84,7 @@ class TagServiceTest {
 
     @Test
     void createOwnerTagUsesAuthenticatedUserAsOwner() {
-        CreateTagRequest request = ownerRequest("  Cat   Photos  ");
+        CreateTagCommand request = ownerRequest("  Cat   Photos  ");
         when(userRepository.findById(actorUserId)).thenReturn(Optional.of(actorUser));
         when(tagRepository.saveAndFlush(any(TagEntity.class))).thenAnswer(invocation -> {
             TagEntity tag = invocation.getArgument(0);
@@ -109,7 +106,7 @@ class TagServiceTest {
 
     @Test
     void createOrGetReturnsExistingOwnerTag() {
-        CreateTagRequest request = ownerRequest(" CATS ");
+        CreateTagCommand request = ownerRequest(" CATS ");
         TagEntity existing = ownerTag("cats", actorUser);
         when(tagRepository.findByOwnerUserIdAndScopeTypeAndNormalizedNameAndDeletedAtIsNull(
                 actorUserId,
@@ -127,7 +124,7 @@ class TagServiceTest {
         User folderOwner = User.builder().id(UUID.randomUUID()).email("owner@example.com").build();
         UUID folderId = UUID.randomUUID();
         FolderEntity folder = FolderEntity.builder().id(folderId).ownerUser(folderOwner).build();
-        CreateTagRequest request = folderRequest("Ceremony", folderId);
+        CreateTagCommand request = folderRequest("Ceremony", folderId);
         when(userRepository.findById(actorUserId)).thenReturn(Optional.of(actorUser));
         when(folderRepository.findByIdAndDeletedAtIsNull(folderId)).thenReturn(Optional.of(folder));
         when(tagRepository.saveAndFlush(any(TagEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -316,21 +313,12 @@ class TagServiceTest {
                 () -> tagService.assertCanUseTagForFileSearch(tagId, actorUserId, null));
     }
 
-    private CreateTagRequest ownerRequest(String name) {
-        CreateTagRequest request = new CreateTagRequest();
-        request.setName(name);
-        request.setScopeType(TagScopeType.OWNER);
-
-        return request;
+    private CreateTagCommand ownerRequest(String name) {
+        return new CreateTagCommand(name, TagScopeType.OWNER, null);
     }
 
-    private CreateTagRequest folderRequest(String name, UUID folderId) {
-        CreateTagRequest request = new CreateTagRequest();
-        request.setName(name);
-        request.setScopeType(TagScopeType.FOLDER);
-        request.setScopeFolderId(folderId);
-
-        return request;
+    private CreateTagCommand folderRequest(String name, UUID folderId) {
+        return new CreateTagCommand(name, TagScopeType.FOLDER, folderId);
     }
 
     private TagEntity ownerTag(String normalizedName, User ownerUser) {

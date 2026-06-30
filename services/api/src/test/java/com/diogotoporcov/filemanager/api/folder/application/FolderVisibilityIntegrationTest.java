@@ -7,8 +7,6 @@ import com.diogotoporcov.filemanager.api.folder.domain.FolderClosureId;
 import com.diogotoporcov.filemanager.api.folder.domain.FolderEntity;
 import com.diogotoporcov.filemanager.api.folder.persistence.FolderClosureRepository;
 import com.diogotoporcov.filemanager.api.folder.persistence.FolderRepository;
-import com.diogotoporcov.filemanager.api.folder.web.CreateFolderRequest;
-import com.diogotoporcov.filemanager.api.folder.web.FolderSummaryResponse;
 import com.diogotoporcov.filemanager.api.identity.domain.User;
 import com.diogotoporcov.filemanager.api.identity.persistence.UserRepository;
 import com.diogotoporcov.filemanager.api.processing.messaging.FileProcessingRequestedEvent;
@@ -61,7 +59,7 @@ class FolderVisibilityIntegrationTest {
         saveFolderGrant(shared, actor, other, Permission.FOLDER_VIEW);
 
         List<String> names = folderService.listRootFolders(null, actor.getId()).stream()
-                .map(FolderSummaryResponse::getName)
+                .map(FolderEntity::getName)
                 .toList();
 
         assertThat(names).containsExactly("owned", "shared");
@@ -89,8 +87,8 @@ class FolderVisibilityIntegrationTest {
         FolderEntity grandchild = saveFolder("grandchild", owner, child);
         saveFolderGrant(parent, actor, owner, Permission.FOLDER_VIEW);
 
-        List<String> directChildNames = folderService.listChildFolders(parent.getId(), null, actor.getId()).getFolders().stream()
-                .map(FolderSummaryResponse::getName)
+        List<String> directChildNames = folderService.listChildFolders(parent.getId(), null, actor.getId()).stream()
+                .map(FolderEntity::getName)
                 .toList();
 
         assertThat(directChildNames).containsExactly("child");
@@ -107,7 +105,7 @@ class FolderVisibilityIntegrationTest {
         saveFolderGrant(shared, actor, owner, Permission.FOLDER_VIEW, FolderGrantScope.RECURSIVE);
 
         List<String> names = folderService.listRootFolders(null, actor.getId()).stream()
-                .map(FolderSummaryResponse::getName)
+                .map(FolderEntity::getName)
                 .toList();
 
         assertThat(names).containsExactly("shared");
@@ -122,11 +120,11 @@ class FolderVisibilityIntegrationTest {
         FolderEntity grandchild = saveFolder("grandchild", owner, child);
         saveFolderGrant(parent, actor, owner, Permission.FOLDER_VIEW, FolderGrantScope.RECURSIVE);
 
-        List<String> childNames = folderService.listChildFolders(parent.getId(), null, actor.getId()).getFolders().stream()
-                .map(FolderSummaryResponse::getName)
+        List<String> childNames = folderService.listChildFolders(parent.getId(), null, actor.getId()).stream()
+                .map(FolderEntity::getName)
                 .toList();
-        List<String> grandchildNames = folderService.listChildFolders(child.getId(), null, actor.getId()).getFolders().stream()
-                .map(FolderSummaryResponse::getName)
+        List<String> grandchildNames = folderService.listChildFolders(child.getId(), null, actor.getId()).stream()
+                .map(FolderEntity::getName)
                 .toList();
 
         assertThat(childNames).containsExactly(child.getName());
@@ -154,14 +152,12 @@ class FolderVisibilityIntegrationTest {
         FolderEntity parent = saveFolder("parent", owner, null);
         FolderEntity child = saveFolder("child", owner, parent);
         saveFolderGrant(parent, actor, owner, Permission.FOLDER_CREATE, FolderGrantScope.RECURSIVE);
-        CreateFolderRequest request = new CreateFolderRequest();
-        request.setName("guest-created");
-        request.setParentFolderId(child.getId());
+        CreateFolderCommand request = new CreateFolderCommand("guest-created", child.getId());
 
         var response = folderService.createFolder(request, actor.getId());
 
-        assertThat(response.getParentFolderId()).isEqualTo(child.getId());
-        assertThat(response.getOwnerUserId()).isEqualTo(actor.getId());
+        assertThat(response.getParentFolder().getId()).isEqualTo(child.getId());
+        assertThat(response.getOwnerUser().getId()).isEqualTo(actor.getId());
     }
 
     @Test
@@ -185,8 +181,7 @@ class FolderVisibilityIntegrationTest {
     @Test
     void createRootFolderWritesSelfClosureRow() {
         User actor = saveUser("root-owner@example.com");
-        CreateFolderRequest request = new CreateFolderRequest();
-        request.setName("root");
+        CreateFolderCommand request = new CreateFolderCommand("root", null);
 
         var response = folderService.createFolder(request, actor.getId());
 
@@ -253,11 +248,7 @@ class FolderVisibilityIntegrationTest {
     }
 
     private FolderEntity createFolderThroughService(String name, FolderEntity parent, User actor) {
-        CreateFolderRequest request = new CreateFolderRequest();
-        request.setName(name);
-        if (parent != null) {
-            request.setParentFolderId(parent.getId());
-        }
+        CreateFolderCommand request = new CreateFolderCommand(name, parent == null ? null : parent.getId());
 
         var response = folderService.createFolder(request, actor.getId());
 

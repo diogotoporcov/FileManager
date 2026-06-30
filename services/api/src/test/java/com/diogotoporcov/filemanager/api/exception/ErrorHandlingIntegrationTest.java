@@ -3,8 +3,8 @@ package com.diogotoporcov.filemanager.api.exception;
 import com.diogotoporcov.filemanager.api.identity.application.IdentityResolutionService;
 import com.diogotoporcov.filemanager.api.identity.domain.User;
 import com.diogotoporcov.filemanager.api.storage.exception.StorageException;
+import com.diogotoporcov.filemanager.api.file.application.FindFilesQuery;
 import com.diogotoporcov.filemanager.api.file.application.search.SearchValidationException;
-import com.diogotoporcov.filemanager.api.file.web.search.FileSearchQuery;
 import com.diogotoporcov.filemanager.api.file.application.FileService;
 import com.diogotoporcov.filemanager.api.processing.messaging.FileProcessingRequestedEvent;
 import io.minio.MinioClient;
@@ -99,7 +99,7 @@ class ErrorHandlingIntegrationTest {
 
     @Test
     void invalidFileSearchParam_Returns400() throws Exception {
-        when(fileService.searchFiles(any(FileSearchQuery.class), any()))
+        when(fileService.searchFiles(any(FindFilesQuery.class), any()))
                 .thenThrow(new SearchValidationException("Unsupported sort field: storagePath"));
 
         mockMvc.perform(get("/files")

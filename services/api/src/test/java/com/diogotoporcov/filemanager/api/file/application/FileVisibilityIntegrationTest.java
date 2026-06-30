@@ -4,8 +4,6 @@ import com.diogotoporcov.filemanager.api.auth.domain.Permission;
 import com.diogotoporcov.filemanager.api.exception.AccessDeniedException;
 import com.diogotoporcov.filemanager.api.file.domain.FileEntity;
 import com.diogotoporcov.filemanager.api.file.persistence.FileRepository;
-import com.diogotoporcov.filemanager.api.file.web.FileResponse;
-import com.diogotoporcov.filemanager.api.file.web.search.FileSearchQuery;
 import com.diogotoporcov.filemanager.api.folder.domain.FolderClosureEntity;
 import com.diogotoporcov.filemanager.api.folder.domain.FolderClosureId;
 import com.diogotoporcov.filemanager.api.folder.domain.FolderEntity;
@@ -101,7 +99,7 @@ class FileVisibilityIntegrationTest {
         User actor = saveUser("actor@example.com");
         User other = saveUser("other@example.com");
         FolderEntity unsharedFolder = saveFolder("unshared", other, null);
-        FileSearchQuery query = query("name,asc", null);
+        FindFilesQuery query = query("name,asc", null);
         query.setFolderId(unsharedFolder.getId());
 
         assertThrows(AccessDeniedException.class, () -> fileService.searchFiles(query, actor.getId()));
@@ -116,7 +114,7 @@ class FileVisibilityIntegrationTest {
         TagEntity tag = saveOwnerTag("wedding", actor);
         saveFileTag(visible, tag, actor);
         saveFileTag(inaccessible, tag, actor);
-        FileSearchQuery query = query("name,asc", null);
+        FindFilesQuery query = query("name,asc", null);
         query.setTagId(tag.getId());
 
         List<String> names = searchNames(actor, query);
@@ -133,12 +131,12 @@ class FileVisibilityIntegrationTest {
         saveFile("c-visible.txt", actor, null);
         saveFile("d-visible.txt", actor, null);
         saveFile("e-visible.txt", actor, null);
-        FileSearchQuery query = query("name,asc", 2);
+        FindFilesQuery query = query("name,asc", 2);
 
         var page = fileService.searchFiles(query, actor.getId());
 
-        assertThat(page.getItems()).extracting("name").containsExactly("c-visible.txt", "d-visible.txt");
-        assertThat(page.isHasMore()).isTrue();
+        assertThat(page.items()).extracting("name").containsExactly("c-visible.txt", "d-visible.txt");
+        assertThat(page.hasMore()).isTrue();
     }
 
     @Test
@@ -198,7 +196,7 @@ class FileVisibilityIntegrationTest {
         saveFileTag(visible, tag, actor);
         saveFileTag(hidden, tag, actor);
         saveFolderGrant(sharedParent, actor, owner, Permission.FOLDER_VIEW, FolderGrantScope.RECURSIVE);
-        FileSearchQuery query = query("name,asc", null);
+        FindFilesQuery query = query("name,asc", null);
         query.setTagId(tag.getId());
 
         List<String> names = searchNames(actor, query);
@@ -218,12 +216,12 @@ class FileVisibilityIntegrationTest {
         saveFile("d-visible.txt", owner, child);
         saveFile("e-visible.txt", owner, child);
         saveFolderGrant(parent, actor, owner, Permission.FOLDER_VIEW, FolderGrantScope.RECURSIVE);
-        FileSearchQuery query = query("name,asc", 2);
+        FindFilesQuery query = query("name,asc", 2);
 
         var page = fileService.searchFiles(query, actor.getId());
 
-        assertThat(page.getItems()).extracting("name").containsExactly("c-visible.txt", "d-visible.txt");
-        assertThat(page.isHasMore()).isTrue();
+        assertThat(page.items()).extracting("name").containsExactly("c-visible.txt", "d-visible.txt");
+        assertThat(page.hasMore()).isTrue();
     }
 
     @Test
@@ -242,14 +240,14 @@ class FileVisibilityIntegrationTest {
         assertThat(names).isEmpty();
     }
 
-    private List<String> searchNames(User actor, FileSearchQuery query) {
-        return fileService.searchFiles(query, actor.getId()).getItems().stream()
-                .map(FileResponse::getName)
+    private List<String> searchNames(User actor, FindFilesQuery query) {
+        return fileService.searchFiles(query, actor.getId()).items().stream()
+                .map(FileEntity::getName)
                 .toList();
     }
 
-    private FileSearchQuery query(String sort, Integer limit) {
-        FileSearchQuery query = new FileSearchQuery();
+    private FindFilesQuery query(String sort, Integer limit) {
+        FindFilesQuery query = new FindFilesQuery();
         query.setSort(sort);
         query.setLimit(limit);
 

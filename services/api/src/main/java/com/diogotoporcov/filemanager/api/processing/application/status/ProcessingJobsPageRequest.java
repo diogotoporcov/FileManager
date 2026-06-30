@@ -1,15 +1,15 @@
-package com.diogotoporcov.filemanager.api.web;
+package com.diogotoporcov.filemanager.api.processing.application.status;
 
 import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
 import java.util.Base64;
 import java.util.UUID;
 
-public record BoundedPageRequest(int size, String cursor) {
+public record ProcessingJobsPageRequest(int size, String cursor) {
     public static final int DEFAULT_SIZE = 50;
     public static final int MAX_SIZE = 200;
 
-    public static BoundedPageRequest of(Integer requestedSize, String cursor) {
+    public static ProcessingJobsPageRequest of(Integer requestedSize, String cursor) {
         int effectiveSize = requestedSize == null ? DEFAULT_SIZE : requestedSize;
 
         if (effectiveSize < 1) {
@@ -20,7 +20,7 @@ public record BoundedPageRequest(int size, String cursor) {
             throw new IllegalArgumentException("Page size must not exceed " + MAX_SIZE);
         }
 
-        return new BoundedPageRequest(effectiveSize, cursor);
+        return new ProcessingJobsPageRequest(effectiveSize, cursor);
     }
 
     public int fetchSize() {

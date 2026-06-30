@@ -1,10 +1,11 @@
 package com.diogotoporcov.filemanager.api.file.web;
 
 import com.diogotoporcov.filemanager.api.auth.application.CurrentUserService;
+import com.diogotoporcov.filemanager.api.application.CursorPage;
 import com.diogotoporcov.filemanager.api.file.application.FileDownload;
 import com.diogotoporcov.filemanager.api.file.application.FileTransferPolicy;
+import com.diogotoporcov.filemanager.api.file.application.FindFilesQuery;
 import com.diogotoporcov.filemanager.api.file.application.PresignedDownloadUrl;
-import com.diogotoporcov.filemanager.api.file.web.search.FileSearchQuery;
 import com.diogotoporcov.filemanager.api.file.application.FileService;
 import com.diogotoporcov.filemanager.api.file.domain.FileEntity;
 import com.diogotoporcov.filemanager.api.web.CursorPageResponse;
@@ -93,10 +94,10 @@ public class FileController {
             @ApiResponse(responseCode = "400", description = "Invalid search parameter", content = @Content)
     })
     @GetMapping
-    public CursorPageResponse<FileResponse> listFiles(@Valid @ParameterObject FileSearchQuery query) {
+    public CursorPageResponse<FileResponse> listFiles(@Valid @ParameterObject com.diogotoporcov.filemanager.api.file.web.search.FileSearchQuery query) {
         UUID actorUserId = currentUserService.getCurrentUserId();
 
-        return fileService.searchFiles(query, actorUserId);
+        return toResponsePage(fileService.searchFiles(toApplicationQuery(query), actorUserId));
     }
 
     @Operation(summary = "Get file metadata", description = "Retrieves metadata for a specific file.")
@@ -177,6 +178,32 @@ public class FileController {
         if (file.getOriginalFilename() == null || file.getOriginalFilename().isBlank()) {
             throw new IllegalArgumentException("Filename is missing");
         }
+    }
+
+    private FindFilesQuery toApplicationQuery(com.diogotoporcov.filemanager.api.file.web.search.FileSearchQuery query) {
+        return new FindFilesQuery(
+                query.getFolderId(),
+                query.getTagId(),
+                query.getCreatedAtFrom(),
+                query.getCreatedAtTo(),
+                query.getUpdatedAtFrom(),
+                query.getUpdatedAtTo(),
+                query.getSizeMin(),
+                query.getSizeMax(),
+                query.getMimeType(),
+                query.getSort(),
+                query.getSize(),
+                query.getLimit(),
+                query.getCursor());
+    }
+
+    private CursorPageResponse<FileResponse> toResponsePage(CursorPage<FileEntity> page) {
+        return CursorPageResponse.<FileResponse>builder()
+                .items(page.items().stream().map(fileResponseMapper::toResponse).toList())
+                .nextCursor(page.nextCursor())
+                .hasMore(page.hasMore())
+                .pageSize(page.pageSize())
+                .build();
     }
 
     @Operation(summary = "Delete file", description = "Deletes a specific file.")

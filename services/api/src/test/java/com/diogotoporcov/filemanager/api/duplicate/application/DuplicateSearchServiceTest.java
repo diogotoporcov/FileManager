@@ -16,10 +16,6 @@ import com.diogotoporcov.filemanager.api.duplicate.persistence.ExactDuplicateGro
 import com.diogotoporcov.filemanager.api.duplicate.persistence.ImageEmbeddingDuplicateCandidateRepository;
 import com.diogotoporcov.filemanager.api.duplicate.persistence.ImagePhashDuplicateCandidateRepository;
 import com.diogotoporcov.filemanager.api.duplicate.persistence.PhashDuplicateCandidateProjection;
-import com.diogotoporcov.filemanager.api.duplicate.web.DuplicateGroupSearchRequest;
-import com.diogotoporcov.filemanager.api.duplicate.web.DuplicateGroupSearchResponse;
-import com.diogotoporcov.filemanager.api.duplicate.web.DuplicateSearchPageRequest;
-import com.diogotoporcov.filemanager.api.duplicate.web.DuplicateSearchResponse;
 import com.diogotoporcov.filemanager.api.file.domain.FileEntity;
 import com.diogotoporcov.filemanager.api.file.persistence.FileRepository;
 import com.diogotoporcov.filemanager.api.identity.domain.User;
@@ -142,11 +138,11 @@ class DuplicateSearchServiceTest {
                 source.getId(),
                 List.of(DuplicateSearchMethod.EXACT),
                 actor.getId(),
-                new DuplicateSearchPageRequest(1, null));
+                new DuplicateSearchPage(1, null));
 
-        DuplicateSearchResponse.DuplicateMethodResultResponse method = response.methods().getFirst();
+        DuplicateSearchResult.DuplicateMethodResult method = response.methods().getFirst();
         assertThat(method.matches())
-                .extracting(DuplicateSearchResponse.DuplicateMatchResponse::fileId)
+                .extracting(DuplicateSearchResult.DuplicateMatchResult::fileId)
                 .containsExactly(first);
         assertThat(method.pageSize()).isEqualTo(1);
         assertThat(method.hasMore()).isTrue();
@@ -177,7 +173,7 @@ class DuplicateSearchServiceTest {
                 actor.getId());
 
         assertThat(response.methods().getFirst().matches())
-                .extracting(DuplicateSearchResponse.DuplicateMatchResponse::fileId)
+                .extracting(DuplicateSearchResult.DuplicateMatchResult::fileId)
                 .containsExactly(match);
         assertThat(response.methods().getFirst().hasMore()).isFalse();
     }
@@ -220,7 +216,7 @@ class DuplicateSearchServiceTest {
                 actor.getId());
 
         assertThat(response.methods().getFirst().matches())
-                .extracting(DuplicateSearchResponse.DuplicateMatchResponse::fileId)
+                .extracting(DuplicateSearchResult.DuplicateMatchResult::fileId)
                 .containsExactly(match);
     }
 
@@ -267,7 +263,7 @@ class DuplicateSearchServiceTest {
                 actor.getId());
 
         assertThat(response.methods().getFirst().matches())
-                .extracting(DuplicateSearchResponse.DuplicateMatchResponse::fileId)
+                .extracting(DuplicateSearchResult.DuplicateMatchResult::fileId)
                 .containsExactly(match);
     }
 
@@ -304,19 +300,19 @@ class DuplicateSearchServiceTest {
                 source.getId(),
                 List.of(DuplicateSearchMethod.IMAGE_PHASH),
                 actor.getId(),
-                new DuplicateSearchPageRequest(1, null));
+                new DuplicateSearchPage(1, null));
         var secondPage = service.searchDuplicatesForFile(
                 source.getId(),
                 List.of(DuplicateSearchMethod.IMAGE_PHASH),
                 actor.getId(),
-                new DuplicateSearchPageRequest(1, firstPage.methods().getFirst().nextCursor()));
+                new DuplicateSearchPage(1, firstPage.methods().getFirst().nextCursor()));
 
         assertThat(firstPage.methods().getFirst().matches())
-                .extracting(DuplicateSearchResponse.DuplicateMatchResponse::fileId)
+                .extracting(DuplicateSearchResult.DuplicateMatchResult::fileId)
                 .containsExactly(first);
         assertThat(firstPage.methods().getFirst().hasMore()).isTrue();
         assertThat(secondPage.methods().getFirst().matches())
-                .extracting(DuplicateSearchResponse.DuplicateMatchResponse::fileId)
+                .extracting(DuplicateSearchResult.DuplicateMatchResult::fileId)
                 .containsExactly(second);
         assertThat(secondPage.methods().getFirst().hasMore()).isFalse();
     }
@@ -360,11 +356,11 @@ class DuplicateSearchServiceTest {
                 source.getId(),
                 List.of(DuplicateSearchMethod.IMAGE_EMBEDDING),
                 actor.getId(),
-                new DuplicateSearchPageRequest(1, null));
+                new DuplicateSearchPage(1, null));
 
-        DuplicateSearchResponse.DuplicateMethodResultResponse method = response.methods().getFirst();
+        DuplicateSearchResult.DuplicateMethodResult method = response.methods().getFirst();
         assertThat(method.matches())
-                .extracting(DuplicateSearchResponse.DuplicateMatchResponse::fileId)
+                .extracting(DuplicateSearchResult.DuplicateMatchResult::fileId)
                 .containsExactly(first);
         assertThat(method.hasMore()).isTrue();
         assertThat(method.nextCursor()).isNotBlank();
@@ -425,11 +421,11 @@ class DuplicateSearchServiceTest {
                 source.getId(),
                 List.of(DuplicateSearchMethod.IMAGE_EMBEDDING),
                 actor.getId(),
-                new DuplicateSearchPageRequest(1, null));
+                new DuplicateSearchPage(1, null));
 
-        DuplicateSearchResponse.DuplicateMethodResultResponse method = response.methods().getFirst();
+        DuplicateSearchResult.DuplicateMethodResult method = response.methods().getFirst();
         assertThat(method.matches())
-                .extracting(DuplicateSearchResponse.DuplicateMatchResponse::fileId)
+                .extracting(DuplicateSearchResult.DuplicateMatchResult::fileId)
                 .containsExactly(first);
         assertThat(method.hasMore()).isTrue();
         assertThat(method.nextCursor()).isNotBlank();
@@ -473,11 +469,11 @@ class DuplicateSearchServiceTest {
                 source.getId(),
                 List.of(DuplicateSearchMethod.IMAGE_EMBEDDING),
                 actor.getId(),
-                new DuplicateSearchPageRequest(1, null));
+                new DuplicateSearchPage(1, null));
 
-        DuplicateSearchResponse.DuplicateMethodResultResponse method = response.methods().getFirst();
+        DuplicateSearchResult.DuplicateMethodResult method = response.methods().getFirst();
         assertThat(method.matches())
-                .extracting(DuplicateSearchResponse.DuplicateMatchResponse::fileId)
+                .extracting(DuplicateSearchResult.DuplicateMatchResult::fileId)
                 .containsExactly(first);
         assertThat(method.hasMore()).isTrue();
         assertThat(method.nextCursor()).isNotBlank();
@@ -535,11 +531,11 @@ class DuplicateSearchServiceTest {
                 source.getId(),
                 List.of(DuplicateSearchMethod.AUDIO_FINGERPRINT),
                 actor.getId(),
-                new DuplicateSearchPageRequest(1, null));
+                new DuplicateSearchPage(1, null));
 
-        DuplicateSearchResponse.DuplicateMethodResultResponse method = response.methods().getFirst();
+        DuplicateSearchResult.DuplicateMethodResult method = response.methods().getFirst();
         assertThat(method.matches())
-                .extracting(DuplicateSearchResponse.DuplicateMatchResponse::fileId)
+                .extracting(DuplicateSearchResult.DuplicateMatchResult::fileId)
                 .containsExactly(first);
         assertThat(method.hasMore()).isTrue();
         assertThat(method.nextCursor()).isNotBlank();
@@ -553,7 +549,7 @@ class DuplicateSearchServiceTest {
                         UUID.randomUUID(),
                         List.of(DuplicateSearchMethod.EXACT, DuplicateSearchMethod.IMAGE_PHASH),
                         actor.getId(),
-                        new DuplicateSearchPageRequest(10, cursor)))
+                        new DuplicateSearchPage(10, cursor)))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("exactly one method");
 
@@ -568,7 +564,7 @@ class DuplicateSearchServiceTest {
                         UUID.randomUUID(),
                         null,
                         actor.getId(),
-                        new DuplicateSearchPageRequest(10, cursor)))
+                        new DuplicateSearchPage(10, cursor)))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("exactly one method");
 
@@ -583,7 +579,7 @@ class DuplicateSearchServiceTest {
                         UUID.randomUUID(),
                         List.of(DuplicateSearchMethod.EXACT),
                         actor.getId(),
-                        new DuplicateSearchPageRequest(10, cursor)))
+                        new DuplicateSearchPage(10, cursor)))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("method does not match");
 
@@ -596,7 +592,7 @@ class DuplicateSearchServiceTest {
                         UUID.randomUUID(),
                         List.of(DuplicateSearchMethod.EXACT),
                         actor.getId(),
-                        new DuplicateSearchPageRequest(10, "%%%%")))
+                        new DuplicateSearchPage(10, "%%%%")))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Invalid duplicate search cursor");
 
@@ -612,7 +608,7 @@ class DuplicateSearchServiceTest {
                         UUID.randomUUID(),
                         List.of(DuplicateSearchMethod.EXACT),
                         actor.getId(),
-                        new DuplicateSearchPageRequest(10, cursor)))
+                        new DuplicateSearchPage(10, cursor)))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Invalid duplicate search cursor");
 
@@ -622,9 +618,8 @@ class DuplicateSearchServiceTest {
     @Test
     void groupSearchIsExactOnly() {
         var response = service.searchGroups(
-                new DuplicateGroupSearchRequest(
+                new DuplicateGroupSearchQuery(
                         List.of(DuplicateSearchMethod.AUDIO_FINGERPRINT, DuplicateSearchMethod.IMAGE_PHASH),
-                        null,
                         null,
                         null,
                         null,
@@ -632,7 +627,7 @@ class DuplicateSearchServiceTest {
                 actor.getId());
 
         assertThat(response.methods())
-                .extracting(DuplicateGroupSearchResponse.DuplicateGroupMethodResultResponse::status)
+                .extracting(DuplicateGroupSearchResult.DuplicateGroupMethodResult::status)
                 .containsExactly(
                         DuplicateMethodStatus.NOT_SUPPORTED_FOR_GROUPED_SEARCH_YET,
                         DuplicateMethodStatus.NOT_SUPPORTED_FOR_GROUPED_SEARCH_YET);
@@ -653,7 +648,7 @@ class DuplicateSearchServiceTest {
                 actor.getId());
 
         assertThat(response.methods())
-                .extracting(DuplicateSearchResponse.DuplicateMethodResultResponse::status)
+                .extracting(DuplicateSearchResult.DuplicateMethodResult::status)
                 .containsOnly(DuplicateMethodStatus.UNSUPPORTED_FOR_FILE_TYPE);
     }
 

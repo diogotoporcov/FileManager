@@ -1,6 +1,7 @@
 package com.diogotoporcov.filemanager.api.duplicate.web;
 
 import com.diogotoporcov.filemanager.api.auth.application.CurrentUserService;
+import com.diogotoporcov.filemanager.api.duplicate.application.DuplicateSearchResult;
 import com.diogotoporcov.filemanager.api.duplicate.application.DuplicateSearchService;
 import com.diogotoporcov.filemanager.api.duplicate.domain.DuplicateSearchMethod;
 import java.util.List;
@@ -39,7 +40,7 @@ class DuplicateControllerTest {
         UUID fileId = UUID.randomUUID();
         when(currentUserService.getCurrentUserId()).thenReturn(actorUserId);
         when(duplicateSearchService.searchDuplicatesForFile(eq(fileId), any(), eq(actorUserId), any()))
-                .thenReturn(new DuplicateSearchResponse(fileId, List.of()));
+                .thenReturn(new DuplicateSearchResult(fileId, List.of()));
 
         controller.findDuplicatesForFile(fileId, null, null, null);
 
@@ -56,7 +57,7 @@ class DuplicateControllerTest {
         UUID fileId = UUID.randomUUID();
         when(currentUserService.getCurrentUserId()).thenReturn(actorUserId);
         when(duplicateSearchService.searchDuplicatesForFile(eq(fileId), any(), eq(actorUserId), any()))
-                .thenReturn(new DuplicateSearchResponse(fileId, List.of()));
+                .thenReturn(new DuplicateSearchResult(fileId, List.of()));
 
         controller.findDuplicatesForFile(fileId, "exact,image_phash,audio_fingerprint", 25, null);
 
@@ -76,7 +77,7 @@ class DuplicateControllerTest {
         UUID fileId = UUID.randomUUID();
         when(currentUserService.getCurrentUserId()).thenReturn(actorUserId);
         when(duplicateSearchService.searchDuplicatesForFile(eq(fileId), any(), eq(actorUserId), any()))
-                .thenReturn(new DuplicateSearchResponse(fileId, List.of()));
+                .thenReturn(new DuplicateSearchResult(fileId, List.of()));
 
         controller.findDuplicatesForFile(fileId, "exact", 25, "cursor");
 

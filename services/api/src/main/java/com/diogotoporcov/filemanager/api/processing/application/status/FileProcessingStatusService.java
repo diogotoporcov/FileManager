@@ -1,15 +1,12 @@
 package com.diogotoporcov.filemanager.api.processing.application.status;
 
+import com.diogotoporcov.filemanager.api.application.CursorPage;
+import com.diogotoporcov.filemanager.api.processing.application.status.ProcessingJobsPageRequest.SeekCursor;
 import com.diogotoporcov.filemanager.api.auth.application.AccessControlService;
 import com.diogotoporcov.filemanager.api.auth.domain.Permission;
-import com.diogotoporcov.filemanager.api.processing.web.status.FileProcessingStatusResponse.AggregateStatus;
-import com.diogotoporcov.filemanager.api.processing.web.status.FileProcessingStatusResponse;
-import com.diogotoporcov.filemanager.api.processing.web.status.ProcessingJobResponse;
+import com.diogotoporcov.filemanager.api.processing.application.status.FileProcessingStatus.AggregateStatus;
 import com.diogotoporcov.filemanager.api.processing.domain.ProcessingJob;
 import com.diogotoporcov.filemanager.api.processing.persistence.ProcessingJobRepository;
-import com.diogotoporcov.filemanager.api.web.BoundedPageRequest.SeekCursor;
-import com.diogotoporcov.filemanager.api.web.BoundedPageRequest;
-import com.diogotoporcov.filemanager.api.web.CursorPageResponse;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.UUID;
@@ -26,10 +23,10 @@ public class FileProcessingStatusService {
     private final AccessControlService accessControlService;
 
     @Transactional(readOnly = true)
-    public CursorPageResponse<ProcessingJobResponse> getProcessingJobs(
+    public CursorPage<ProcessingJobStatus> getProcessingJobs(
             UUID actorUserId,
             UUID fileId,
-            BoundedPageRequest pageRequest) {
+            ProcessingJobsPageRequest pageRequest) {
         accessControlService.assertCanAccessFile(actorUserId, fileId, Permission.FILE_VIEW);
 
         List<ProcessingJob> jobs = findProcessingJobPage(fileId, pageRequest);
@@ -37,17 +34,16 @@ public class FileProcessingStatusService {
         List<ProcessingJob> pageJobs = hasMore ? jobs.subList(0, pageRequest.size()) : jobs;
         ProcessingJob last = pageJobs.isEmpty() ? null : pageJobs.getLast();
 
-        return CursorPageResponse.<ProcessingJobResponse>builder()
-                .items(pageJobs.stream()
-                        .map(this::mapToResponse)
-                        .collect(Collectors.toList()))
-                .hasMore(hasMore)
-                .nextCursor(nextJobCursor(hasMore, last))
-                .pageSize(pageRequest.size())
-                .build();
+        return new CursorPage<>(
+                pageJobs.stream()
+                        .map(this::mapToStatus)
+                        .collect(Collectors.toList()),
+                nextJobCursor(hasMore, last),
+                hasMore,
+                pageRequest.size());
     }
 
-    private List<ProcessingJob> findProcessingJobPage(UUID fileId, BoundedPageRequest pageRequest) {
+    private List<ProcessingJob> findProcessingJobPage(UUID fileId, ProcessingJobsPageRequest pageRequest) {
         PageRequest pageable = PageRequest.of(0, pageRequest.fetchSize());
         SeekCursor cursor = pageRequest.decodedCursor();
         if (cursor == null) {
@@ -62,22 +58,22 @@ public class FileProcessingStatusService {
             return null;
         }
 
-        return BoundedPageRequest.encodeCursor(last.getCreatedAt(), last.getId());
+        return ProcessingJobsPageRequest.encodeCursor(last.getCreatedAt(), last.getId());
     }
 
     @Transactional(readOnly = true)
-    public FileProcessingStatusResponse getFileProcessingStatus(UUID actorUserId, UUID fileId) {
+    public FileProcessingStatus getFileProcessingStatus(UUID actorUserId, UUID fileId) {
         accessControlService.assertCanAccessFile(actorUserId, fileId, Permission.FILE_VIEW);
 
         List<ProcessingJob> jobs = processingJobRepository.findPage(
                 fileId,
-                PageRequest.of(0, BoundedPageRequest.MAX_SIZE));
+                PageRequest.of(0, ProcessingJobsPageRequest.MAX_SIZE));
         AggregateStatus overallStatus = calculateAggregateStatus(jobs);
 
-        return FileProcessingStatusResponse.builder()
+        return FileProcessingStatus.builder()
                 .fileId(fileId)
                 .overallStatus(overallStatus)
-                .jobs(jobs.stream().map(this::mapToResponse).collect(Collectors.toList()))
+                .jobs(jobs.stream().map(this::mapToStatus).collect(Collectors.toList()))
                 .build();
     }
 
@@ -106,8 +102,8 @@ public class FileProcessingStatusService {
         return AggregateStatus.PARTIAL_FAILURE;
     }
 
-    private ProcessingJobResponse mapToResponse(ProcessingJob job) {
-        return ProcessingJobResponse.builder()
+    private ProcessingJobStatus mapToStatus(ProcessingJob job) {
+        return ProcessingJobStatus.builder()
                 .id(job.getId())
                 .fileId(job.getFile().getId())
                 .jobType(job.getJobType())

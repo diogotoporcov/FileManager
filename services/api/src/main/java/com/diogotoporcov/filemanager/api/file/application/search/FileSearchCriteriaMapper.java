@@ -1,7 +1,6 @@
 package com.diogotoporcov.filemanager.api.file.application.search;
 
-import com.diogotoporcov.filemanager.api.file.web.search.FileSearchQuery;
-import com.diogotoporcov.filemanager.api.web.BoundedPageRequest;
+import com.diogotoporcov.filemanager.api.file.application.FindFilesQuery;
 import java.time.format.DateTimeParseException;
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -11,6 +10,8 @@ import org.springframework.stereotype.Component;
 @Component
 public class FileSearchCriteriaMapper {
     private static final int MAX_MIME_TYPES = 20;
+    public static final int DEFAULT_PAGE_SIZE = 50;
+    public static final int MAX_PAGE_SIZE = 200;
 
     private final FileSortMapper fileSortMapper;
 
@@ -18,9 +19,9 @@ public class FileSearchCriteriaMapper {
         this.fileSortMapper = fileSortMapper;
     }
 
-    public FileSearchCriteria toCriteria(FileSearchQuery query, UUID actorUserId) {
+    public FileSearchCriteria toCriteria(FindFilesQuery query, UUID actorUserId) {
         SortSpec sort = fileSortMapper.parse(query.getSort());
-        BoundedPageRequest pageRequest = BoundedPageRequest.of(requestedLimit(query), query.getCursor());
+        int pageSize = pageSize(requestedLimit(query));
         FileSearchCursor cursor = FileSearchCursor.decode(query.getCursor(), sort);
 
         return new FileSearchCriteria(
@@ -32,16 +33,30 @@ public class FileSearchCriteriaMapper {
                 new LongRange(query.getSizeMin(), query.getSizeMax()),
                 normalizeMimeTypes(query.getMimeType()),
                 sort,
-                pageRequest,
+                pageSize,
                 cursor);
     }
 
-    private Integer requestedLimit(FileSearchQuery query) {
+    private Integer requestedLimit(FindFilesQuery query) {
         if (query.getSize() != null && query.getLimit() != null && !query.getSize().equals(query.getLimit())) {
             throw new SearchValidationException("Specify either size or limit, not both");
         }
 
         return query.getLimit() != null ? query.getLimit() : query.getSize();
+    }
+
+    private int pageSize(Integer requestedSize) {
+        int effectiveSize = requestedSize == null ? DEFAULT_PAGE_SIZE : requestedSize;
+
+        if (effectiveSize < 1) {
+            throw new IllegalArgumentException("Page size must be positive");
+        }
+
+        if (effectiveSize > MAX_PAGE_SIZE) {
+            throw new IllegalArgumentException("Page size must not exceed " + MAX_PAGE_SIZE);
+        }
+
+        return effectiveSize;
     }
 
     private OffsetDateTime parseDateTime(String field, String raw) {

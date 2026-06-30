@@ -25,7 +25,6 @@ import com.diogotoporcov.filemanager.api.processing.persistence.result.FileEmbed
 import com.diogotoporcov.filemanager.api.processing.persistence.result.FileFingerprintRepository;
 import com.diogotoporcov.filemanager.api.processing.persistence.result.ImageFingerprintRepository;
 import com.diogotoporcov.filemanager.api.processing.persistence.result.ImagePhashMihChunkRepository;
-import com.diogotoporcov.filemanager.api.processing.web.result.AudioAnalysisResultRequest;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -296,8 +295,8 @@ class ProcessingJobServiceTest {
                 .toList();
     }
 
-    private AudioAnalysisResultRequest audioRequest(UUID fileId) {
-        return AudioAnalysisResultRequest.builder()
+    private AudioAnalysisResultCommand audioRequest(UUID fileId) {
+        return AudioAnalysisResultCommand.builder()
                 .fileId(fileId)
                 .durationMs(1_000L)
                 .codec("mp3")
