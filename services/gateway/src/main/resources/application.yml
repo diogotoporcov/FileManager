@@ -4,10 +4,23 @@ server:
 filemanager:
   api:
     base-url: ${FILEMANAGER_API_BASE_URL:http://localhost:8081}
+  gateway:
+    max-request-size: ${GATEWAY_MAX_REQUEST_SIZE:100MB}
+    rate-limit:
+      enabled: ${GATEWAY_RATE_LIMIT_ENABLED:true}
+      replenish-rate: ${GATEWAY_RATE_LIMIT_REPLENISH_RATE:20}
+      burst-capacity: ${GATEWAY_RATE_LIMIT_BURST_CAPACITY:40}
+      requested-tokens: ${GATEWAY_RATE_LIMIT_REQUESTED_TOKENS:1}
+      forwarded-headers-enabled: ${GATEWAY_RATE_LIMIT_FORWARDED_HEADERS_ENABLED:true}
+      trusted-proxy-cidrs: ${GATEWAY_RATE_LIMIT_TRUSTED_PROXY_CIDRS:127.0.0.1/32,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
 
 spring:
   application:
     name: filemanager-gateway
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
   cloud:
     gateway:
       server:
@@ -15,26 +28,6 @@ spring:
           httpclient:
             connect-timeout: ${GATEWAY_CONNECT_TIMEOUT:5000}
             response-timeout: ${GATEWAY_RESPONSE_TIMEOUT:60s}
-          default-filters:
-            - name: RequestSize
-              args:
-                maxSize: ${GATEWAY_MAX_REQUEST_SIZE:100MB}
-          routes:
-            # 1. Block access to internal endpoints
-            - id: internal_stop
-              uri: "forward:/not-found"
-              predicates:
-                - Path=/api/v1/internal/**, /internal/**
-              filters:
-                - SetStatus=404
-
-            # 2. Route public API v1 to backend
-            - id: filemanager_api_v1
-              uri: ${filemanager.api.base-url}
-              predicates:
-                - Path=/api/v1/**
-              filters:
-                - RewritePath=/api/v1/(?<segment>.*), /${segment}
 
 management:
   endpoints:

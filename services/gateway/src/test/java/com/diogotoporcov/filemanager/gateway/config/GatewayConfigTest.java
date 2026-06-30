@@ -45,7 +45,7 @@ class GatewayConfigTest {
         assertThat(duration).isPositive();
 
         // Max request size
-        String maxRequestSize = context.getEnvironment().getProperty("spring.cloud.gateway.server.webflux.default-filters[0].args.maxSize");
+        String maxRequestSize = context.getEnvironment().getProperty("filemanager.gateway.max-request-size");
         assertThat(maxRequestSize).isNotNull();
     }
 }
