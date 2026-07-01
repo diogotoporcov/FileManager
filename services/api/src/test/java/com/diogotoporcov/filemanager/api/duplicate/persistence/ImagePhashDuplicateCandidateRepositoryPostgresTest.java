@@ -34,10 +34,10 @@ import org.testcontainers.utility.DockerImageName;
     "spring.jpa.hibernate.ddl-auto=validate",
     "spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect",
     "filemanager.internal.api-token=test-internal-token-123456789012",
-    "minio.endpoint=http://localhost:9000",
-    "minio.access-key=dummy",
-    "minio.secret-key=dummy",
-    "minio.bucket-name=test-bucket"
+    "storage.object.endpoint=http://localhost:9000",
+    "storage.object.access-key=dummy",
+    "storage.object.secret-key=dummy",
+    "storage.object.bucket-name=test-bucket"
 })
 @Testcontainers
 class ImagePhashDuplicateCandidateRepositoryPostgresTest {

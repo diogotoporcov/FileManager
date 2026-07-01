@@ -9,11 +9,11 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.validation.annotation.Validated;
 
 @Configuration
-@ConfigurationProperties(prefix = "minio")
+@ConfigurationProperties(prefix = "storage.object")
 @Getter
 @Setter
 @Validated
-public class MinioProperties {
+public class ObjectStorageProperties {
     @NotBlank
     @URL
     private String endpoint;

@@ -1,6 +1,6 @@
 package com.diogotoporcov.filemanager.api.storage.adapter;
 
-import com.diogotoporcov.filemanager.api.storage.config.MinioProperties;
+import com.diogotoporcov.filemanager.api.storage.config.ObjectStorageProperties;
 import com.diogotoporcov.filemanager.api.storage.exception.StorageObjectNotFoundException;
 import com.diogotoporcov.filemanager.api.storage.port.CreatePresignedDownloadUrlRequest;
 import com.diogotoporcov.filemanager.api.storage.port.GetObjectRequest;
@@ -21,26 +21,27 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
-class MinioAdapterTest {
+class S3CompatibleObjectStorageAdapterTest {
     @Mock
     private MinioClient minioClient;
 
-    private MinioAdapter adapter;
+    private S3CompatibleObjectStorageAdapter adapter;
 
     @BeforeEach
     void setUp() {
-        MinioProperties properties = new MinioProperties();
+        ObjectStorageProperties properties = new ObjectStorageProperties();
         properties.setEndpoint("http://localhost:9000");
         properties.setAccessKey("access");
         properties.setSecretKey("secret");
         properties.setBucketName("files");
-        adapter = new MinioAdapter(minioClient, properties);
+        adapter = new S3CompatibleObjectStorageAdapter(minioClient, properties);
     }
 
     @Test

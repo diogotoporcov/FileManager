@@ -5,10 +5,10 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
-public class MinioConfig {
+public class S3CompatibleObjectStorageConfig {
 
     @Bean
-    public MinioClient minioClient(MinioProperties properties) {
+    public MinioClient minioClient(ObjectStorageProperties properties) {
         return MinioClient.builder()
                 .endpoint(properties.getEndpoint())
                 .credentials(properties.getAccessKey(), properties.getSecretKey())

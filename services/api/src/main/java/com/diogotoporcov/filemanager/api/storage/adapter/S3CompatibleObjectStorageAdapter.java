@@ -1,5 +1,15 @@
 package com.diogotoporcov.filemanager.api.storage.adapter;
 
+import com.diogotoporcov.filemanager.api.storage.config.ObjectStorageProperties;
+import com.diogotoporcov.filemanager.api.storage.exception.StorageException;
+import com.diogotoporcov.filemanager.api.storage.exception.StorageObjectNotFoundException;
+import com.diogotoporcov.filemanager.api.storage.port.CreatePresignedDownloadUrlRequest;
+import com.diogotoporcov.filemanager.api.storage.port.CreatePresignedDownloadUrlResponse;
+import com.diogotoporcov.filemanager.api.storage.port.GetObjectRequest;
+import com.diogotoporcov.filemanager.api.storage.port.GetObjectResponse;
+import com.diogotoporcov.filemanager.api.storage.port.ObjectStoragePort;
+import com.diogotoporcov.filemanager.api.storage.port.StoreObjectRequest;
+import com.diogotoporcov.filemanager.api.storage.port.StoreObjectResponse;
 import io.minio.BucketExistsArgs;
 import io.minio.GetObjectArgs;
 import io.minio.GetPresignedObjectUrlArgs;
@@ -10,35 +20,23 @@ import io.minio.PutObjectArgs;
 import io.minio.RemoveObjectArgs;
 import io.minio.errors.ErrorResponseException;
 import io.minio.http.Method;
-import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.InitializingBean;
-import org.springframework.stereotype.Component;
-import com.diogotoporcov.filemanager.api.storage.config.MinioProperties;
-import com.diogotoporcov.filemanager.api.storage.exception.StorageObjectNotFoundException;
-import com.diogotoporcov.filemanager.api.storage.port.ObjectStoragePort;
-import com.diogotoporcov.filemanager.api.storage.exception.StorageException;
-import com.diogotoporcov.filemanager.api.storage.port.CreatePresignedDownloadUrlRequest;
-import com.diogotoporcov.filemanager.api.storage.port.CreatePresignedDownloadUrlResponse;
-import com.diogotoporcov.filemanager.api.storage.port.GetObjectRequest;
-import com.diogotoporcov.filemanager.api.storage.port.GetObjectResponse;
-import com.diogotoporcov.filemanager.api.storage.port.StoreObjectRequest;
-import com.diogotoporcov.filemanager.api.storage.port.StoreObjectResponse;
-
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
+import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.InitializingBean;
+import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
-public class MinioAdapter implements ObjectStoragePort, InitializingBean {
+public class S3CompatibleObjectStorageAdapter implements ObjectStoragePort, InitializingBean {
 
     private final MinioClient minioClient;
-    private final MinioProperties properties;
+    private final ObjectStorageProperties properties;
 
     @Override
     public void afterPropertiesSet() {
         try {
-            // Ensure the configured bucket exists at startup; create it if missing.
             boolean found = minioClient.bucketExists(BucketExistsArgs.builder()
                     .bucket(properties.getBucketName())
                     .build());
@@ -49,7 +47,7 @@ public class MinioAdapter implements ObjectStoragePort, InitializingBean {
                         .build());
             }
         } catch (Exception e) {
-            throw new StorageException("Failed to initialize MinIO bucket: " + properties.getBucketName(), e);
+            throw new StorageException("Failed to initialize object storage bucket: " + properties.getBucketName(), e);
         }
     }
 

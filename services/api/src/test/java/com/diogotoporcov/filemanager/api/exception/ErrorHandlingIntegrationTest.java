@@ -89,7 +89,7 @@ class ErrorHandlingIntegrationTest {
     @Test
     void storageError_Returns500WithSafeMessage() throws Exception {
         when(fileService.getFileMetadata(any(), any()))
-                .thenThrow(new StorageException("Raw minio error details here"));
+                .thenThrow(new StorageException("Raw object storage error details here"));
 
         mockMvc.perform(get("/files/" + UUID.randomUUID())
                         .with(jwt()))

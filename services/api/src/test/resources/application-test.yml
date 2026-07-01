@@ -17,11 +17,12 @@ spring:
           jwk-set-uri: http://localhost:8082/realms/filemanager/protocol/openid-connect/certs
           audiences: filemanager-api
 
-minio:
-  endpoint: http://localhost:9000
-  access-key: dummy
-  secret-key: dummy
-  bucket-name: test-bucket
+storage:
+  object:
+    endpoint: http://localhost:9000
+    access-key: dummy
+    secret-key: dummy
+    bucket-name: test-bucket
 
 filemanager:
   internal:
