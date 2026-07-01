@@ -1,6 +1,6 @@
 package com.diogotoporcov.filemanager.api.duplicate.web;
 
-import com.diogotoporcov.filemanager.api.auth.application.CurrentUserService;
+import com.diogotoporcov.filemanager.api.auth.application.CurrentUserProvider;
 import com.diogotoporcov.filemanager.api.duplicate.application.DuplicateGroupSearchQuery;
 import com.diogotoporcov.filemanager.api.duplicate.application.DuplicateGroupSearchResult;
 import com.diogotoporcov.filemanager.api.duplicate.application.DuplicateSearchPage;
@@ -37,7 +37,7 @@ import org.springframework.web.bind.annotation.RestController;
 })
 public class DuplicateController {
     private final DuplicateSearchService duplicateSearchService;
-    private final CurrentUserService currentUserService;
+    private final CurrentUserProvider currentUserProvider;
 
     @Operation(summary = "Find duplicates for one owned source file")
     @GetMapping("/files/{fileId}/duplicates")
@@ -51,7 +51,7 @@ public class DuplicateController {
             @RequestParam(value = "cursor", required = false) String cursor) {
         List<DuplicateSearchMethod> parsedMethods = parseMethods(methods);
         validateCursorRequest(cursor, parsedMethods);
-        UUID actorUserId = currentUserService.getCurrentUserId();
+        UUID actorUserId = currentUserProvider.getCurrentUserId();
 
         return toResponse(duplicateSearchService.searchDuplicatesForFile(
                 fileId,
@@ -64,7 +64,7 @@ public class DuplicateController {
     @PostMapping("/duplicates/groups/search")
     public DuplicateGroupSearchResponse searchDuplicateGroups(
             @RequestBody(required = false) @Valid DuplicateGroupSearchRequest request) {
-        UUID actorUserId = currentUserService.getCurrentUserId();
+        UUID actorUserId = currentUserProvider.getCurrentUserId();
 
         return toResponse(duplicateSearchService.searchGroups(toQuery(request), actorUserId));
     }

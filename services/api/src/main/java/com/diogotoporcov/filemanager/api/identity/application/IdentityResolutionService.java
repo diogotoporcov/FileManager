@@ -1,6 +1,7 @@
 package com.diogotoporcov.filemanager.api.identity.application;
 
 import com.diogotoporcov.filemanager.api.auth.domain.AuthenticatedIdentity;
+import com.diogotoporcov.filemanager.api.auth.domain.ExternalIdentityClaims;
 import com.diogotoporcov.filemanager.api.auth.port.IdentityProviderPort;
 import com.diogotoporcov.filemanager.api.config.AppProperties;
 import com.diogotoporcov.filemanager.api.identity.domain.User;
@@ -8,7 +9,6 @@ import com.diogotoporcov.filemanager.api.identity.domain.UserIdentity;
 import com.diogotoporcov.filemanager.api.identity.persistence.UserIdentityRepository;
 import com.diogotoporcov.filemanager.api.identity.persistence.UserRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,8 +22,8 @@ public class IdentityResolutionService {
     private final AppProperties appProperties;
 
     @Transactional
-    public User resolveUser(Jwt jwt) {
-        AuthenticatedIdentity identity = identityProviderPort.extractIdentity(jwt);
+    public User resolveUser(ExternalIdentityClaims claims) {
+        AuthenticatedIdentity identity = identityProviderPort.extractIdentity(claims);
 
         return userIdentityRepository.findByProviderAndProviderSubject(identity.provider(), identity.subject())
                 .map(UserIdentity::getUser)

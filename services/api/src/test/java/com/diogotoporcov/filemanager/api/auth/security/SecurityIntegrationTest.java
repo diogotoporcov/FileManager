@@ -1,6 +1,7 @@
 package com.diogotoporcov.filemanager.api.auth.security;
 
 import com.diogotoporcov.filemanager.api.application.CursorPage;
+import com.diogotoporcov.filemanager.api.auth.domain.ExternalIdentityClaims;
 import com.diogotoporcov.filemanager.api.identity.domain.User;
 import com.diogotoporcov.filemanager.api.exception.AccessDeniedException;
 import com.diogotoporcov.filemanager.api.file.application.FindFilesQuery;
@@ -388,7 +389,12 @@ class SecurityIntegrationTest {
                 .build();
 
         when(jwtDecoder.decode("test-internal-token")).thenReturn(dummyJwt);
-        when(identityResolutionService.resolveUser(dummyJwt)).thenThrow(new AccessDeniedException("Invalid user"));
+        when(identityResolutionService.resolveUser(new ExternalIdentityClaims(
+                "test-internal-token",
+                null,
+                null,
+                null,
+                null))).thenThrow(new AccessDeniedException("Invalid user"));
 
         mockMvc.perform(get("/files")
                         .header("Authorization", "Bearer test-internal-token"))

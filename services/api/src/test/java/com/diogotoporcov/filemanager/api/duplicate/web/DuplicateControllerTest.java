@@ -1,6 +1,6 @@
 package com.diogotoporcov.filemanager.api.duplicate.web;
 
-import com.diogotoporcov.filemanager.api.auth.application.CurrentUserService;
+import com.diogotoporcov.filemanager.api.auth.application.CurrentUserProvider;
 import com.diogotoporcov.filemanager.api.duplicate.application.DuplicateSearchResult;
 import com.diogotoporcov.filemanager.api.duplicate.application.DuplicateSearchService;
 import com.diogotoporcov.filemanager.api.duplicate.domain.DuplicateSearchMethod;
@@ -25,20 +25,20 @@ class DuplicateControllerTest {
     @Mock
     private DuplicateSearchService duplicateSearchService;
     @Mock
-    private CurrentUserService currentUserService;
+    private CurrentUserProvider currentUserProvider;
 
     private DuplicateController controller;
 
     @BeforeEach
     void setUp() {
-        controller = new DuplicateController(duplicateSearchService, currentUserService);
+        controller = new DuplicateController(duplicateSearchService, currentUserProvider);
     }
 
     @Test
     void omittedMethodsPassesEmptySelectionForServiceDefault() {
         UUID actorUserId = UUID.randomUUID();
         UUID fileId = UUID.randomUUID();
-        when(currentUserService.getCurrentUserId()).thenReturn(actorUserId);
+        when(currentUserProvider.getCurrentUserId()).thenReturn(actorUserId);
         when(duplicateSearchService.searchDuplicatesForFile(eq(fileId), any(), eq(actorUserId), any()))
                 .thenReturn(new DuplicateSearchResult(fileId, List.of()));
 
@@ -55,7 +55,7 @@ class DuplicateControllerTest {
     void commaSeparatedMethodsAreParsedCaseInsensitively() {
         UUID actorUserId = UUID.randomUUID();
         UUID fileId = UUID.randomUUID();
-        when(currentUserService.getCurrentUserId()).thenReturn(actorUserId);
+        when(currentUserProvider.getCurrentUserId()).thenReturn(actorUserId);
         when(duplicateSearchService.searchDuplicatesForFile(eq(fileId), any(), eq(actorUserId), any()))
                 .thenReturn(new DuplicateSearchResult(fileId, List.of()));
 
@@ -75,7 +75,7 @@ class DuplicateControllerTest {
     void singleMethodCursorIsForwarded() {
         UUID actorUserId = UUID.randomUUID();
         UUID fileId = UUID.randomUUID();
-        when(currentUserService.getCurrentUserId()).thenReturn(actorUserId);
+        when(currentUserProvider.getCurrentUserId()).thenReturn(actorUserId);
         when(duplicateSearchService.searchDuplicatesForFile(eq(fileId), any(), eq(actorUserId), any()))
                 .thenReturn(new DuplicateSearchResult(fileId, List.of()));
 
@@ -97,7 +97,7 @@ class DuplicateControllerTest {
                 () -> controller.findDuplicatesForFile(fileId, "EXACT,NOPE", null, null));
 
         assertThat(exception.getMessage()).contains("Invalid duplicate search method");
-        verify(currentUserService, never()).getCurrentUserId();
+        verify(currentUserProvider, never()).getCurrentUserId();
     }
 
     @Test
@@ -109,7 +109,7 @@ class DuplicateControllerTest {
                 () -> controller.findDuplicatesForFile(fileId, "EXACT,IMAGE_PHASH", null, "cursor"));
 
         assertThat(exception.getMessage()).contains("exactly one method");
-        verify(currentUserService, never()).getCurrentUserId();
+        verify(currentUserProvider, never()).getCurrentUserId();
         verify(duplicateSearchService, never()).searchDuplicatesForFile(any(), any(), any(), any());
     }
 
@@ -122,7 +122,7 @@ class DuplicateControllerTest {
                 () -> controller.findDuplicatesForFile(fileId, null, null, "cursor"));
 
         assertThat(exception.getMessage()).contains("exactly one method");
-        verify(currentUserService, never()).getCurrentUserId();
+        verify(currentUserProvider, never()).getCurrentUserId();
         verify(duplicateSearchService, never()).searchDuplicatesForFile(any(), any(), any(), any());
     }
 

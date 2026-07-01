@@ -1,6 +1,6 @@
 package com.diogotoporcov.filemanager.api.tag.web;
 
-import com.diogotoporcov.filemanager.api.auth.application.CurrentUserService;
+import com.diogotoporcov.filemanager.api.auth.application.CurrentUserProvider;
 import com.diogotoporcov.filemanager.api.tag.application.CreateTagCommand;
 import com.diogotoporcov.filemanager.api.tag.application.TagService;
 import com.diogotoporcov.filemanager.api.tag.domain.TagEntity;
@@ -34,7 +34,7 @@ import org.springframework.web.bind.annotation.RestController;
 })
 public class TagController {
     private final TagService tagService;
-    private final CurrentUserService currentUserService;
+    private final CurrentUserProvider currentUserProvider;
     private final TagResponseMapper tagResponseMapper;
 
     @Operation(
@@ -50,7 +50,7 @@ public class TagController {
     })
     @PostMapping("/tags")
     public TagResponse createOrGetTag(@Valid @RequestBody CreateTagRequest request) {
-        return tagResponseMapper.toResponse(tagService.createOrGetTag(toCommand(request), currentUserService.getCurrentUserId()));
+        return tagResponseMapper.toResponse(tagService.createOrGetTag(toCommand(request), currentUserProvider.getCurrentUserId()));
     }
 
     @Operation(
@@ -68,13 +68,13 @@ public class TagController {
                 scopeFolderId,
                 q,
                 limit,
-                currentUserService.getCurrentUserId()));
+                currentUserProvider.getCurrentUserId()));
     }
 
     @Operation(summary = "List file tags", description = "Lists active tags assigned to a file.")
     @GetMapping("/files/{fileId}/tags")
     public List<TagResponse> listFileTags(@Parameter(description = "ID of the file") @PathVariable UUID fileId) {
-        return toResponseList(tagService.listFileTags(fileId, currentUserService.getCurrentUserId()));
+        return toResponseList(tagService.listFileTags(fileId, currentUserProvider.getCurrentUserId()));
     }
 
     @Operation(
@@ -84,7 +84,7 @@ public class TagController {
     public List<TagResponse> applyTagToFile(
             @Parameter(description = "ID of the file") @PathVariable UUID fileId,
             @Valid @RequestBody ApplyTagRequest request) {
-        return toResponseList(tagService.applyTagToFile(fileId, request.getTagId(), currentUserService.getCurrentUserId()));
+        return toResponseList(tagService.applyTagToFile(fileId, request.getTagId(), currentUserProvider.getCurrentUserId()));
     }
 
     @Operation(
@@ -95,13 +95,13 @@ public class TagController {
     public List<TagResponse> removeTagFromFile(
             @Parameter(description = "ID of the file") @PathVariable UUID fileId,
             @Parameter(description = "ID of the tag") @PathVariable UUID tagId) {
-        return toResponseList(tagService.removeTagFromFile(fileId, tagId, currentUserService.getCurrentUserId()));
+        return toResponseList(tagService.removeTagFromFile(fileId, tagId, currentUserProvider.getCurrentUserId()));
     }
 
     @Operation(summary = "List folder tags", description = "Lists active tags assigned to a folder.")
     @GetMapping("/folders/{folderId}/tags")
     public List<TagResponse> listFolderTags(@Parameter(description = "ID of the folder") @PathVariable UUID folderId) {
-        return toResponseList(tagService.listFolderTags(folderId, currentUserService.getCurrentUserId()));
+        return toResponseList(tagService.listFolderTags(folderId, currentUserProvider.getCurrentUserId()));
     }
 
     @Operation(
@@ -111,7 +111,7 @@ public class TagController {
     public List<TagResponse> applyTagToFolder(
             @Parameter(description = "ID of the folder") @PathVariable UUID folderId,
             @Valid @RequestBody ApplyTagRequest request) {
-        return toResponseList(tagService.applyTagToFolder(folderId, request.getTagId(), currentUserService.getCurrentUserId()));
+        return toResponseList(tagService.applyTagToFolder(folderId, request.getTagId(), currentUserProvider.getCurrentUserId()));
     }
 
     @Operation(
@@ -122,7 +122,7 @@ public class TagController {
     public List<TagResponse> removeTagFromFolder(
             @Parameter(description = "ID of the folder") @PathVariable UUID folderId,
             @Parameter(description = "ID of the tag") @PathVariable UUID tagId) {
-        return toResponseList(tagService.removeTagFromFolder(folderId, tagId, currentUserService.getCurrentUserId()));
+        return toResponseList(tagService.removeTagFromFolder(folderId, tagId, currentUserProvider.getCurrentUserId()));
     }
 
     private CreateTagCommand toCommand(CreateTagRequest request) {

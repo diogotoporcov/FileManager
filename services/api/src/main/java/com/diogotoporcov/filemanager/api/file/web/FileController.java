@@ -1,7 +1,7 @@
 package com.diogotoporcov.filemanager.api.file.web;
 
-import com.diogotoporcov.filemanager.api.auth.application.CurrentUserService;
 import com.diogotoporcov.filemanager.api.application.CursorPage;
+import com.diogotoporcov.filemanager.api.auth.application.CurrentUserProvider;
 import com.diogotoporcov.filemanager.api.file.application.FileDownload;
 import com.diogotoporcov.filemanager.api.file.application.FileTransferPolicy;
 import com.diogotoporcov.filemanager.api.file.application.FindFilesQuery;
@@ -50,7 +50,7 @@ import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBo
 public class FileController {
 
     private final FileService fileService;
-    private final CurrentUserService currentUserService;
+    private final CurrentUserProvider currentUserProvider;
     private final FileResponseMapper fileResponseMapper;
 
     @Operation(summary = "Upload a file", description = "Uploads a new file owned by the authenticated user.")
@@ -66,7 +66,7 @@ public class FileController {
     ) throws IOException {
         validateUpload(file);
 
-        UUID actorUserId = currentUserService.getCurrentUserId();
+        UUID actorUserId = currentUserProvider.getCurrentUserId();
         FileEntity entity = fileService.uploadFile(
                 file.getOriginalFilename(),
                 file.getContentType(),
@@ -95,7 +95,7 @@ public class FileController {
     })
     @GetMapping
     public CursorPageResponse<FileResponse> listFiles(@Valid @ParameterObject com.diogotoporcov.filemanager.api.file.web.search.FileSearchQuery query) {
-        UUID actorUserId = currentUserService.getCurrentUserId();
+        UUID actorUserId = currentUserProvider.getCurrentUserId();
 
         return toResponsePage(fileService.searchFiles(toApplicationQuery(query), actorUserId));
     }
@@ -107,7 +107,7 @@ public class FileController {
     })
     @GetMapping("/{fileId}")
     public FileResponse getFileMetadata(@Parameter(description = "ID of the file") @PathVariable UUID fileId) {
-        UUID actorUserId = currentUserService.getCurrentUserId();
+        UUID actorUserId = currentUserProvider.getCurrentUserId();
         FileEntity entity = fileService.getFileMetadata(fileId, actorUserId);
 
         return fileResponseMapper.toResponse(entity);
@@ -122,7 +122,7 @@ public class FileController {
     public ResponseEntity<StreamingResponseBody> downloadFile(
             @Parameter(description = "ID of the file") @PathVariable UUID fileId,
             @RequestHeader(value = HttpHeaders.RANGE, required = false) String rangeHeader) {
-        UUID actorUserId = currentUserService.getCurrentUserId();
+        UUID actorUserId = currentUserProvider.getCurrentUserId();
         FileDownload download = fileService.openDownload(fileId, actorUserId, rangeHeader);
         StreamingResponseBody body = outputStream -> {
             try (InputStream content = download.getContent()) {
@@ -159,7 +159,7 @@ public class FileController {
     @PostMapping("/{fileId}/download-url")
     public PresignedDownloadUrlResponse createPresignedDownloadUrl(
             @Parameter(description = "ID of the file") @PathVariable UUID fileId) {
-        UUID actorUserId = currentUserService.getCurrentUserId();
+        UUID actorUserId = currentUserProvider.getCurrentUserId();
         PresignedDownloadUrl downloadUrl = fileService.createPresignedDownloadUrl(fileId, actorUserId);
 
         return PresignedDownloadUrlResponse.builder()
@@ -214,7 +214,7 @@ public class FileController {
     @DeleteMapping("/{fileId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteFile(@Parameter(description = "ID of the file") @PathVariable UUID fileId) {
-        UUID actorUserId = currentUserService.getCurrentUserId();
+        UUID actorUserId = currentUserProvider.getCurrentUserId();
         fileService.deleteFile(fileId, actorUserId);
     }
 

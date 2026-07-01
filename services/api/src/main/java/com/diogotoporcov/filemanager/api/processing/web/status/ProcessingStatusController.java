@@ -1,7 +1,7 @@
 package com.diogotoporcov.filemanager.api.processing.web.status;
 
 import com.diogotoporcov.filemanager.api.application.CursorPage;
-import com.diogotoporcov.filemanager.api.auth.application.CurrentUserService;
+import com.diogotoporcov.filemanager.api.auth.application.CurrentUserProvider;
 import com.diogotoporcov.filemanager.api.processing.application.status.FileProcessingStatus;
 import com.diogotoporcov.filemanager.api.processing.application.status.FileProcessingStatusService;
 import com.diogotoporcov.filemanager.api.processing.application.status.ProcessingJobsPageRequest;
@@ -33,7 +33,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class ProcessingStatusController {
 
     private final FileProcessingStatusService fileProcessingStatusService;
-    private final CurrentUserService currentUserService;
+    private final CurrentUserProvider currentUserProvider;
 
     @Operation(summary = "Get processing jobs", description = "Lists all processing jobs (checksum, phash, etc.) for a specific file.")
     @ApiResponse(responseCode = "200", description = "List of processing jobs")
@@ -42,7 +42,7 @@ public class ProcessingStatusController {
             @Parameter(description = "ID of the file") @PathVariable UUID fileId,
             @Parameter(description = "Maximum jobs to return") @org.springframework.web.bind.annotation.RequestParam(required = false) Integer size,
             @Parameter(description = "Cursor returned by the previous page") @org.springframework.web.bind.annotation.RequestParam(required = false) String cursor) {
-        UUID actorUserId = currentUserService.getCurrentUserId();
+        UUID actorUserId = currentUserProvider.getCurrentUserId();
 
         return toResponsePage(fileProcessingStatusService.getProcessingJobs(actorUserId, fileId, ProcessingJobsPageRequest.of(size, cursor)));
     }
@@ -51,7 +51,7 @@ public class ProcessingStatusController {
     @ApiResponse(responseCode = "200", description = "Aggregated processing status")
     @GetMapping("/{fileId}/processing-status")
     public FileProcessingStatusResponse getFileProcessingStatus(@Parameter(description = "ID of the file") @PathVariable UUID fileId) {
-        UUID actorUserId = currentUserService.getCurrentUserId();
+        UUID actorUserId = currentUserProvider.getCurrentUserId();
 
         return toResponse(fileProcessingStatusService.getFileProcessingStatus(actorUserId, fileId));
     }

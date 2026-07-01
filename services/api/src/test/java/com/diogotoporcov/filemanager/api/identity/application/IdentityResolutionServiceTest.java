@@ -1,6 +1,7 @@
 package com.diogotoporcov.filemanager.api.identity.application;
 
 import com.diogotoporcov.filemanager.api.auth.domain.AuthenticatedIdentity;
+import com.diogotoporcov.filemanager.api.auth.domain.ExternalIdentityClaims;
 import com.diogotoporcov.filemanager.api.auth.port.IdentityProviderPort;
 import com.diogotoporcov.filemanager.api.config.AppProperties;
 import com.diogotoporcov.filemanager.api.identity.domain.User;
@@ -9,15 +10,18 @@ import com.diogotoporcov.filemanager.api.identity.persistence.UserIdentityReposi
 import com.diogotoporcov.filemanager.api.identity.persistence.UserRepository;
 import java.util.Optional;
 import java.util.UUID;
-import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.junit.jupiter.MockitoExtension;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
-import org.springframework.security.oauth2.jwt.Jwt;
+import org.mockito.junit.jupiter.MockitoExtension;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class IdentityResolutionServiceTest {
@@ -32,19 +36,28 @@ class IdentityResolutionServiceTest {
     private IdentityProviderPort identityProviderPort;
 
     private final AppProperties appProperties = new AppProperties();
+    private final ExternalIdentityClaims claims = new ExternalIdentityClaims(
+            "jwt-sub",
+            "jwt@example.com",
+            null,
+            null,
+            true);
 
     private IdentityResolutionService identityResolutionService;
 
-    @org.junit.jupiter.api.BeforeEach
+    @BeforeEach
     void setUp() {
-        identityResolutionService = new IdentityResolutionService(userRepository, userIdentityRepository, identityProviderPort, appProperties);
+        identityResolutionService = new IdentityResolutionService(
+                userRepository,
+                userIdentityRepository,
+                identityProviderPort,
+                appProperties);
     }
 
     @Test
     void resolveUser_ExistingIdentity_ReturnsUser() {
         String subject = "sub-123";
-        Jwt jwt = mock(Jwt.class);
-        when(identityProviderPort.extractIdentity(jwt)).thenReturn(identity(subject, "test@example.com", null, null, null));
+        when(identityProviderPort.extractIdentity(claims)).thenReturn(identity(subject, "test@example.com", null, null, null));
 
         User user = User.builder().id(UUID.randomUUID()).email("test@example.com").build();
         UserIdentity identity = UserIdentity.builder().user(user).build();
@@ -52,7 +65,7 @@ class IdentityResolutionServiceTest {
         when(userIdentityRepository.findByProviderAndProviderSubject("keycloak", subject))
                 .thenReturn(Optional.of(identity));
 
-        User result = identityResolutionService.resolveUser(jwt);
+        User result = identityResolutionService.resolveUser(claims);
 
         assertThat(result).isEqualTo(user);
         verify(userIdentityRepository, never()).save(any());
@@ -62,8 +75,7 @@ class IdentityResolutionServiceTest {
     void resolveUser_NewIdentityExistingUser_RejectsAutoLinkByDefault() {
         String subject = "sub-123";
         String email = "test@example.com";
-        Jwt jwt = mock(Jwt.class);
-        when(identityProviderPort.extractIdentity(jwt)).thenReturn(identity(subject, email, null, null, true));
+        when(identityProviderPort.extractIdentity(claims)).thenReturn(identity(subject, email, null, null, true));
 
         User user = User.builder().id(UUID.randomUUID()).email(email).build();
 
@@ -71,7 +83,7 @@ class IdentityResolutionServiceTest {
                 .thenReturn(Optional.empty());
         when(userRepository.findByEmail(email)).thenReturn(Optional.of(user));
 
-        assertThatThrownBy(() -> identityResolutionService.resolveUser(jwt))
+        assertThatThrownBy(() -> identityResolutionService.resolveUser(claims))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Automatic linking to an existing user is not enabled");
         verify(userIdentityRepository, never()).save(any(UserIdentity.class));
@@ -85,8 +97,7 @@ class IdentityResolutionServiceTest {
 
         String subject = "sub-123";
         String email = "test@example.com";
-        Jwt jwt = mock(Jwt.class);
-        when(identityProviderPort.extractIdentity(jwt)).thenReturn(identity(subject, email, null, null, true));
+        when(identityProviderPort.extractIdentity(claims)).thenReturn(identity(subject, email, null, null, true));
 
         User user = User.builder().id(UUID.randomUUID()).email(email).build();
 
@@ -94,7 +105,7 @@ class IdentityResolutionServiceTest {
                 .thenReturn(Optional.empty());
         when(userRepository.findByEmail(email)).thenReturn(Optional.of(user));
 
-        User result = identityResolutionService.resolveUser(jwt);
+        User result = identityResolutionService.resolveUser(claims);
 
         assertThat(result).isEqualTo(user);
         verify(userIdentityRepository).save(any(UserIdentity.class));
@@ -105,15 +116,14 @@ class IdentityResolutionServiceTest {
     void resolveUser_NewUser_ProvisionsAndReturnsUser() {
         String subject = "sub-123";
         String email = "new@example.com";
-        Jwt jwt = mock(Jwt.class);
-        when(identityProviderPort.extractIdentity(jwt)).thenReturn(identity(subject, email, "First", "Last", true));
+        when(identityProviderPort.extractIdentity(claims)).thenReturn(identity(subject, email, "First", "Last", true));
 
         when(userIdentityRepository.findByProviderAndProviderSubject("keycloak", subject))
                 .thenReturn(Optional.empty());
         when(userRepository.findByEmail(email)).thenReturn(Optional.empty());
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        User result = identityResolutionService.resolveUser(jwt);
+        User result = identityResolutionService.resolveUser(claims);
 
         assertThat(result.getEmail()).isEqualTo(email);
         assertThat(result.getFirstName()).isEqualTo("First");
@@ -124,22 +134,20 @@ class IdentityResolutionServiceTest {
 
     @Test
     void resolveUser_MissingSubject_ThrowsException() {
-        Jwt jwt = mock(Jwt.class);
-        when(identityProviderPort.extractIdentity(jwt))
+        when(identityProviderPort.extractIdentity(claims))
                 .thenThrow(new IllegalArgumentException("Subject (sub) claim is missing or blank in JWT"));
 
-        assertThatThrownBy(() -> identityResolutionService.resolveUser(jwt))
+        assertThatThrownBy(() -> identityResolutionService.resolveUser(claims))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Subject (sub) claim is missing or blank");
     }
 
     @Test
     void resolveUser_MissingEmail_ThrowsException() {
-        Jwt jwt = mock(Jwt.class);
-        when(identityProviderPort.extractIdentity(jwt))
+        when(identityProviderPort.extractIdentity(claims))
                 .thenThrow(new IllegalArgumentException("Email claim is missing or blank in JWT"));
 
-        assertThatThrownBy(() -> identityResolutionService.resolveUser(jwt))
+        assertThatThrownBy(() -> identityResolutionService.resolveUser(claims))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Email claim is missing or blank");
     }
@@ -148,8 +156,7 @@ class IdentityResolutionServiceTest {
     void resolveUser_UnverifiedEmailLinking_ThrowsException() {
         String subject = "sub-123";
         String email = "test@example.com";
-        Jwt jwt = mock(Jwt.class);
-        when(identityProviderPort.extractIdentity(jwt)).thenReturn(identity(subject, email, null, null, false));
+        when(identityProviderPort.extractIdentity(claims)).thenReturn(identity(subject, email, null, null, false));
 
         when(userIdentityRepository.findByProviderAndProviderSubject("keycloak", subject))
                 .thenReturn(Optional.empty());
@@ -157,7 +164,7 @@ class IdentityResolutionServiceTest {
         appProperties.getAuth().setAutoLinkExistingUsers(true);
         appProperties.getAuth().getTrustedAutoLinkProviders().add("keycloak");
 
-        assertThatThrownBy(() -> identityResolutionService.resolveUser(jwt))
+        assertThatThrownBy(() -> identityResolutionService.resolveUser(claims))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Cannot provision identity with unverified email");
     }
@@ -166,13 +173,12 @@ class IdentityResolutionServiceTest {
     void resolveUser_UnverifiedEmailForNewUser_ThrowsExceptionByDefault() {
         String subject = "sub-123";
         String email = "new@example.com";
-        Jwt jwt = mock(Jwt.class);
-        when(identityProviderPort.extractIdentity(jwt)).thenReturn(identity(subject, email, "First", "Last", false));
+        when(identityProviderPort.extractIdentity(claims)).thenReturn(identity(subject, email, "First", "Last", false));
 
         when(userIdentityRepository.findByProviderAndProviderSubject("keycloak", subject))
                 .thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> identityResolutionService.resolveUser(jwt))
+        assertThatThrownBy(() -> identityResolutionService.resolveUser(claims))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Cannot provision identity with unverified email");
         verify(userRepository, never()).save(any(User.class));
@@ -184,15 +190,14 @@ class IdentityResolutionServiceTest {
         appProperties.getAuth().setRequireVerifiedEmail(false);
         String subject = "sub-123";
         String email = "new@example.com";
-        Jwt jwt = mock(Jwt.class);
-        when(identityProviderPort.extractIdentity(jwt)).thenReturn(identity(subject, email, "First", "Last", false));
+        when(identityProviderPort.extractIdentity(claims)).thenReturn(identity(subject, email, "First", "Last", false));
 
         when(userIdentityRepository.findByProviderAndProviderSubject("keycloak", subject))
                 .thenReturn(Optional.empty());
         when(userRepository.findByEmail(email)).thenReturn(Optional.empty());
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        User result = identityResolutionService.resolveUser(jwt);
+        User result = identityResolutionService.resolveUser(claims);
 
         assertThat(result.getEmail()).isEqualTo(email);
         verify(userRepository).save(any(User.class));
@@ -203,8 +208,7 @@ class IdentityResolutionServiceTest {
     void resolveUser_EmailNormalization_Works() {
         String subject = "sub-123";
         String normalizedEmail = "test@example.com";
-        Jwt jwt = mock(Jwt.class);
-        when(identityProviderPort.extractIdentity(jwt)).thenReturn(identity(subject, normalizedEmail, null, null, true));
+        when(identityProviderPort.extractIdentity(claims)).thenReturn(identity(subject, normalizedEmail, null, null, true));
 
         User user = User.builder().id(UUID.randomUUID()).email(normalizedEmail).build();
 
@@ -212,7 +216,7 @@ class IdentityResolutionServiceTest {
                 .thenReturn(Optional.empty());
         when(userRepository.findByEmail(normalizedEmail)).thenReturn(Optional.of(user));
 
-        assertThatThrownBy(() -> identityResolutionService.resolveUser(jwt))
+        assertThatThrownBy(() -> identityResolutionService.resolveUser(claims))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Automatic linking to an existing user is not enabled");
         verify(userRepository).findByEmail(normalizedEmail);

@@ -1,7 +1,7 @@
 package com.diogotoporcov.filemanager.api.sharing.web;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.diogotoporcov.filemanager.api.auth.application.CurrentUserService;
+import com.diogotoporcov.filemanager.api.auth.application.CurrentUserProvider;
 import com.diogotoporcov.filemanager.api.auth.domain.Permission;
 import com.diogotoporcov.filemanager.api.exception.AccessDeniedException;
 import com.diogotoporcov.filemanager.api.exception.GlobalExceptionHandler;
@@ -41,16 +41,16 @@ class SharingControllerTest {
     @BeforeEach
     void setUp() {
         sharingService = mock(SharingService.class);
-        CurrentUserService currentUserService = mock(CurrentUserService.class);
+        CurrentUserProvider currentUserProvider = mock(CurrentUserProvider.class);
         mockMvc = MockMvcBuilders.standaloneSetup(new SharingController(
                         sharingService,
-                        currentUserService,
+                        currentUserProvider,
                         new GrantResponseMapper()))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
         objectMapper = new ObjectMapper();
         actorId = UUID.randomUUID();
-        when(currentUserService.getCurrentUserId()).thenReturn(actorId);
+        when(currentUserProvider.getCurrentUserId()).thenReturn(actorId);
     }
 
     @Test
