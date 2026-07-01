@@ -1,61 +1,69 @@
 package com.diogotoporcov.filemanager.api.observability.application;
 
-import com.diogotoporcov.filemanager.api.observability.port.ApplicationMetricsPort;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.DistributionSummary;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Duration;
+import java.util.Objects;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
 
-import static org.mockito.Mockito.verify;
+import static org.assertj.core.api.Assertions.assertThat;
 
-@ExtendWith(MockitoExtension.class)
 class FileManagerMetricsTest {
 
-    @Mock
-    private ApplicationMetricsPort applicationMetricsPort;
-
+    private MeterRegistry registry;
     private FileManagerMetrics metrics;
 
     @BeforeEach
     void setUp() {
-        metrics = new FileManagerMetrics(applicationMetricsPort);
+        registry = new SimpleMeterRegistry();
+        metrics = new FileManagerMetrics(registry);
     }
 
     @Test
     void recordFileUpload() {
         metrics.recordFileUpload(100L, "USER");
 
-        verify(applicationMetricsPort).recordFileUpload(100L, "USER");
+        Counter counter = counter("filemanager.files.uploaded", "owner_type", "USER");
+        assertThat(counter.count()).isEqualTo(1.0);
+
+        DistributionSummary summary = summary("filemanager.files.upload.bytes", "owner_type", "USER");
+        assertThat(summary.totalAmount()).isEqualTo(100.0);
     }
 
     @Test
     void recordFileDownload() {
         metrics.recordFileDownload();
 
-        verify(applicationMetricsPort).recordFileDownload();
+        Counter counter = counter("filemanager.files.downloaded");
+        assertThat(counter.count()).isEqualTo(1.0);
     }
 
     @Test
     void recordJobCreated() {
         metrics.recordJobCreated("CHECKSUM");
 
-        verify(applicationMetricsPort).recordJobCreated("CHECKSUM");
+        Counter counter = counter("filemanager.processing.jobs.created", "job_type", "CHECKSUM");
+        assertThat(counter.count()).isEqualTo(1.0);
     }
 
     @Test
     void recordJobCompleted() {
         metrics.recordJobCompleted("PHASH");
 
-        verify(applicationMetricsPort).recordJobCompleted("PHASH");
+        Counter counter = counter("filemanager.processing.jobs.completed", "job_type", "PHASH");
+        assertThat(counter.count()).isEqualTo(1.0);
     }
 
     @Test
     void recordJobFailed() {
         metrics.recordJobFailed("CHECKSUM");
 
-        verify(applicationMetricsPort).recordJobFailed("CHECKSUM");
+        Counter counter = counter("filemanager.processing.jobs.failed", "job_type", "CHECKSUM");
+        assertThat(counter.count()).isEqualTo(1.0);
     }
 
     @Test
@@ -64,30 +72,49 @@ class FileManagerMetricsTest {
         metrics.recordDuplicateSearchMethodCompleted("EXACT");
         metrics.recordDuplicateSearchMethodNotReady("IMAGE_PHASH");
         metrics.recordDuplicateSearchMethodDisabled("IMAGE_EMBEDDING");
-        metrics.recordDuplicateMatchesReturned("EXACT", 2);
+        metrics.recordDuplicateMatchesReturned("EXACT", 3);
 
-        verify(applicationMetricsPort).recordDuplicateSearchRequested();
-        verify(applicationMetricsPort).recordDuplicateSearchMethodCompleted("EXACT");
-        verify(applicationMetricsPort).recordDuplicateSearchMethodNotReady("IMAGE_PHASH");
-        verify(applicationMetricsPort).recordDuplicateSearchMethodDisabled("IMAGE_EMBEDDING");
-        verify(applicationMetricsPort).recordDuplicateMatchesReturned("EXACT", 2);
+        assertThat(counter("filemanager.duplicate.search.requested").count()).isEqualTo(1.0);
+        assertThat(counter("filemanager.duplicate.search.method.completed", "method", "EXACT").count()).isEqualTo(1.0);
+        assertThat(counter("filemanager.duplicate.search.method.not_ready", "method", "IMAGE_PHASH").count())
+                .isEqualTo(1.0);
+        assertThat(counter("filemanager.duplicate.search.method.disabled", "method", "IMAGE_EMBEDDING").count())
+                .isEqualTo(1.0);
+        assertThat(summary("filemanager.duplicate.search.matches_returned", "method", "EXACT").totalAmount())
+                .isEqualTo(3.0);
     }
 
     @Test
     void recordDuplicateGroupMetrics() {
         metrics.recordDuplicateGroupsRequested();
-        metrics.recordDuplicateGroupsReturned("EXACT", 1);
+        metrics.recordDuplicateGroupsReturned("EXACT", 2);
 
-        verify(applicationMetricsPort).recordDuplicateGroupsRequested();
-        verify(applicationMetricsPort).recordDuplicateGroupsReturned("EXACT", 1);
+        assertThat(counter("filemanager.duplicate.groups.requested").count()).isEqualTo(1.0);
+        assertThat(summary("filemanager.duplicate.groups.returned", "method", "EXACT").totalAmount())
+                .isEqualTo(2.0);
     }
 
     @Test
     void recordOperationDuration() {
-        Duration duration = Duration.ofMillis(12);
+        metrics.recordOperationDuration("duplicate.search", "success", Duration.ofMillis(12));
 
-        metrics.recordOperationDuration("duplicate.search", "success", duration);
+        Timer timer = Objects.requireNonNull(registry.find("filemanager.operation.duration")
+                .tag("operation", "duplicate.search")
+                .tag("status", "success")
+                .timer());
+        assertThat(timer.count()).isEqualTo(1);
+        assertThat(timer.totalTime(java.util.concurrent.TimeUnit.MILLISECONDS)).isEqualTo(12.0);
+    }
 
-        verify(applicationMetricsPort).recordOperationDuration("duplicate.search", "success", duration);
+    private Counter counter(String name) {
+        return Objects.requireNonNull(registry.find(name).counter());
+    }
+
+    private Counter counter(String name, String tagKey, String tagValue) {
+        return Objects.requireNonNull(registry.find(name).tag(tagKey, tagValue).counter());
+    }
+
+    private DistributionSummary summary(String name, String tagKey, String tagValue) {
+        return Objects.requireNonNull(registry.find(name).tag(tagKey, tagValue).summary());
     }
 }
