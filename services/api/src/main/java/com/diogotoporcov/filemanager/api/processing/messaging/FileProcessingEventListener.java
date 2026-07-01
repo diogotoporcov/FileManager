@@ -1,8 +1,7 @@
 package com.diogotoporcov.filemanager.api.processing.messaging;
 
 import com.diogotoporcov.filemanager.api.processing.application.ProcessingJobService;
-import com.diogotoporcov.filemanager.api.processing.messaging.port.EventPublisherPort;
-import com.diogotoporcov.filemanager.api.processing.messaging.port.PublishEventResponse;
+import com.diogotoporcov.filemanager.api.processing.messaging.port.FileProcessingEventPublisher;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -15,17 +14,18 @@ import org.springframework.transaction.event.TransactionalEventListener;
 @Slf4j
 public class FileProcessingEventListener {
 
-    private final EventPublisherPort eventPublisherPort;
+    private final FileProcessingEventPublisher fileProcessingEventPublisher;
     private final ProcessingJobService processingJobService;
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void handleFileProcessingRequested(FileProcessingRequestedEvent event) {
         log.info("Handling file processing requested event for file {} after transaction commit", event.fileId());
         try {
-            PublishEventResponse response = eventPublisherPort.publishFileProcessingRequested(event);
-            processingJobService.updateExternalJobId(event.processingJobId(), response.getMessageId());
+            fileProcessingEventPublisher.publish(event);
+            processingJobService.updateExternalJobId(event.processingJobId(), event.eventId().toString());
         } catch (Exception e) {
-            log.error("Failed to publish event to Kafka after commit. Marking job {} as FAILED", event.processingJobId(), e);
+            log.error("Failed to publish file-processing event after commit. Marking job {} as FAILED",
+                    event.processingJobId(), e);
             processingJobService.handleProcessingFailure(event.processingJobId(), event.fileId(), "Event publication failed");
         }
     }

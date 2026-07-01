@@ -1,18 +1,18 @@
-package com.diogotoporcov.filemanager.api.processing.messaging;
+package com.diogotoporcov.filemanager.api.processing.messaging.adapter;
 
 import com.diogotoporcov.filemanager.api.config.AppProperties;
-import com.diogotoporcov.filemanager.api.processing.domain.ProcessingJob;
 import com.diogotoporcov.filemanager.api.processing.application.mime.ProcessableAudioMimeTypes;
 import com.diogotoporcov.filemanager.api.processing.application.mime.ProcessableImageMimeTypes;
+import com.diogotoporcov.filemanager.api.processing.domain.ProcessingJob;
+import com.diogotoporcov.filemanager.api.processing.messaging.FileProcessingRequestedEvent;
+import java.util.Locale;
+import java.util.Objects;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
-import java.util.Locale;
-import java.util.Objects;
-
 @Component
 @RequiredArgsConstructor
-public class ProcessingTopicResolver {
+public class KafkaProcessingTopicResolver {
 
     private final AppProperties appProperties;
 
