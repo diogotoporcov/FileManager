@@ -1,6 +1,10 @@
 package com.diogotoporcov.filemanager.api.duplicate.web;
 
-import com.diogotoporcov.filemanager.api.auth.application.CurrentUserService;
+import com.diogotoporcov.filemanager.api.auth.application.CurrentUserProvider;
+import com.diogotoporcov.filemanager.api.duplicate.application.DuplicateGroupSearchQuery;
+import com.diogotoporcov.filemanager.api.duplicate.application.DuplicateGroupSearchResult;
+import com.diogotoporcov.filemanager.api.duplicate.application.DuplicateSearchPage;
+import com.diogotoporcov.filemanager.api.duplicate.application.DuplicateSearchResult;
 import com.diogotoporcov.filemanager.api.duplicate.application.DuplicateSearchService;
 import com.diogotoporcov.filemanager.api.duplicate.domain.DuplicateSearchMethod;
 import io.swagger.v3.oas.annotations.Operation;
@@ -33,7 +37,7 @@ import org.springframework.web.bind.annotation.RestController;
 })
 public class DuplicateController {
     private final DuplicateSearchService duplicateSearchService;
-    private final CurrentUserService currentUserService;
+    private final CurrentUserProvider currentUserProvider;
 
     @Operation(summary = "Find duplicates for one owned source file")
     @GetMapping("/files/{fileId}/duplicates")
@@ -47,22 +51,96 @@ public class DuplicateController {
             @RequestParam(value = "cursor", required = false) String cursor) {
         List<DuplicateSearchMethod> parsedMethods = parseMethods(methods);
         validateCursorRequest(cursor, parsedMethods);
-        UUID actorUserId = currentUserService.getCurrentUserId();
+        UUID actorUserId = currentUserProvider.getCurrentUserId();
 
-        return duplicateSearchService.searchDuplicatesForFile(
+        return toResponse(duplicateSearchService.searchDuplicatesForFile(
                 fileId,
                 parsedMethods,
                 actorUserId,
-                new DuplicateSearchPageRequest(pageSize, cursor));
+                new DuplicateSearchPage(pageSize, cursor)));
     }
 
     @Operation(summary = "Find duplicate groups among files owned by the current user")
     @PostMapping("/duplicates/groups/search")
     public DuplicateGroupSearchResponse searchDuplicateGroups(
             @RequestBody(required = false) @Valid DuplicateGroupSearchRequest request) {
-        UUID actorUserId = currentUserService.getCurrentUserId();
+        UUID actorUserId = currentUserProvider.getCurrentUserId();
 
-        return duplicateSearchService.searchGroups(request, actorUserId);
+        return toResponse(duplicateSearchService.searchGroups(toQuery(request), actorUserId));
+    }
+
+    private DuplicateGroupSearchQuery toQuery(DuplicateGroupSearchRequest request) {
+        if (request == null) {
+            return null;
+        }
+
+        return new DuplicateGroupSearchQuery(
+                request.methods(),
+                request.limit(),
+                request.folderId(),
+                request.mimeType(),
+                request.minConfidence());
+    }
+
+    private DuplicateSearchResponse toResponse(DuplicateSearchResult result) {
+        return new DuplicateSearchResponse(
+                result.sourceFileId(),
+                result.methods().stream()
+                        .map(method -> DuplicateSearchResponse.DuplicateMethodResultResponse.builder()
+                                .method(method.method())
+                                .status(method.status())
+                                .matches(method.matches().stream()
+                                        .map(match -> DuplicateSearchResponse.DuplicateMatchResponse.builder()
+                                                .fileId(match.fileId())
+                                                .confidence(match.confidence())
+                                                .score(match.score())
+                                                .evidence(match.evidence().stream()
+                                                        .map(evidence -> DuplicateSearchResponse.DuplicateEvidenceResponse.builder()
+                                                                .type(evidence.type())
+                                                                .score(evidence.score())
+                                                                .details(evidence.details())
+                                                                .build())
+                                                        .toList())
+                                                .build())
+                                        .toList())
+                                .pageSize(method.pageSize())
+                                .hasMore(method.hasMore())
+                                .nextCursor(method.nextCursor())
+                                .build())
+                        .toList());
+    }
+
+    private DuplicateGroupSearchResponse toResponse(DuplicateGroupSearchResult result) {
+        return new DuplicateGroupSearchResponse(
+                result.methods().stream()
+                        .map(method -> DuplicateGroupSearchResponse.DuplicateGroupMethodResultResponse.builder()
+                                .method(method.method())
+                                .status(method.status())
+                                .groups(method.groups().stream()
+                                        .map(group -> DuplicateGroupSearchResponse.DuplicateGroupResponse.builder()
+                                                .groupId(group.groupId())
+                                                .confidence(group.confidence())
+                                                .representativeFileId(group.representativeFileId())
+                                                .files(group.files().stream()
+                                                        .map(file -> DuplicateGroupSearchResponse.DuplicateGroupFileResponse.builder()
+                                                                .fileId(file.fileId())
+                                                                .name(file.name())
+                                                                .mimeType(file.mimeType())
+                                                                .size(file.size())
+                                                                .build())
+                                                        .toList())
+                                                .evidence(group.evidence().stream()
+                                                        .map(evidence -> DuplicateGroupSearchResponse.DuplicateGroupEvidenceResponse.builder()
+                                                                .type(evidence.type())
+                                                                .score(evidence.score())
+                                                                .details(evidence.details())
+                                                                .build())
+                                                        .toList())
+                                                .build())
+                                        .toList())
+                                .build())
+                        .toList(),
+                result.nextCursor());
     }
 
     private List<DuplicateSearchMethod> parseMethods(String rawMethods) {

@@ -10,9 +10,6 @@ import com.diogotoporcov.filemanager.api.folder.domain.FolderEntity;
 import com.diogotoporcov.filemanager.api.folder.persistence.FolderRepository;
 import com.diogotoporcov.filemanager.api.identity.domain.User;
 import com.diogotoporcov.filemanager.api.identity.persistence.UserRepository;
-import com.diogotoporcov.filemanager.api.tag.web.CreateTagRequest;
-import com.diogotoporcov.filemanager.api.tag.web.TagResponse;
-import com.diogotoporcov.filemanager.api.tag.web.TagResponseMapper;
 import com.diogotoporcov.filemanager.api.tag.domain.FileTagEntity;
 import com.diogotoporcov.filemanager.api.tag.domain.FileTagId;
 import com.diogotoporcov.filemanager.api.tag.domain.FolderTagEntity;
@@ -50,31 +47,28 @@ public class TagService {
     private final FolderRepository folderRepository;
     private final UserRepository userRepository;
     private final AccessControlService accessControlService;
-    private final TagResponseMapper tagResponseMapper;
     private final TransactionTemplate transactionTemplate;
 
-    public TagResponse createOrGetTag(CreateTagRequest request, UUID actorUserId) {
-        Objects.requireNonNull(request, "request must not be null");
-        NormalizedTagName tagName = normalizeTagName(request.getName());
-        assertCanCreateTagInRequestedScope(request, actorUserId);
-        Optional<TagResponse> existing = executeInTransaction(() -> findExistingTag(request, actorUserId, tagName.normalizedName())
-                .map(tagResponseMapper::toResponse));
+    public TagEntity createOrGetTag(CreateTagCommand command, UUID actorUserId) {
+        Objects.requireNonNull(command, "command must not be null");
+        NormalizedTagName tagName = normalizeTagName(command.name());
+        assertCanCreateTagInRequestedScope(command, actorUserId);
+        Optional<TagEntity> existing = executeInTransaction(() -> findExistingTag(command, actorUserId, tagName.normalizedName()));
         if (existing.isPresent()) {
             return existing.get();
         }
 
         try {
             return executeInTransaction(() -> {
-                TagEntity unsaved = buildTag(request, actorUserId, tagName);
+                TagEntity unsaved = buildTag(command, actorUserId, tagName);
 
-                return tagResponseMapper.toResponse(tagRepository.saveAndFlush(unsaved));
+                return tagRepository.saveAndFlush(unsaved);
             });
         } catch (DataIntegrityViolationException ex) {
-            Optional<TagResponse> concurrentlyCreated = executeInTransaction(() -> findExistingTag(
-                            request,
+            Optional<TagEntity> concurrentlyCreated = executeInTransaction(() -> findExistingTag(
+                            command,
                             actorUserId,
-                            tagName.normalizedName())
-                    .map(tagResponseMapper::toResponse));
+                            tagName.normalizedName()));
 
             return concurrentlyCreated.orElseThrow(() -> ex);
         }
@@ -91,7 +85,7 @@ public class TagService {
     }
 
     @Transactional(readOnly = true)
-    public List<TagResponse> listTags(
+    public List<TagEntity> listTags(
             UUID scopeFolderId,
             String query,
             Integer requestedLimit,
@@ -104,33 +98,24 @@ public class TagService {
             folderRepository.findByIdAndDeletedAtIsNull(scopeFolderId)
                     .orElseThrow(() -> new ResourceNotFoundException("Folder not found: " + scopeFolderId));
 
-            return tagRepository.listFolderTags(scopeFolderId, normalizedQuery, PageRequest.of(0, limit))
-                    .stream()
-                    .map(tagResponseMapper::toResponse)
-                    .toList();
+            return tagRepository.listFolderTags(scopeFolderId, normalizedQuery, PageRequest.of(0, limit));
         }
 
         accessControlService.assertCanViewOwner(actorUserId, actorUserId);
         findUser(actorUserId);
 
-        return tagRepository.listOwnerUserTags(actorUserId, normalizedQuery, PageRequest.of(0, limit))
-                .stream()
-                .map(tagResponseMapper::toResponse)
-                .toList();
+        return tagRepository.listOwnerUserTags(actorUserId, normalizedQuery, PageRequest.of(0, limit));
     }
 
     @Transactional(readOnly = true)
-    public List<TagResponse> listFileTags(UUID fileId, UUID actorUserId) {
+    public List<TagEntity> listFileTags(UUID fileId, UUID actorUserId) {
         accessControlService.assertCanAccessFile(actorUserId, fileId, Permission.FILE_VIEW);
 
-        return fileTagRepository.findActiveTagsByFileId(fileId)
-                .stream()
-                .map(tagResponseMapper::toResponse)
-                .toList();
+        return fileTagRepository.findActiveTagsByFileId(fileId);
     }
 
     @Transactional
-    public List<TagResponse> applyTagToFile(UUID fileId, UUID tagId, UUID actorUserId) {
+    public List<TagEntity> applyTagToFile(UUID fileId, UUID tagId, UUID actorUserId) {
         accessControlService.assertCanAccessFile(actorUserId, fileId, Permission.FILE_MODIFY);
         FileEntity file = fileRepository.findByIdAndDeletedAtIsNull(fileId)
                 .orElseThrow(() -> new ResourceNotFoundException("File not found: " + fileId));
@@ -152,7 +137,7 @@ public class TagService {
     }
 
     @Transactional
-    public List<TagResponse> removeTagFromFile(UUID fileId, UUID tagId, UUID actorUserId) {
+    public List<TagEntity> removeTagFromFile(UUID fileId, UUID tagId, UUID actorUserId) {
         accessControlService.assertCanAccessFile(actorUserId, fileId, Permission.FILE_MODIFY);
         FileTagId assignmentId = new FileTagId(fileId, tagId);
         if (fileTagRepository.existsById(assignmentId)) {
@@ -163,17 +148,14 @@ public class TagService {
     }
 
     @Transactional(readOnly = true)
-    public List<TagResponse> listFolderTags(UUID folderId, UUID actorUserId) {
+    public List<TagEntity> listFolderTags(UUID folderId, UUID actorUserId) {
         accessControlService.assertCanAccessFolder(actorUserId, folderId, Permission.FOLDER_VIEW);
 
-        return folderTagRepository.findActiveTagsByFolderId(folderId)
-                .stream()
-                .map(tagResponseMapper::toResponse)
-                .toList();
+        return folderTagRepository.findActiveTagsByFolderId(folderId);
     }
 
     @Transactional
-    public List<TagResponse> applyTagToFolder(UUID folderId, UUID tagId, UUID actorUserId) {
+    public List<TagEntity> applyTagToFolder(UUID folderId, UUID tagId, UUID actorUserId) {
         accessControlService.assertCanAccessFolder(actorUserId, folderId, Permission.FOLDER_RENAME);
         FolderEntity folder = folderRepository.findByIdAndDeletedAtIsNull(folderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Folder not found: " + folderId));
@@ -195,7 +177,7 @@ public class TagService {
     }
 
     @Transactional
-    public List<TagResponse> removeTagFromFolder(UUID folderId, UUID tagId, UUID actorUserId) {
+    public List<TagEntity> removeTagFromFolder(UUID folderId, UUID tagId, UUID actorUserId) {
         accessControlService.assertCanAccessFolder(actorUserId, folderId, Permission.FOLDER_RENAME);
         FolderTagId assignmentId = new FolderTagId(folderId, tagId);
         if (folderTagRepository.existsById(assignmentId)) {
@@ -250,10 +232,10 @@ public class TagService {
         }
     }
 
-    private TagEntity buildTag(CreateTagRequest request, UUID actorUserId, NormalizedTagName tagName) {
+    private TagEntity buildTag(CreateTagCommand command, UUID actorUserId, NormalizedTagName tagName) {
         User createdByUser = findUser(actorUserId);
-        if (request.getScopeType() == TagScopeType.OWNER) {
-            if (request.getScopeFolderId() != null) {
+        if (command.scopeType() == TagScopeType.OWNER) {
+            if (command.scopeFolderId() != null) {
                 throw new IllegalArgumentException("OWNER-scoped tags must not include scopeFolderId");
             }
 
@@ -266,16 +248,16 @@ public class TagService {
                     .build();
         }
 
-        if (request.getScopeType() != TagScopeType.FOLDER) {
+        if (command.scopeType() != TagScopeType.FOLDER) {
             throw new IllegalArgumentException("Unsupported tag scope type");
         }
 
-        if (request.getScopeFolderId() == null) {
+        if (command.scopeFolderId() == null) {
             throw new IllegalArgumentException("FOLDER-scoped tags require scopeFolderId");
         }
 
-        FolderEntity folder = folderRepository.findByIdAndDeletedAtIsNull(request.getScopeFolderId())
-                .orElseThrow(() -> new ResourceNotFoundException("Folder not found: " + request.getScopeFolderId()));
+        FolderEntity folder = folderRepository.findByIdAndDeletedAtIsNull(command.scopeFolderId())
+                .orElseThrow(() -> new ResourceNotFoundException("Folder not found: " + command.scopeFolderId()));
 
         return TagEntity.builder()
                 .displayName(tagName.displayName())
@@ -287,9 +269,9 @@ public class TagService {
                 .build();
     }
 
-    private void assertCanCreateTagInRequestedScope(CreateTagRequest request, UUID actorUserId) {
-        if (request.getScopeType() == TagScopeType.OWNER) {
-            if (request.getScopeFolderId() != null) {
+    private void assertCanCreateTagInRequestedScope(CreateTagCommand command, UUID actorUserId) {
+        if (command.scopeType() == TagScopeType.OWNER) {
+            if (command.scopeFolderId() != null) {
                 throw new IllegalArgumentException("OWNER-scoped tags must not include scopeFolderId");
             }
 
@@ -298,11 +280,11 @@ public class TagService {
             return;
         }
 
-        if (request.getScopeType() == TagScopeType.FOLDER) {
-            if (request.getScopeFolderId() == null) {
+        if (command.scopeType() == TagScopeType.FOLDER) {
+            if (command.scopeFolderId() == null) {
                 throw new IllegalArgumentException("FOLDER-scoped tags require scopeFolderId");
             }
-            accessControlService.assertCanAccessFolder(actorUserId, request.getScopeFolderId(), Permission.FOLDER_UPLOAD_FILE);
+            accessControlService.assertCanAccessFolder(actorUserId, command.scopeFolderId(), Permission.FOLDER_UPLOAD_FILE);
 
             return;
         }
@@ -310,18 +292,18 @@ public class TagService {
         throw new IllegalArgumentException("Unsupported tag scope type");
     }
 
-    private Optional<TagEntity> findExistingTag(CreateTagRequest request, UUID actorUserId, String normalizedName) {
-        if (request.getScopeType() == TagScopeType.FOLDER) {
-            if (request.getScopeFolderId() == null) {
+    private Optional<TagEntity> findExistingTag(CreateTagCommand command, UUID actorUserId, String normalizedName) {
+        if (command.scopeType() == TagScopeType.FOLDER) {
+            if (command.scopeFolderId() == null) {
                 return Optional.empty();
             }
 
             return tagRepository.findByScopeFolderIdAndNormalizedNameAndDeletedAtIsNull(
-                    request.getScopeFolderId(),
+                    command.scopeFolderId(),
                     normalizedName);
         }
 
-        if (request.getScopeType() == TagScopeType.OWNER) {
+        if (command.scopeType() == TagScopeType.OWNER) {
             return tagRepository.findByOwnerUserIdAndScopeTypeAndNormalizedNameAndDeletedAtIsNull(
                     actorUserId,
                     TagScopeType.OWNER,

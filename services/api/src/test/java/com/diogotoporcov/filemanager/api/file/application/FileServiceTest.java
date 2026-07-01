@@ -6,8 +6,6 @@ import com.diogotoporcov.filemanager.api.config.AppProperties;
 import com.diogotoporcov.filemanager.api.config.FileTransferProperties;
 import com.diogotoporcov.filemanager.api.duplicate.application.ExactDuplicateGroupMaintenanceService;
 import com.diogotoporcov.filemanager.api.exception.FileTransferDisabledException;
-import com.diogotoporcov.filemanager.api.file.web.FileResponseMapper;
-import com.diogotoporcov.filemanager.api.file.web.search.FileSearchQuery;
 import com.diogotoporcov.filemanager.api.file.application.search.FileSearchCriteriaMapper;
 import com.diogotoporcov.filemanager.api.file.application.search.FileSortMapper;
 import com.diogotoporcov.filemanager.api.file.domain.FileEntity;
@@ -19,7 +17,6 @@ import com.diogotoporcov.filemanager.api.identity.domain.User;
 import com.diogotoporcov.filemanager.api.identity.persistence.UserRepository;
 import com.diogotoporcov.filemanager.api.observability.application.FileManagerMetrics;
 import com.diogotoporcov.filemanager.api.processing.application.job.ProcessingJobPlanner;
-import com.diogotoporcov.filemanager.api.processing.application.policy.ProcessingPolicyContext;
 import com.diogotoporcov.filemanager.api.processing.domain.ProcessingJob;
 import com.diogotoporcov.filemanager.api.processing.messaging.FileProcessingRequestedEvent;
 import com.diogotoporcov.filemanager.api.processing.persistence.ProcessingJobRepository;
@@ -53,6 +50,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -114,7 +112,6 @@ class FileServiceTest {
                 new FileSearchCriteriaMapper(fileSortMapper),
                 new FileSearchSpecificationBuilder(),
                 fileSortMapper,
-                new FileResponseMapper(),
                 tagService,
                 exactDuplicateGroupMaintenanceService);
     }
@@ -133,7 +130,7 @@ class FileServiceTest {
                 .storagePath("storage-path")
                 .etag("test-etag")
                 .build());
-        when(processingJobPlanner.planJobs(any(ProcessingPolicyContext.class))).thenReturn(List.of(ProcessingJob.JobType.CHECKSUM));
+        when(processingJobPlanner.planJobs(anyString())).thenReturn(List.of(ProcessingJob.JobType.CHECKSUM));
         ProcessingJob processingJob = ProcessingJob.builder().id(UUID.randomUUID()).jobType(ProcessingJob.JobType.CHECKSUM).build();
         when(processingJobRepository.save(any(ProcessingJob.class))).thenReturn(processingJob);
 
@@ -169,7 +166,7 @@ class FileServiceTest {
             return file;
         });
         when(objectStoragePort.putObject(any())).thenReturn(StoreObjectResponse.builder().etag("etag").build());
-        when(processingJobPlanner.planJobs(any(ProcessingPolicyContext.class)))
+        when(processingJobPlanner.planJobs(anyString()))
                 .thenReturn(List.of(ProcessingJob.JobType.CHECKSUM, ProcessingJob.JobType.PHASH));
         when(processingJobRepository.save(any(ProcessingJob.class)))
                 .thenReturn(ProcessingJob.builder().id(UUID.randomUUID()).jobType(ProcessingJob.JobType.CHECKSUM).build())
@@ -193,7 +190,7 @@ class FileServiceTest {
         when(folderRepository.findByIdAndDeletedAtIsNull(folderId)).thenReturn(Optional.of(folder));
         when(fileRepository.save(any(FileEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(objectStoragePort.putObject(any())).thenReturn(StoreObjectResponse.builder().etag("etag").build());
-        when(processingJobPlanner.planJobs(any(ProcessingPolicyContext.class))).thenReturn(List.of());
+        when(processingJobPlanner.planJobs(anyString())).thenReturn(List.of());
 
         try (ByteArrayInputStream content = new ByteArrayInputStream("hello".getBytes())) {
             fileService.uploadFile("folder.txt", "text/plain", 5L, content, folderId, userId);
@@ -213,7 +210,7 @@ class FileServiceTest {
         when(userRepository.findByIdForUpdate(userId)).thenReturn(Optional.of(user));
         when(fileRepository.save(any(FileEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(objectStoragePort.putObject(any())).thenReturn(StoreObjectResponse.builder().etag("etag").build());
-        when(processingJobPlanner.planJobs(any(ProcessingPolicyContext.class))).thenReturn(List.of());
+        when(processingJobPlanner.planJobs(anyString())).thenReturn(List.of());
 
         try (ByteArrayInputStream content = new ByteArrayInputStream("hello".getBytes())) {
             fileService.uploadFile("C:\\fakepath\\ report.txt ", null, 5L, content, userId);
@@ -244,7 +241,7 @@ class FileServiceTest {
 
     @Test
     void searchFilesDefaultsToAuthenticatedUserVisibility() {
-        FileSearchQuery query = new FileSearchQuery();
+        FindFilesQuery query = new FindFilesQuery();
         query.setSize(2);
         when(userRepository.findById(userId)).thenReturn(Optional.of(user));
         when(fileRepository.findAll(org.mockito.ArgumentMatchers.<Specification<FileEntity>>any(), any(Pageable.class)))
@@ -255,16 +252,16 @@ class FileServiceTest {
 
         var result = fileService.searchFiles(query, userId);
 
-        assertEquals(2, result.getItems().size());
-        assertTrue(result.isHasMore());
-        assertNotNull(result.getNextCursor());
+        assertEquals(2, result.items().size());
+        assertTrue(result.hasMore());
+        assertNotNull(result.nextCursor());
         verify(tagService).assertCanUseTagForFileSearch(null, userId, null);
     }
 
     @Test
     void searchFilesWithFolderChecksFolderBeforeQuery() {
         UUID folderId = UUID.randomUUID();
-        FileSearchQuery query = new FileSearchQuery();
+        FindFilesQuery query = new FindFilesQuery();
         query.setFolderId(folderId);
         when(userRepository.findById(userId)).thenReturn(Optional.of(user));
         when(folderRepository.findByIdAndDeletedAtIsNull(folderId))
@@ -281,7 +278,7 @@ class FileServiceTest {
     @Test
     void searchFilesWithTagValidatesTagBeforeQuery() {
         UUID tagId = UUID.randomUUID();
-        FileSearchQuery query = new FileSearchQuery();
+        FindFilesQuery query = new FindFilesQuery();
         query.setTagId(tagId);
         when(userRepository.findById(userId)).thenReturn(Optional.of(user));
         when(fileRepository.findAll(org.mockito.ArgumentMatchers.<Specification<FileEntity>>any(), any(Pageable.class)))

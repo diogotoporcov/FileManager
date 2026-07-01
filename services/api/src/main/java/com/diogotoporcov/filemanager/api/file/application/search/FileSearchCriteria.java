@@ -1,7 +1,5 @@
 package com.diogotoporcov.filemanager.api.file.application.search;
 
-import com.diogotoporcov.filemanager.api.web.BoundedPageRequest;
-
 import java.util.List;
 import java.util.UUID;
 
@@ -14,7 +12,7 @@ public record FileSearchCriteria(
         LongRange size,
         List<String> mimeTypes,
         SortSpec sort,
-        BoundedPageRequest pageRequest,
+        int pageSize,
         FileSearchCursor cursor
 ) {
     public FileSearchCriteria {

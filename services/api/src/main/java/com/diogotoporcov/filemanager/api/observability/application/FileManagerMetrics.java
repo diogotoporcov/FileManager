@@ -1,66 +1,67 @@
 package com.diogotoporcov.filemanager.api.observability.application;
 
-import com.diogotoporcov.filemanager.api.observability.port.ApplicationMetricsPort;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Duration;
 import org.springframework.stereotype.Component;
 
 @Component
 public class FileManagerMetrics {
-    private final ApplicationMetricsPort applicationMetricsPort;
+    private final MeterRegistry registry;
 
-    public FileManagerMetrics(ApplicationMetricsPort applicationMetricsPort) {
-        this.applicationMetricsPort = applicationMetricsPort;
+    public FileManagerMetrics(MeterRegistry registry) {
+        this.registry = registry;
     }
 
     public void recordFileUpload(long bytes, String ownerType) {
-        applicationMetricsPort.recordFileUpload(bytes, ownerType);
+        registry.counter("filemanager.files.uploaded", "owner_type", ownerType).increment();
+        registry.summary("filemanager.files.upload.bytes", "owner_type", ownerType).record(bytes);
     }
 
     public void recordFileDownload() {
-        applicationMetricsPort.recordFileDownload();
+        registry.counter("filemanager.files.downloaded").increment();
     }
 
     public void recordJobCreated(String jobType) {
-        applicationMetricsPort.recordJobCreated(jobType);
+        registry.counter("filemanager.processing.jobs.created", "job_type", jobType).increment();
     }
 
     public void recordJobCompleted(String jobType) {
-        applicationMetricsPort.recordJobCompleted(jobType);
+        registry.counter("filemanager.processing.jobs.completed", "job_type", jobType).increment();
     }
 
     public void recordJobFailed(String jobType) {
-        applicationMetricsPort.recordJobFailed(jobType);
+        registry.counter("filemanager.processing.jobs.failed", "job_type", jobType).increment();
     }
 
     public void recordDuplicateSearchRequested() {
-        applicationMetricsPort.recordDuplicateSearchRequested();
+        registry.counter("filemanager.duplicate.search.requested").increment();
     }
 
     public void recordDuplicateSearchMethodCompleted(String method) {
-        applicationMetricsPort.recordDuplicateSearchMethodCompleted(method);
+        registry.counter("filemanager.duplicate.search.method.completed", "method", method).increment();
     }
 
     public void recordDuplicateSearchMethodNotReady(String method) {
-        applicationMetricsPort.recordDuplicateSearchMethodNotReady(method);
+        registry.counter("filemanager.duplicate.search.method.not_ready", "method", method).increment();
     }
 
     public void recordDuplicateSearchMethodDisabled(String method) {
-        applicationMetricsPort.recordDuplicateSearchMethodDisabled(method);
+        registry.counter("filemanager.duplicate.search.method.disabled", "method", method).increment();
     }
 
     public void recordDuplicateMatchesReturned(String method, int count) {
-        applicationMetricsPort.recordDuplicateMatchesReturned(method, count);
+        registry.summary("filemanager.duplicate.search.matches_returned", "method", method).record(count);
     }
 
     public void recordDuplicateGroupsRequested() {
-        applicationMetricsPort.recordDuplicateGroupsRequested();
+        registry.counter("filemanager.duplicate.groups.requested").increment();
     }
 
     public void recordDuplicateGroupsReturned(String method, int count) {
-        applicationMetricsPort.recordDuplicateGroupsReturned(method, count);
+        registry.summary("filemanager.duplicate.groups.returned", "method", method).record(count);
     }
 
     public void recordOperationDuration(String operation, String status, Duration duration) {
-        applicationMetricsPort.recordOperationDuration(operation, status, duration);
+        registry.timer("filemanager.operation.duration", "operation", operation, "status", status).record(duration);
     }
 }

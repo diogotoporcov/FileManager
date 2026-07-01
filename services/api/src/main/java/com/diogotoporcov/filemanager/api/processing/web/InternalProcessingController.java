@@ -5,6 +5,7 @@ import com.diogotoporcov.filemanager.api.processing.web.result.ChecksumResultReq
 import com.diogotoporcov.filemanager.api.processing.web.result.EmbeddingResultRequest;
 import com.diogotoporcov.filemanager.api.processing.web.result.PhashResultRequest;
 import com.diogotoporcov.filemanager.api.processing.web.result.ProcessingFailureRequest;
+import com.diogotoporcov.filemanager.api.processing.application.AudioAnalysisResultCommand;
 import com.diogotoporcov.filemanager.api.processing.application.ProcessingJobService;
 import io.swagger.v3.oas.annotations.Hidden;
 import jakarta.validation.Valid;
@@ -62,7 +63,7 @@ public class InternalProcessingController {
     public ResponseEntity<Void> reportAudioAnalysisResult(
             @PathVariable UUID jobId,
             @RequestBody @Valid AudioAnalysisResultRequest request) {
-        processingJobService.handleAudioAnalysisResult(jobId, request);
+        processingJobService.handleAudioAnalysisResult(jobId, toCommand(request));
 
         return ResponseEntity.ok().build();
     }
@@ -74,5 +75,22 @@ public class InternalProcessingController {
         processingJobService.handleProcessingFailure(jobId, request.getFileId(), request.getErrorMessage());
 
         return ResponseEntity.ok().build();
+    }
+
+    private AudioAnalysisResultCommand toCommand(AudioAnalysisResultRequest request) {
+        return AudioAnalysisResultCommand.builder()
+                .fileId(request.getFileId())
+                .durationMs(request.getDurationMs())
+                .codec(request.getCodec())
+                .sampleRate(request.getSampleRate())
+                .channels(request.getChannels())
+                .bitRate(request.getBitRate())
+                .audioStreamIndex(request.getAudioStreamIndex())
+                .containerFormat(request.getContainerFormat())
+                .fingerprint(request.getFingerprint())
+                .fingerprintAlgorithm(request.getFingerprintAlgorithm())
+                .fingerprintVersion(request.getFingerprintVersion())
+                .fingerprintDurationSeconds(request.getFingerprintDurationSeconds())
+                .build();
     }
 }

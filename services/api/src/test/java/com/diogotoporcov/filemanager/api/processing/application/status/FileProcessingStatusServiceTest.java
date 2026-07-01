@@ -1,15 +1,12 @@
 package com.diogotoporcov.filemanager.api.processing.application.status;
 
+import com.diogotoporcov.filemanager.api.application.CursorPage;
 import com.diogotoporcov.filemanager.api.auth.application.AccessControlService;
 import com.diogotoporcov.filemanager.api.auth.domain.Permission;
 import com.diogotoporcov.filemanager.api.file.domain.FileEntity;
-import com.diogotoporcov.filemanager.api.processing.web.status.FileProcessingStatusResponse.AggregateStatus;
-import com.diogotoporcov.filemanager.api.processing.web.status.FileProcessingStatusResponse;
-import com.diogotoporcov.filemanager.api.processing.web.status.ProcessingJobResponse;
+import com.diogotoporcov.filemanager.api.processing.application.status.FileProcessingStatus.AggregateStatus;
 import com.diogotoporcov.filemanager.api.processing.domain.ProcessingJob;
 import com.diogotoporcov.filemanager.api.processing.persistence.ProcessingJobRepository;
-import com.diogotoporcov.filemanager.api.web.BoundedPageRequest;
-import com.diogotoporcov.filemanager.api.web.CursorPageResponse;
 import java.time.OffsetDateTime;
 import java.util.Collections;
 import java.util.List;
@@ -62,13 +59,13 @@ class FileProcessingStatusServiceTest {
         when(processingJobRepository.findPage(eq(fileId), any()))
                 .thenReturn(List.of(job));
 
-        CursorPageResponse<ProcessingJobResponse> result = fileProcessingStatusService.getProcessingJobs(
+        CursorPage<ProcessingJobStatus> result = fileProcessingStatusService.getProcessingJobs(
                 actorUserId,
                 fileId,
-                BoundedPageRequest.of(null, null));
+                ProcessingJobsPageRequest.of(null, null));
 
-        assertEquals(1, result.getItems().size());
-        assertEquals(job.getId(), result.getItems().getFirst().getId());
+        assertEquals(1, result.items().size());
+        assertEquals(job.getId(), result.items().getFirst().id());
         verify(accessControlService).assertCanAccessFile(actorUserId, fileId, Permission.FILE_VIEW);
     }
 
@@ -76,7 +73,7 @@ class FileProcessingStatusServiceTest {
     void getProcessingJobs_ShouldUseCursor_WhenCursorProvided() {
         OffsetDateTime cursorCreatedAt = OffsetDateTime.parse("2026-01-01T10:15:30Z");
         UUID cursorId = UUID.randomUUID();
-        String cursor = BoundedPageRequest.encodeCursor(cursorCreatedAt, cursorId);
+        String cursor = ProcessingJobsPageRequest.encodeCursor(cursorCreatedAt, cursorId);
         ProcessingJob job = ProcessingJob.builder()
                 .id(UUID.randomUUID())
                 .file(fileEntity)
@@ -87,13 +84,13 @@ class FileProcessingStatusServiceTest {
         when(processingJobRepository.findPageAfterCursor(eq(fileId), eq(cursorCreatedAt), eq(cursorId), any()))
                 .thenReturn(List.of(job));
 
-        CursorPageResponse<ProcessingJobResponse> result = fileProcessingStatusService.getProcessingJobs(
+        CursorPage<ProcessingJobStatus> result = fileProcessingStatusService.getProcessingJobs(
                 actorUserId,
                 fileId,
-                BoundedPageRequest.of(10, cursor));
+                ProcessingJobsPageRequest.of(10, cursor));
 
-        assertEquals(1, result.getItems().size());
-        assertEquals(job.getId(), result.getItems().getFirst().getId());
+        assertEquals(1, result.items().size());
+        assertEquals(job.getId(), result.items().getFirst().id());
         verify(processingJobRepository).findPageAfterCursor(eq(fileId), eq(cursorCreatedAt), eq(cursorId), any());
     }
 
@@ -109,24 +106,24 @@ class FileProcessingStatusServiceTest {
                 ProcessingJob.JobType.PHASH);
         when(processingJobRepository.findPage(eq(fileId), any())).thenReturn(List.of(job1, job2));
 
-        CursorPageResponse<ProcessingJobResponse> result = fileProcessingStatusService.getProcessingJobs(
+        CursorPage<ProcessingJobStatus> result = fileProcessingStatusService.getProcessingJobs(
                 actorUserId,
                 fileId,
-                BoundedPageRequest.of(1, null));
+                ProcessingJobsPageRequest.of(1, null));
 
-        assertEquals(1, result.getItems().size());
-        assertTrue(result.isHasMore());
-        assertEquals(BoundedPageRequest.encodeCursor(job1.getCreatedAt(), job1.getId()), result.getNextCursor());
+        assertEquals(1, result.items().size());
+        assertTrue(result.hasMore());
+        assertEquals(ProcessingJobsPageRequest.encodeCursor(job1.getCreatedAt(), job1.getId()), result.nextCursor());
     }
 
     @Test
     void getFileProcessingStatus_ShouldReturnNotStarted_WhenNoJobs() {
         when(processingJobRepository.findPage(eq(fileId), any())).thenReturn(Collections.emptyList());
 
-        FileProcessingStatusResponse result = fileProcessingStatusService.getFileProcessingStatus(actorUserId, fileId);
+        FileProcessingStatus result = fileProcessingStatusService.getFileProcessingStatus(actorUserId, fileId);
 
-        assertEquals(AggregateStatus.NOT_STARTED, result.getOverallStatus());
-        assertTrue(result.getJobs().isEmpty());
+        assertEquals(AggregateStatus.NOT_STARTED, result.overallStatus());
+        assertTrue(result.jobs().isEmpty());
     }
 
     @Test
@@ -135,9 +132,9 @@ class FileProcessingStatusServiceTest {
         ProcessingJob job2 = ProcessingJob.builder().status(ProcessingJob.JobStatus.PENDING).file(fileEntity).build();
         when(processingJobRepository.findPage(eq(fileId), any())).thenReturn(List.of(job1, job2));
 
-        FileProcessingStatusResponse result = fileProcessingStatusService.getFileProcessingStatus(actorUserId, fileId);
+        FileProcessingStatus result = fileProcessingStatusService.getFileProcessingStatus(actorUserId, fileId);
 
-        assertEquals(AggregateStatus.PROCESSING, result.getOverallStatus());
+        assertEquals(AggregateStatus.PROCESSING, result.overallStatus());
     }
 
     @Test
@@ -145,9 +142,9 @@ class FileProcessingStatusServiceTest {
         ProcessingJob job1 = ProcessingJob.builder().status(ProcessingJob.JobStatus.COMPLETED).file(fileEntity).build();
         when(processingJobRepository.findPage(eq(fileId), any())).thenReturn(List.of(job1));
 
-        FileProcessingStatusResponse result = fileProcessingStatusService.getFileProcessingStatus(actorUserId, fileId);
+        FileProcessingStatus result = fileProcessingStatusService.getFileProcessingStatus(actorUserId, fileId);
 
-        assertEquals(AggregateStatus.COMPLETED, result.getOverallStatus());
+        assertEquals(AggregateStatus.COMPLETED, result.overallStatus());
     }
 
     @Test
@@ -155,9 +152,9 @@ class FileProcessingStatusServiceTest {
         ProcessingJob job1 = ProcessingJob.builder().status(ProcessingJob.JobStatus.FAILED).file(fileEntity).build();
         when(processingJobRepository.findPage(eq(fileId), any())).thenReturn(List.of(job1));
 
-        FileProcessingStatusResponse result = fileProcessingStatusService.getFileProcessingStatus(actorUserId, fileId);
+        FileProcessingStatus result = fileProcessingStatusService.getFileProcessingStatus(actorUserId, fileId);
 
-        assertEquals(AggregateStatus.FAILED, result.getOverallStatus());
+        assertEquals(AggregateStatus.FAILED, result.overallStatus());
     }
 
     @Test
@@ -166,9 +163,9 @@ class FileProcessingStatusServiceTest {
         ProcessingJob job2 = ProcessingJob.builder().status(ProcessingJob.JobStatus.FAILED).file(fileEntity).build();
         when(processingJobRepository.findPage(eq(fileId), any())).thenReturn(List.of(job1, job2));
 
-        FileProcessingStatusResponse result = fileProcessingStatusService.getFileProcessingStatus(actorUserId, fileId);
+        FileProcessingStatus result = fileProcessingStatusService.getFileProcessingStatus(actorUserId, fileId);
 
-        assertEquals(AggregateStatus.PARTIAL_FAILURE, result.getOverallStatus());
+        assertEquals(AggregateStatus.PARTIAL_FAILURE, result.overallStatus());
     }
 
     @Test
@@ -181,7 +178,7 @@ class FileProcessingStatusServiceTest {
                 () -> fileProcessingStatusService.getProcessingJobs(
                         actorUserId,
                         fileId,
-                        BoundedPageRequest.of(null, null)));
+                        ProcessingJobsPageRequest.of(null, null)));
     }
 
     @Test

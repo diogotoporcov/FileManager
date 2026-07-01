@@ -3,7 +3,7 @@ package com.diogotoporcov.filemanager.api.config;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.diogotoporcov.filemanager.api.duplicate.application.DuplicateDetectionProperties;
-import com.diogotoporcov.filemanager.api.storage.config.MinioProperties;
+import com.diogotoporcov.filemanager.api.storage.config.ObjectStorageProperties;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
@@ -31,8 +31,8 @@ class ConfigurationValidationTest {
     }
 
     @Test
-    void minioProperties_Valid() {
-        MinioProperties properties = new MinioProperties();
+    void objectStorageProperties_Valid() {
+        ObjectStorageProperties properties = new ObjectStorageProperties();
         properties.setEndpoint("http://localhost:9000");
         properties.setAccessKey("admin");
         properties.setSecretKey("password");
@@ -42,8 +42,8 @@ class ConfigurationValidationTest {
     }
 
     @Test
-    void minioProperties_BlankValues_Fail() {
-        MinioProperties properties = new MinioProperties();
+    void objectStorageProperties_BlankValues_Fail() {
+        ObjectStorageProperties properties = new ObjectStorageProperties();
 
         assertThat(validator.validate(properties)).hasSize(4);
     }
@@ -57,16 +57,43 @@ class ConfigurationValidationTest {
                 "username: ${POSTGRES_USER}",
                 "password: ${POSTGRES_PASSWORD}",
                 "api-token: ${INTERNAL_API_TOKEN}",
-                "access-key: ${MINIO_ROOT_USER}",
-                "secret-key: ${MINIO_ROOT_PASSWORD}"
+                "access-key: ${OBJECT_STORAGE_ACCESS_KEY:${MINIO_ROOT_USER}}",
+                "secret-key: ${OBJECT_STORAGE_SECRET_KEY:${MINIO_ROOT_PASSWORD}}"
         );
         assertThat(applicationYaml).doesNotContain(
                 "${POSTGRES_USER:}",
                 "${POSTGRES_PASSWORD:}",
                 "${INTERNAL_API_TOKEN:}",
+                "${OBJECT_STORAGE_ACCESS_KEY:}",
+                "${OBJECT_STORAGE_SECRET_KEY:}",
                 "${MINIO_ROOT_USER:}",
                 "${MINIO_ROOT_PASSWORD:}"
         );
+    }
+
+    @Test
+    void envExample_DoesNotDeclareIndependentObjectStorageSecrets() throws IOException {
+        String envExample = java.nio.file.Files.readString(envExamplePath(), StandardCharsets.UTF_8);
+
+        assertThat(envExample)
+                .doesNotContain("OBJECT_STORAGE_SECRET_KEY=replace_me")
+                .doesNotContain("S3_SECRET_KEY=replace_me")
+                .contains(
+                        "OBJECT_STORAGE_SECRET_KEY=${MINIO_ROOT_PASSWORD}",
+                        "S3_SECRET_KEY=${MINIO_ROOT_PASSWORD}");
+    }
+
+    private java.nio.file.Path envExamplePath() {
+        java.nio.file.Path directory = java.nio.file.Path.of("").toAbsolutePath();
+        while (directory != null) {
+            java.nio.file.Path candidate = directory.resolve(".env.example");
+            if (java.nio.file.Files.exists(candidate)) {
+                return candidate;
+            }
+            directory = directory.getParent();
+        }
+
+        throw new IllegalStateException(".env.example not found");
     }
 
     @Test
@@ -80,7 +107,7 @@ class ConfigurationValidationTest {
     }
 
     @Test
-    void appProperties_ProcessingCapabilityTogglesBindCorrectly() {
+    void appProperties_ProcessingTogglesBindCorrectly() {
         MapConfigurationPropertySource source = new MapConfigurationPropertySource(Map.of(
                 "app.processing.checksum.enabled", "false",
                 "app.processing.image.phash-enabled", "false",

@@ -1,12 +1,15 @@
 package com.diogotoporcov.filemanager.api.folder.web;
 
-import com.diogotoporcov.filemanager.api.auth.application.CurrentUserService;
+import com.diogotoporcov.filemanager.api.application.CursorPage;
+import com.diogotoporcov.filemanager.api.auth.application.CurrentUserProvider;
+import com.diogotoporcov.filemanager.api.file.application.FindFilesQuery;
 import com.diogotoporcov.filemanager.api.file.web.FileResponse;
 import com.diogotoporcov.filemanager.api.file.web.FileResponseMapper;
-import com.diogotoporcov.filemanager.api.file.web.search.FileSearchQuery;
 import com.diogotoporcov.filemanager.api.file.application.FileService;
 import com.diogotoporcov.filemanager.api.file.domain.FileEntity;
+import com.diogotoporcov.filemanager.api.folder.application.CreateFolderCommand;
 import com.diogotoporcov.filemanager.api.folder.application.FolderService;
+import com.diogotoporcov.filemanager.api.folder.application.RenameFolderCommand;
 import com.diogotoporcov.filemanager.api.web.CursorPageResponse;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.Operation;
@@ -45,8 +48,9 @@ import org.springframework.web.multipart.MultipartFile;
 public class FolderController {
     private final FolderService folderService;
     private final FileService fileService;
-    private final CurrentUserService currentUserService;
+    private final CurrentUserProvider currentUserProvider;
     private final FileResponseMapper fileResponseMapper;
+    private final FolderResponseMapper folderResponseMapper;
 
     @Operation(summary = "Create a folder", description = "Creates a root folder owned by the authenticated user or a child folder under an accessible parent.")
     @ApiResponses({
@@ -57,7 +61,7 @@ public class FolderController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public FolderResponse createFolder(@Valid @RequestBody CreateFolderRequest request) {
-        return folderService.createFolder(request, currentUserService.getCurrentUserId());
+        return folderResponseMapper.toResponse(folderService.createFolder(toCommand(request), currentUserProvider.getCurrentUserId()));
     }
 
     @Operation(summary = "List root folders", description = "Lists active root folders visible to the authenticated user.")
@@ -65,16 +69,17 @@ public class FolderController {
     public FolderChildrenResponse listRootFolders(
             @Parameter(description = "Tag ID to filter root folders by assignment") @RequestParam(required = false) UUID tagId) {
         return FolderChildrenResponse.builder()
-                .folders(folderService.listRootFolders(
-                        tagId,
-                        currentUserService.getCurrentUserId()))
+                .folders(folderService.listRootFolders(tagId, currentUserProvider.getCurrentUserId())
+                        .stream()
+                        .map(folderResponseMapper::toSummary)
+                        .toList())
                 .build();
     }
 
     @Operation(summary = "Get folder metadata", description = "Retrieves metadata for an active folder.")
     @GetMapping("/{folderId}")
     public FolderResponse getFolder(@Parameter(description = "ID of the folder") @PathVariable UUID folderId) {
-        return folderService.getFolder(folderId, currentUserService.getCurrentUserId());
+        return folderResponseMapper.toResponse(folderService.getFolder(folderId, currentUserProvider.getCurrentUserId()));
     }
 
     @Operation(summary = "Rename folder", description = "Renames an active folder.")
@@ -86,7 +91,10 @@ public class FolderController {
     public FolderResponse renameFolder(
             @Parameter(description = "ID of the folder") @PathVariable UUID folderId,
             @Valid @RequestBody UpdateFolderRequest request) {
-        return folderService.renameFolder(folderId, request, currentUserService.getCurrentUserId());
+        return folderResponseMapper.toResponse(folderService.renameFolder(
+                folderId,
+                new RenameFolderCommand(request.getName()),
+                currentUserProvider.getCurrentUserId()));
     }
 
     @Operation(
@@ -95,7 +103,7 @@ public class FolderController {
     @DeleteMapping("/{folderId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteFolder(@Parameter(description = "ID of the folder") @PathVariable UUID folderId) {
-        folderService.deleteFolder(folderId, currentUserService.getCurrentUserId());
+        folderService.deleteFolder(folderId, currentUserProvider.getCurrentUserId());
     }
 
     @Operation(summary = "List child folders", description = "Lists direct child folders only.")
@@ -103,7 +111,12 @@ public class FolderController {
     public FolderChildrenResponse listChildFolders(
             @Parameter(description = "ID of the folder") @PathVariable UUID folderId,
             @Parameter(description = "Tag ID to filter child folders by assignment") @RequestParam(required = false) UUID tagId) {
-        return folderService.listChildFolders(folderId, tagId, currentUserService.getCurrentUserId());
+        return FolderChildrenResponse.builder()
+                .folders(folderService.listChildFolders(folderId, tagId, currentUserProvider.getCurrentUserId())
+                        .stream()
+                        .map(folderResponseMapper::toSummary)
+                        .toList())
+                .build();
     }
 
     @Operation(summary = "Create child folder", description = "Creates a direct child folder under the parent folder.")
@@ -112,9 +125,9 @@ public class FolderController {
     public FolderResponse createChildFolder(
             @Parameter(description = "ID of the parent folder") @PathVariable UUID folderId,
             @Valid @RequestBody CreateFolderRequest request) {
-        request.setParentFolderId(folderId);
-
-        return folderService.createFolder(request, currentUserService.getCurrentUserId());
+        return folderResponseMapper.toResponse(folderService.createFolder(
+                new CreateFolderCommand(request.getName(), folderId),
+                currentUserProvider.getCurrentUserId()));
     }
 
     @Operation(
@@ -123,10 +136,9 @@ public class FolderController {
     @GetMapping("/{folderId}/files")
     public CursorPageResponse<FileResponse> listFolderFiles(
             @Parameter(description = "ID of the folder") @PathVariable UUID folderId,
-            @Valid @ParameterObject FileSearchQuery query) {
-        query.setFolderId(folderId);
+            @Valid @ParameterObject com.diogotoporcov.filemanager.api.file.web.search.FileSearchQuery query) {
 
-        return fileService.searchFiles(query, currentUserService.getCurrentUserId());
+        return toResponsePage(fileService.searchFiles(toApplicationQuery(query, folderId), currentUserProvider.getCurrentUserId()));
     }
 
     @Operation(summary = "Upload file into folder", description = "Uploads a file owned by the authenticated user into the folder.")
@@ -137,7 +149,7 @@ public class FolderController {
             @Parameter(description = "The file to upload") @RequestParam("file") MultipartFile file) throws IOException {
         validateUpload(file);
 
-        UUID actorUserId = currentUserService.getCurrentUserId();
+        UUID actorUserId = currentUserProvider.getCurrentUserId();
         FileEntity entity = fileService.uploadFile(
                 file.getOriginalFilename(),
                 file.getContentType(),
@@ -157,5 +169,37 @@ public class FolderController {
         if (file.getOriginalFilename() == null || file.getOriginalFilename().isBlank()) {
             throw new IllegalArgumentException("Filename is missing");
         }
+    }
+
+    private CreateFolderCommand toCommand(CreateFolderRequest request) {
+        return new CreateFolderCommand(request.getName(), request.getParentFolderId());
+    }
+
+    private FindFilesQuery toApplicationQuery(
+            com.diogotoporcov.filemanager.api.file.web.search.FileSearchQuery query,
+            UUID folderId) {
+        return new FindFilesQuery(
+                folderId,
+                query.getTagId(),
+                query.getCreatedAtFrom(),
+                query.getCreatedAtTo(),
+                query.getUpdatedAtFrom(),
+                query.getUpdatedAtTo(),
+                query.getSizeMin(),
+                query.getSizeMax(),
+                query.getMimeType(),
+                query.getSort(),
+                query.getSize(),
+                query.getLimit(),
+                query.getCursor());
+    }
+
+    private CursorPageResponse<FileResponse> toResponsePage(CursorPage<FileEntity> page) {
+        return CursorPageResponse.<FileResponse>builder()
+                .items(page.items().stream().map(fileResponseMapper::toResponse).toList())
+                .nextCursor(page.nextCursor())
+                .hasMore(page.hasMore())
+                .pageSize(page.pageSize())
+                .build();
     }
 }

@@ -1,7 +1,6 @@
 package com.diogotoporcov.filemanager.api.file.application.search;
 
-import com.diogotoporcov.filemanager.api.file.web.search.FileSearchQuery;
-import com.diogotoporcov.filemanager.api.web.BoundedPageRequest;
+import com.diogotoporcov.filemanager.api.file.application.FindFilesQuery;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -17,7 +16,7 @@ class FileSearchCriteriaMapperTest {
 
     @Test
     void validDateRangeAccepted() {
-        FileSearchQuery query = baseQuery();
+        FindFilesQuery query = baseQuery();
         query.setCreatedAtFrom("2026-01-01T00:00:00Z");
         query.setCreatedAtTo("2026-02-01T00:00:00Z");
 
@@ -29,7 +28,7 @@ class FileSearchCriteriaMapperTest {
 
     @Test
     void invalidDateRangeRejected() {
-        FileSearchQuery query = baseQuery();
+        FindFilesQuery query = baseQuery();
         query.setCreatedAtFrom("2026-02-01T00:00:00Z");
         query.setCreatedAtTo("2026-01-01T00:00:00Z");
 
@@ -38,7 +37,7 @@ class FileSearchCriteriaMapperTest {
 
     @Test
     void invalidDateFormatRejected() {
-        FileSearchQuery query = baseQuery();
+        FindFilesQuery query = baseQuery();
         query.setUpdatedAtFrom("not-a-date");
 
         assertThrows(SearchValidationException.class, () -> mapper.toCriteria(query, actorUserId));
@@ -46,7 +45,7 @@ class FileSearchCriteriaMapperTest {
 
     @Test
     void validSizeRangeAccepted() {
-        FileSearchQuery query = baseQuery();
+        FindFilesQuery query = baseQuery();
         query.setSizeMin(1L);
         query.setSizeMax(10L);
 
@@ -58,7 +57,7 @@ class FileSearchCriteriaMapperTest {
 
     @Test
     void negativeSizeRejected() {
-        FileSearchQuery query = baseQuery();
+        FindFilesQuery query = baseQuery();
         query.setSizeMin(-1L);
 
         assertThrows(SearchValidationException.class, () -> mapper.toCriteria(query, actorUserId));
@@ -66,7 +65,7 @@ class FileSearchCriteriaMapperTest {
 
     @Test
     void sizeMinGreaterThanSizeMaxRejected() {
-        FileSearchQuery query = baseQuery();
+        FindFilesQuery query = baseQuery();
         query.setSizeMin(10L);
         query.setSizeMax(1L);
 
@@ -75,7 +74,7 @@ class FileSearchCriteriaMapperTest {
 
     @Test
     void validSortAccepted() {
-        FileSearchQuery query = baseQuery();
+        FindFilesQuery query = baseQuery();
         query.setSort("size,asc");
 
         var criteria = mapper.toCriteria(query, actorUserId);
@@ -86,7 +85,7 @@ class FileSearchCriteriaMapperTest {
 
     @Test
     void unsupportedSortFieldRejected() {
-        FileSearchQuery query = baseQuery();
+        FindFilesQuery query = baseQuery();
         query.setSort("storagePath,desc");
 
         assertThrows(SearchValidationException.class, () -> mapper.toCriteria(query, actorUserId));
@@ -94,7 +93,7 @@ class FileSearchCriteriaMapperTest {
 
     @Test
     void invalidSortDirectionRejected() {
-        FileSearchQuery query = baseQuery();
+        FindFilesQuery query = baseQuery();
         query.setSort("createdAt,newest");
 
         assertThrows(SearchValidationException.class, () -> mapper.toCriteria(query, actorUserId));
@@ -102,7 +101,7 @@ class FileSearchCriteriaMapperTest {
 
     @Test
     void repeatedMimeTypeListAccepted() {
-        FileSearchQuery query = baseQuery();
+        FindFilesQuery query = baseQuery();
         query.setMimeType(List.of("image/jpeg", "image/png"));
 
         var criteria = mapper.toCriteria(query, actorUserId);
@@ -112,7 +111,7 @@ class FileSearchCriteriaMapperTest {
 
     @Test
     void blankMimeTypeRejected() {
-        FileSearchQuery query = baseQuery();
+        FindFilesQuery query = baseQuery();
         query.setMimeType(List.of("image/jpeg", " "));
 
         assertThrows(SearchValidationException.class, () -> mapper.toCriteria(query, actorUserId));
@@ -120,7 +119,7 @@ class FileSearchCriteriaMapperTest {
 
     @Test
     void tooManyMimeTypesRejected() {
-        FileSearchQuery query = baseQuery();
+        FindFilesQuery query = baseQuery();
         List<String> mimeTypes = new ArrayList<>();
         for (int i = 0; i < 21; i++) {
             mimeTypes.add("application/test-" + i);
@@ -132,15 +131,15 @@ class FileSearchCriteriaMapperTest {
 
     @Test
     void pageSizeAboveMaxRejected() {
-        FileSearchQuery query = baseQuery();
-        query.setLimit(BoundedPageRequest.MAX_SIZE + 1);
+        FindFilesQuery query = baseQuery();
+        query.setLimit(FileSearchCriteriaMapper.MAX_PAGE_SIZE + 1);
 
         assertThrows(IllegalArgumentException.class, () -> mapper.toCriteria(query, actorUserId));
     }
 
     @Test
     void zeroLimitRejected() {
-        FileSearchQuery query = baseQuery();
+        FindFilesQuery query = baseQuery();
         query.setLimit(0);
 
         assertThrows(IllegalArgumentException.class, () -> mapper.toCriteria(query, actorUserId));
@@ -148,16 +147,16 @@ class FileSearchCriteriaMapperTest {
 
     @Test
     void sameSizeAndLimitAccepted() {
-        FileSearchQuery query = baseQuery();
+        FindFilesQuery query = baseQuery();
         query.setSize(25);
         query.setLimit(25);
 
-        assertEquals(25, mapper.toCriteria(query, actorUserId).pageRequest().size());
+        assertEquals(25, mapper.toCriteria(query, actorUserId).pageSize());
     }
 
     @Test
     void differentSizeAndLimitRejected() {
-        FileSearchQuery query = baseQuery();
+        FindFilesQuery query = baseQuery();
         query.setSize(25);
         query.setLimit(50);
 
@@ -166,7 +165,7 @@ class FileSearchCriteriaMapperTest {
 
     @Test
     void defaultSortIsCreatedAtDescending() {
-        FileSearchQuery query = baseQuery();
+        FindFilesQuery query = baseQuery();
 
         var criteria = mapper.toCriteria(query, actorUserId);
 
@@ -178,7 +177,7 @@ class FileSearchCriteriaMapperTest {
     @Test
     void folderIdIsMappedToCriteria() {
         UUID folderId = UUID.randomUUID();
-        FileSearchQuery query = baseQuery();
+        FindFilesQuery query = baseQuery();
         query.setFolderId(folderId);
 
         var criteria = mapper.toCriteria(query, actorUserId);
@@ -189,7 +188,7 @@ class FileSearchCriteriaMapperTest {
     @Test
     void tagIdIsMappedToCriteria() {
         UUID tagId = UUID.randomUUID();
-        FileSearchQuery query = baseQuery();
+        FindFilesQuery query = baseQuery();
         query.setTagId(tagId);
 
         var criteria = mapper.toCriteria(query, actorUserId);
@@ -197,7 +196,7 @@ class FileSearchCriteriaMapperTest {
         assertEquals(tagId, criteria.tagId());
     }
 
-    private FileSearchQuery baseQuery() {
-        return new FileSearchQuery();
+    private FindFilesQuery baseQuery() {
+        return new FindFilesQuery();
     }
 }

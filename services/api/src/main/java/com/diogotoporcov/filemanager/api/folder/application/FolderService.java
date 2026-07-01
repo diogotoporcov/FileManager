@@ -5,12 +5,6 @@ import com.diogotoporcov.filemanager.api.auth.domain.Permission;
 import com.diogotoporcov.filemanager.api.exception.ConflictException;
 import com.diogotoporcov.filemanager.api.exception.ResourceNotFoundException;
 import com.diogotoporcov.filemanager.api.file.persistence.FileRepository;
-import com.diogotoporcov.filemanager.api.folder.web.CreateFolderRequest;
-import com.diogotoporcov.filemanager.api.folder.web.FolderChildrenResponse;
-import com.diogotoporcov.filemanager.api.folder.web.FolderResponse;
-import com.diogotoporcov.filemanager.api.folder.web.FolderResponseMapper;
-import com.diogotoporcov.filemanager.api.folder.web.FolderSummaryResponse;
-import com.diogotoporcov.filemanager.api.folder.web.UpdateFolderRequest;
 import com.diogotoporcov.filemanager.api.folder.domain.FolderClosureEntity;
 import com.diogotoporcov.filemanager.api.folder.domain.FolderClosureId;
 import com.diogotoporcov.filemanager.api.folder.domain.FolderEntity;
@@ -37,19 +31,18 @@ public class FolderService {
     private final FileRepository fileRepository;
     private final UserRepository userRepository;
     private final AccessControlService accessControlService;
-    private final FolderResponseMapper folderResponseMapper;
     private final TagService tagService;
 
     @Transactional
-    public FolderResponse createFolder(CreateFolderRequest request, UUID actorUserId) {
-        Objects.requireNonNull(request, "request must not be null");
-        String name = normalizeFolderName(request.getName());
+    public FolderEntity createFolder(CreateFolderCommand command, UUID actorUserId) {
+        Objects.requireNonNull(command, "command must not be null");
+        String name = normalizeFolderName(command.name());
         User ownerUser = findUser(actorUserId);
 
         FolderEntity parentFolder = null;
-        if (request.getParentFolderId() != null) {
-            parentFolder = folderRepository.findByIdAndDeletedAtIsNull(request.getParentFolderId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Folder not found: " + request.getParentFolderId()));
+        if (command.parentFolderId() != null) {
+            parentFolder = folderRepository.findByIdAndDeletedAtIsNull(command.parentFolderId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Folder not found: " + command.parentFolderId()));
             accessControlService.assertCanAccessFolder(actorUserId, parentFolder.getId(), Permission.FOLDER_CREATE);
         } else {
             accessControlService.assertCanCreateFolderForOwner(actorUserId, actorUserId);
@@ -67,21 +60,19 @@ public class FolderService {
         FolderEntity savedFolder = folderRepository.save(folder);
         createClosureRows(savedFolder, parentFolder);
 
-        return folderResponseMapper.toResponse(savedFolder);
+        return savedFolder;
     }
 
     @Transactional(readOnly = true)
-    public FolderResponse getFolder(UUID folderId, UUID actorUserId) {
-        FolderEntity folder = findAccessibleFolder(folderId, actorUserId, Permission.FOLDER_VIEW);
-
-        return folderResponseMapper.toResponse(folder);
+    public FolderEntity getFolder(UUID folderId, UUID actorUserId) {
+        return findAccessibleFolder(folderId, actorUserId, Permission.FOLDER_VIEW);
     }
 
     @Transactional
-    public FolderResponse renameFolder(UUID folderId, UpdateFolderRequest request, UUID actorUserId) {
-        Objects.requireNonNull(request, "request must not be null");
+    public FolderEntity renameFolder(UUID folderId, RenameFolderCommand command, UUID actorUserId) {
+        Objects.requireNonNull(command, "command must not be null");
         FolderEntity folder = findAccessibleFolder(folderId, actorUserId, Permission.FOLDER_RENAME);
-        String name = normalizeFolderName(request.getName());
+        String name = normalizeFolderName(command.name());
 
         if (!folder.getName().equalsIgnoreCase(name)) {
             rejectDuplicateActiveSibling(name, folder.getOwnerUser(), folder.getParentFolder());
@@ -89,7 +80,7 @@ public class FolderService {
 
         folder.setName(name);
 
-        return folderResponseMapper.toResponse(folderRepository.save(folder));
+        return folderRepository.save(folder);
     }
 
     @Transactional
@@ -108,32 +99,21 @@ public class FolderService {
     }
 
     @Transactional(readOnly = true)
-    public List<FolderSummaryResponse> listRootFolders(UUID tagId, UUID actorUserId) {
+    public List<FolderEntity> listRootFolders(UUID tagId, UUID actorUserId) {
         findUser(actorUserId);
         tagService.assertCanUseTagForFolderListing(tagId, actorUserId, null);
-        List<FolderEntity> folders = tagId == null
+        return tagId == null
                 ? folderRepository.findVisibleRootFolders(actorUserId)
                 : folderRepository.findVisibleTaggedRootFolders(actorUserId, tagId);
-
-        return folders
-                .stream()
-                .map(folderResponseMapper::toSummary)
-                .toList();
     }
 
     @Transactional(readOnly = true)
-    public FolderChildrenResponse listChildFolders(UUID folderId, UUID tagId, UUID actorUserId) {
+    public List<FolderEntity> listChildFolders(UUID folderId, UUID tagId, UUID actorUserId) {
         FolderEntity parentFolder = findAccessibleFolder(folderId, actorUserId, Permission.FOLDER_VIEW);
         tagService.assertCanUseTagForFolderListing(tagId, actorUserId, folderId);
-        List<FolderEntity> folderEntities = tagId == null
+        return tagId == null
                 ? folderRepository.findByParentFolderAndDeletedAtIsNullOrderByNameAsc(parentFolder)
                 : folderRepository.findTaggedChildFolders(parentFolder, tagId);
-        List<FolderSummaryResponse> folders = folderEntities
-                .stream()
-                .map(folderResponseMapper::toSummary)
-                .toList();
-
-        return FolderChildrenResponse.builder().folders(folders).build();
     }
 
     @Transactional(readOnly = true)

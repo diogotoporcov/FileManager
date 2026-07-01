@@ -1,6 +1,6 @@
 package com.diogotoporcov.filemanager.api.file.web;
 
-import com.diogotoporcov.filemanager.api.auth.application.CurrentUserService;
+import com.diogotoporcov.filemanager.api.auth.application.CurrentUserProvider;
 import com.diogotoporcov.filemanager.api.file.application.FileDownload;
 import com.diogotoporcov.filemanager.api.file.application.InvalidDownloadRangeException;
 import com.diogotoporcov.filemanager.api.file.application.PresignedDownloadUrl;
@@ -57,7 +57,7 @@ class FileDownloadSecurityTest {
     private FileService fileService;
 
     @MockitoBean
-    private CurrentUserService currentUserService;
+    private CurrentUserProvider currentUserProvider;
 
     @MockitoBean
     private IdentityResolutionService identityResolutionService;
@@ -79,7 +79,7 @@ class FileDownloadSecurityTest {
         mockMvc = MockMvcBuilders.webAppContextSetup(context)
                 .apply(springSecurity())
                 .build();
-        when(currentUserService.getCurrentUserId()).thenReturn(UUID.randomUUID());
+        when(currentUserProvider.getCurrentUserId()).thenReturn(UUID.randomUUID());
     }
 
     @Test

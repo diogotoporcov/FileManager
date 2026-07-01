@@ -1,6 +1,6 @@
 package com.diogotoporcov.filemanager.api.sharing.web;
 
-import com.diogotoporcov.filemanager.api.auth.application.CurrentUserService;
+import com.diogotoporcov.filemanager.api.auth.application.CurrentUserProvider;
 import com.diogotoporcov.filemanager.api.sharing.application.SharingService;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -21,7 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class SharingController {
     private final SharingService sharingService;
-    private final CurrentUserService currentUserService;
+    private final CurrentUserProvider currentUserProvider;
     private final GrantResponseMapper grantResponseMapper;
 
     @PostMapping("/files/{fileId}/grants")
@@ -29,7 +29,7 @@ public class SharingController {
     public List<GrantResponse> createFileGrants(
             @PathVariable UUID fileId,
             @Valid @RequestBody CreateFileGrantRequest request) {
-        UUID actorUserId = currentUserService.getCurrentUserId();
+        UUID actorUserId = currentUserProvider.getCurrentUserId();
 
         return sharingService.createFileGrants(fileId, request.getGranteeUserId(), request.getPermissions(), actorUserId)
                 .stream()
@@ -39,7 +39,7 @@ public class SharingController {
 
     @GetMapping("/files/{fileId}/grants")
     public List<GrantResponse> listFileGrants(@PathVariable UUID fileId) {
-        UUID actorUserId = currentUserService.getCurrentUserId();
+        UUID actorUserId = currentUserProvider.getCurrentUserId();
 
         return sharingService.listFileGrants(fileId, actorUserId)
                 .stream()
@@ -50,7 +50,7 @@ public class SharingController {
     @DeleteMapping("/files/{fileId}/grants/{grantId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void revokeFileGrant(@PathVariable UUID fileId, @PathVariable UUID grantId) {
-        sharingService.revokeFileGrant(fileId, grantId, currentUserService.getCurrentUserId());
+        sharingService.revokeFileGrant(fileId, grantId, currentUserProvider.getCurrentUserId());
     }
 
     @PostMapping("/folders/{folderId}/grants")
@@ -58,7 +58,7 @@ public class SharingController {
     public List<GrantResponse> createFolderGrants(
             @PathVariable UUID folderId,
             @Valid @RequestBody CreateFolderGrantRequest request) {
-        UUID actorUserId = currentUserService.getCurrentUserId();
+        UUID actorUserId = currentUserProvider.getCurrentUserId();
 
         return sharingService.createFolderGrants(
                         folderId,
@@ -73,7 +73,7 @@ public class SharingController {
 
     @GetMapping("/folders/{folderId}/grants")
     public List<GrantResponse> listFolderGrants(@PathVariable UUID folderId) {
-        UUID actorUserId = currentUserService.getCurrentUserId();
+        UUID actorUserId = currentUserProvider.getCurrentUserId();
 
         return sharingService.listFolderGrants(folderId, actorUserId)
                 .stream()
@@ -84,6 +84,6 @@ public class SharingController {
     @DeleteMapping("/folders/{folderId}/grants/{grantId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void revokeFolderGrant(@PathVariable UUID folderId, @PathVariable UUID grantId) {
-        sharingService.revokeFolderGrant(folderId, grantId, currentUserService.getCurrentUserId());
+        sharingService.revokeFolderGrant(folderId, grantId, currentUserProvider.getCurrentUserId());
     }
 }

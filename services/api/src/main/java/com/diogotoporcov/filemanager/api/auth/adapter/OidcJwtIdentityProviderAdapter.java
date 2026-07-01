@@ -2,8 +2,8 @@ package com.diogotoporcov.filemanager.api.auth.adapter;
 
 import com.diogotoporcov.filemanager.api.config.AppProperties;
 import com.diogotoporcov.filemanager.api.auth.domain.AuthenticatedIdentity;
+import com.diogotoporcov.filemanager.api.auth.domain.ExternalIdentityClaims;
 import com.diogotoporcov.filemanager.api.auth.port.IdentityProviderPort;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -16,15 +16,14 @@ public class OidcJwtIdentityProviderAdapter implements IdentityProviderPort {
     }
 
     @Override
-    public AuthenticatedIdentity extractIdentity(Jwt jwt) {
+    public AuthenticatedIdentity extractIdentity(ExternalIdentityClaims claims) {
         AppProperties.Auth auth = appProperties.getAuth();
-        AppProperties.Auth.Claims claims = auth.getClaims();
-        String subject = jwt.getSubject();
+        String subject = claims.subject();
         if (subject == null || subject.isBlank()) {
             throw new IllegalArgumentException("Subject (sub) claim is missing or blank in JWT");
         }
 
-        String rawEmail = jwt.getClaimAsString(claims.getEmail());
+        String rawEmail = claims.email();
         if (rawEmail == null || rawEmail.isBlank()) {
             throw new IllegalArgumentException("Email claim is missing or blank in JWT");
         }
@@ -33,9 +32,9 @@ public class OidcJwtIdentityProviderAdapter implements IdentityProviderPort {
                 auth.getProviderName(),
                 subject,
                 rawEmail.trim().toLowerCase(),
-                jwt.getClaimAsString(claims.getFirstName()),
-                jwt.getClaimAsString(claims.getLastName()),
-                jwt.getClaimAsBoolean(claims.getEmailVerified())
+                claims.firstName(),
+                claims.lastName(),
+                claims.emailVerified()
         );
     }
 }

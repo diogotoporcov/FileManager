@@ -7,7 +7,6 @@ import com.diogotoporcov.filemanager.api.exception.ResourceNotFoundException;
 import com.diogotoporcov.filemanager.api.file.domain.FileEntity;
 import com.diogotoporcov.filemanager.api.file.persistence.FileRepository;
 import com.diogotoporcov.filemanager.api.observability.application.FileManagerMetrics;
-import com.diogotoporcov.filemanager.api.processing.web.result.AudioAnalysisResultRequest;
 import com.diogotoporcov.filemanager.api.processing.domain.ProcessingJob;
 import com.diogotoporcov.filemanager.api.processing.domain.result.AudioFingerprint;
 import com.diogotoporcov.filemanager.api.processing.domain.result.FileEmbedding;
@@ -151,21 +150,21 @@ public class ProcessingJobService {
     }
 
     @Transactional
-    public void handleAudioAnalysisResult(UUID jobId, AudioAnalysisResultRequest request) {
-        if (request == null) {
-            throw new IllegalArgumentException("Audio analysis result request must not be null");
+    public void handleAudioAnalysisResult(UUID jobId, AudioAnalysisResultCommand command) {
+        if (command == null) {
+            throw new IllegalArgumentException("Audio analysis result command must not be null");
         }
-        log.info("Handling audio analysis result for job {} and file {}", jobId, request.getFileId());
+        log.info("Handling audio analysis result for job {} and file {}", jobId, command.fileId());
 
-        validateAudioAnalysisRequest(request);
+        validateAudioAnalysisResult(command);
 
-        ProcessingJob job = getAndValidateJob(jobId, request.getFileId(), ProcessingJob.JobType.AUDIO_ANALYSIS);
+        ProcessingJob job = getAndValidateJob(jobId, command.fileId(), ProcessingJob.JobType.AUDIO_ANALYSIS);
         if (shouldIgnoreSuccessfulTerminalCallback(job)) {
             return;
         }
-        FileEntity file = getActiveFile(request.getFileId());
+        FileEntity file = getActiveFile(command.fileId());
 
-        updateAudioFingerprint(file, request);
+        updateAudioFingerprint(file, command);
         completeJob(job);
     }
 
@@ -185,47 +184,47 @@ public class ProcessingJobService {
         validateEmbeddingValues(dimension, embedding);
     }
 
-    private void validateAudioAnalysisRequest(AudioAnalysisResultRequest request) {
-        if (request == null) {
-            throw new IllegalArgumentException("Audio analysis result request must not be null");
+    private void validateAudioAnalysisResult(AudioAnalysisResultCommand command) {
+        if (command == null) {
+            throw new IllegalArgumentException("Audio analysis result command must not be null");
         }
 
-        if (request.getDurationMs() == null || request.getDurationMs() <= 0) {
+        if (command.durationMs() == null || command.durationMs() <= 0) {
             throw new IllegalArgumentException("Audio duration must be positive");
         }
 
-        if (request.getSampleRate() == null || request.getSampleRate() <= 0) {
+        if (command.sampleRate() == null || command.sampleRate() <= 0) {
             throw new IllegalArgumentException("Audio sample rate must be positive");
         }
 
-        if (request.getChannels() == null || request.getChannels() <= 0) {
+        if (command.channels() == null || command.channels() <= 0) {
             throw new IllegalArgumentException("Audio channels must be positive");
         }
 
-        if (request.getBitRate() != null && request.getBitRate() <= 0) {
+        if (command.bitRate() != null && command.bitRate() <= 0) {
             throw new IllegalArgumentException("Audio bit rate must be positive");
         }
 
-        if (request.getAudioStreamIndex() != null && request.getAudioStreamIndex() < 0) {
+        if (command.audioStreamIndex() != null && command.audioStreamIndex() < 0) {
             throw new IllegalArgumentException("Audio stream index must be non-negative");
         }
 
-        if (request.getFingerprintDurationSeconds() == null || request.getFingerprintDurationSeconds() <= 0) {
+        if (command.fingerprintDurationSeconds() == null || command.fingerprintDurationSeconds() <= 0) {
             throw new IllegalArgumentException("Audio fingerprint duration must be positive");
         }
 
-        validateRequiredText(request.getCodec(), "Audio codec", 255);
-        validateRequiredText(request.getFingerprint(), "Audio fingerprint", AudioFingerprint.MAX_FINGERPRINT_LENGTH);
+        validateRequiredText(command.codec(), "Audio codec", 255);
+        validateRequiredText(command.fingerprint(), "Audio fingerprint", AudioFingerprint.MAX_FINGERPRINT_LENGTH);
         validateRequiredText(
-                request.getFingerprintAlgorithm(),
+                command.fingerprintAlgorithm(),
                 "Audio fingerprint algorithm",
                 AudioFingerprint.MAX_FINGERPRINT_ALGORITHM_LENGTH);
         validateRequiredText(
-                request.getFingerprintVersion(),
+                command.fingerprintVersion(),
                 "Audio fingerprint version",
                 AudioFingerprint.MAX_FINGERPRINT_VERSION_LENGTH);
         validateNullableText(
-                request.getContainerFormat(),
+                command.containerFormat(),
                 "Audio container format",
                 255);
     }
@@ -393,36 +392,36 @@ public class ProcessingJobService {
                 );
     }
 
-    private void updateAudioFingerprint(FileEntity file, AudioAnalysisResultRequest request) {
+    private void updateAudioFingerprint(FileEntity file, AudioAnalysisResultCommand command) {
         audioFingerprintRepository.findByFileId(file.getId())
                 .ifPresentOrElse(
                         existing -> {
-                            existing.setDurationMs(request.getDurationMs());
-                            existing.setCodec(request.getCodec().trim());
-                            existing.setSampleRate(request.getSampleRate());
-                            existing.setChannels(request.getChannels());
-                            existing.setBitRate(request.getBitRate());
-                            existing.setAudioStreamIndex(request.getAudioStreamIndex());
-                            existing.setContainerFormat(normalizeNullableText(request.getContainerFormat()));
-                            existing.setFingerprint(request.getFingerprint().trim());
-                            existing.setFingerprintAlgorithm(request.getFingerprintAlgorithm().trim());
-                            existing.setFingerprintVersion(request.getFingerprintVersion().trim());
-                            existing.setFingerprintDurationSeconds(request.getFingerprintDurationSeconds());
+                            existing.setDurationMs(command.durationMs());
+                            existing.setCodec(command.codec().trim());
+                            existing.setSampleRate(command.sampleRate());
+                            existing.setChannels(command.channels());
+                            existing.setBitRate(command.bitRate());
+                            existing.setAudioStreamIndex(command.audioStreamIndex());
+                            existing.setContainerFormat(normalizeNullableText(command.containerFormat()));
+                            existing.setFingerprint(command.fingerprint().trim());
+                            existing.setFingerprintAlgorithm(command.fingerprintAlgorithm().trim());
+                            existing.setFingerprintVersion(command.fingerprintVersion().trim());
+                            existing.setFingerprintDurationSeconds(command.fingerprintDurationSeconds());
                             audioFingerprintRepository.save(existing);
                         },
                         () -> audioFingerprintRepository.save(AudioFingerprint.builder()
                                 .file(file)
-                                .durationMs(request.getDurationMs())
-                                .codec(request.getCodec().trim())
-                                .sampleRate(request.getSampleRate())
-                                .channels(request.getChannels())
-                                .bitRate(request.getBitRate())
-                                .audioStreamIndex(request.getAudioStreamIndex())
-                                .containerFormat(normalizeNullableText(request.getContainerFormat()))
-                                .fingerprint(request.getFingerprint().trim())
-                                .fingerprintAlgorithm(request.getFingerprintAlgorithm().trim())
-                                .fingerprintVersion(request.getFingerprintVersion().trim())
-                                .fingerprintDurationSeconds(request.getFingerprintDurationSeconds())
+                                .durationMs(command.durationMs())
+                                .codec(command.codec().trim())
+                                .sampleRate(command.sampleRate())
+                                .channels(command.channels())
+                                .bitRate(command.bitRate())
+                                .audioStreamIndex(command.audioStreamIndex())
+                                .containerFormat(normalizeNullableText(command.containerFormat()))
+                                .fingerprint(command.fingerprint().trim())
+                                .fingerprintAlgorithm(command.fingerprintAlgorithm().trim())
+                                .fingerprintVersion(command.fingerprintVersion().trim())
+                                .fingerprintDurationSeconds(command.fingerprintDurationSeconds())
                                 .build())
                 );
     }

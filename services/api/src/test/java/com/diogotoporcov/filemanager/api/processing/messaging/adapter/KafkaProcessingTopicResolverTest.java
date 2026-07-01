@@ -1,16 +1,17 @@
-package com.diogotoporcov.filemanager.api.processing.messaging;
+package com.diogotoporcov.filemanager.api.processing.messaging.adapter;
 
 import com.diogotoporcov.filemanager.api.config.AppProperties;
 import com.diogotoporcov.filemanager.api.processing.domain.ProcessingJob;
+import com.diogotoporcov.filemanager.api.processing.messaging.FileProcessingRequestedEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-class ProcessingTopicResolverTest {
+class KafkaProcessingTopicResolverTest {
 
-    private ProcessingTopicResolver resolver;
+    private KafkaProcessingTopicResolver resolver;
 
     @BeforeEach
     void setUp() {
@@ -18,7 +19,7 @@ class ProcessingTopicResolverTest {
         appProperties.getKafka().getTopics().setFileProcessingChecksum("topic.checksum");
         appProperties.getKafka().getTopics().setFileProcessingImage("topic.image");
         appProperties.getKafka().getTopics().setFileProcessingAudio("topic.audio");
-        resolver = new ProcessingTopicResolver(appProperties);
+        resolver = new KafkaProcessingTopicResolver(appProperties);
     }
 
     @Test
@@ -75,6 +76,13 @@ class ProcessingTopicResolverTest {
         assertThatThrownBy(() -> resolver.resolve(event("UNKNOWN", "application/pdf")))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Unsupported processing job type");
+    }
+
+    @Test
+    void blankEventJobTypeFailsClearly() {
+        assertThatThrownBy(() -> resolver.resolve(event(" ", "application/pdf")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Processing job type must not be blank");
     }
 
     private static FileProcessingRequestedEvent event(String jobType, String mimeType) {
