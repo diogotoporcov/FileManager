@@ -3,7 +3,6 @@ package com.diogotoporcov.filemanager.api.processing.application.job;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.diogotoporcov.filemanager.api.config.AppProperties;
-import com.diogotoporcov.filemanager.api.processing.application.policy.GlobalProcessingPolicyResolver;
 import com.diogotoporcov.filemanager.api.processing.domain.ProcessingJob;
 import java.util.List;
 import java.util.Set;
@@ -74,13 +73,43 @@ class ProcessingJobPlannerTest {
                 .containsExactly(ProcessingJob.JobType.CHECKSUM);
     }
 
+    @Test
+    void planJobs_DisabledChecksumSkipsChecksum() {
+        AppProperties appProperties = new AppProperties();
+        appProperties.getProcessing().getChecksum().setEnabled(false);
+
+        assertThat(plannerWith(appProperties).planJobs("application/pdf"))
+                .isEmpty();
+    }
+
+    @Test
+    void planJobs_DisabledImagePhashSkipsPhashOnly() {
+        AppProperties appProperties = new AppProperties();
+        appProperties.getProcessing().getImage().setPhashEnabled(false);
+
+        assertThat(plannerWith(appProperties).planJobs("image/png"))
+                .containsExactly(
+                        ProcessingJob.JobType.CHECKSUM,
+                        ProcessingJob.JobType.EMBEDDING);
+    }
+
+    @Test
+    void planJobs_DisabledImageEmbeddingSkipsEmbeddingOnly() {
+        AppProperties appProperties = new AppProperties();
+        appProperties.getProcessing().getImage().setEmbeddingEnabled(false);
+
+        assertThat(plannerWith(appProperties).planJobs("image/png"))
+                .containsExactly(
+                        ProcessingJob.JobType.CHECKSUM,
+                        ProcessingJob.JobType.PHASH);
+    }
+
     private static ProcessingJobPlanner plannerWith(AppProperties appProperties) {
-        GlobalProcessingPolicyResolver resolver = new GlobalProcessingPolicyResolver(appProperties);
         return new ProcessingJobPlanner(List.of(
-                new ChecksumJobStrategy(resolver),
-                new PhashJobStrategy(appProperties, resolver),
-                new EmbeddingJobStrategy(appProperties, resolver),
-                new AudioAnalysisJobStrategy(appProperties, resolver)
+                new ChecksumJobStrategy(appProperties),
+                new PhashJobStrategy(appProperties),
+                new EmbeddingJobStrategy(appProperties),
+                new AudioAnalysisJobStrategy(appProperties)
         ));
     }
 }

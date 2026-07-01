@@ -21,7 +21,6 @@ import com.diogotoporcov.filemanager.api.identity.domain.User;
 import com.diogotoporcov.filemanager.api.identity.persistence.UserRepository;
 import com.diogotoporcov.filemanager.api.observability.application.FileManagerMetrics;
 import com.diogotoporcov.filemanager.api.processing.application.job.ProcessingJobPlanner;
-import com.diogotoporcov.filemanager.api.processing.application.policy.ProcessingPolicyContext;
 import com.diogotoporcov.filemanager.api.processing.domain.ProcessingJob;
 import com.diogotoporcov.filemanager.api.processing.domain.result.FileFingerprint;
 import com.diogotoporcov.filemanager.api.processing.messaging.FileProcessingRequestedEvent;
@@ -130,12 +129,7 @@ public class FileService {
             FileEntity savedFile = fileRepository.save(fileEntity);
             fileManagerMetrics.recordFileUpload(size, "USER");
 
-            ProcessingPolicyContext processingContext = new ProcessingPolicyContext(
-                    actorUserId,
-                    folderId,
-                    effectiveContentType,
-                    null);
-            List<ProcessingJob.JobType> plannedJobs = processingJobPlanner.planJobs(processingContext);
+            List<ProcessingJob.JobType> plannedJobs = processingJobPlanner.planJobs(effectiveContentType);
 
             for (ProcessingJob.JobType jobType : plannedJobs) {
                 ProcessingJob job = ProcessingJob.builder()

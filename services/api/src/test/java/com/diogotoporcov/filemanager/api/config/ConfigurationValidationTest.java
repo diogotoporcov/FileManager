@@ -107,7 +107,7 @@ class ConfigurationValidationTest {
     }
 
     @Test
-    void appProperties_ProcessingCapabilityTogglesBindCorrectly() {
+    void appProperties_ProcessingTogglesBindCorrectly() {
         MapConfigurationPropertySource source = new MapConfigurationPropertySource(Map.of(
                 "app.processing.checksum.enabled", "false",
                 "app.processing.image.phash-enabled", "false",

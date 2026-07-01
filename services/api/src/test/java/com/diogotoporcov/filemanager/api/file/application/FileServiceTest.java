@@ -17,7 +17,6 @@ import com.diogotoporcov.filemanager.api.identity.domain.User;
 import com.diogotoporcov.filemanager.api.identity.persistence.UserRepository;
 import com.diogotoporcov.filemanager.api.observability.application.FileManagerMetrics;
 import com.diogotoporcov.filemanager.api.processing.application.job.ProcessingJobPlanner;
-import com.diogotoporcov.filemanager.api.processing.application.policy.ProcessingPolicyContext;
 import com.diogotoporcov.filemanager.api.processing.domain.ProcessingJob;
 import com.diogotoporcov.filemanager.api.processing.messaging.FileProcessingRequestedEvent;
 import com.diogotoporcov.filemanager.api.processing.persistence.ProcessingJobRepository;
@@ -51,6 +50,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -130,7 +130,7 @@ class FileServiceTest {
                 .storagePath("storage-path")
                 .etag("test-etag")
                 .build());
-        when(processingJobPlanner.planJobs(any(ProcessingPolicyContext.class))).thenReturn(List.of(ProcessingJob.JobType.CHECKSUM));
+        when(processingJobPlanner.planJobs(anyString())).thenReturn(List.of(ProcessingJob.JobType.CHECKSUM));
         ProcessingJob processingJob = ProcessingJob.builder().id(UUID.randomUUID()).jobType(ProcessingJob.JobType.CHECKSUM).build();
         when(processingJobRepository.save(any(ProcessingJob.class))).thenReturn(processingJob);
 
@@ -166,7 +166,7 @@ class FileServiceTest {
             return file;
         });
         when(objectStoragePort.putObject(any())).thenReturn(StoreObjectResponse.builder().etag("etag").build());
-        when(processingJobPlanner.planJobs(any(ProcessingPolicyContext.class)))
+        when(processingJobPlanner.planJobs(anyString()))
                 .thenReturn(List.of(ProcessingJob.JobType.CHECKSUM, ProcessingJob.JobType.PHASH));
         when(processingJobRepository.save(any(ProcessingJob.class)))
                 .thenReturn(ProcessingJob.builder().id(UUID.randomUUID()).jobType(ProcessingJob.JobType.CHECKSUM).build())
@@ -190,7 +190,7 @@ class FileServiceTest {
         when(folderRepository.findByIdAndDeletedAtIsNull(folderId)).thenReturn(Optional.of(folder));
         when(fileRepository.save(any(FileEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(objectStoragePort.putObject(any())).thenReturn(StoreObjectResponse.builder().etag("etag").build());
-        when(processingJobPlanner.planJobs(any(ProcessingPolicyContext.class))).thenReturn(List.of());
+        when(processingJobPlanner.planJobs(anyString())).thenReturn(List.of());
 
         try (ByteArrayInputStream content = new ByteArrayInputStream("hello".getBytes())) {
             fileService.uploadFile("folder.txt", "text/plain", 5L, content, folderId, userId);
@@ -210,7 +210,7 @@ class FileServiceTest {
         when(userRepository.findByIdForUpdate(userId)).thenReturn(Optional.of(user));
         when(fileRepository.save(any(FileEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(objectStoragePort.putObject(any())).thenReturn(StoreObjectResponse.builder().etag("etag").build());
-        when(processingJobPlanner.planJobs(any(ProcessingPolicyContext.class))).thenReturn(List.of());
+        when(processingJobPlanner.planJobs(anyString())).thenReturn(List.of());
 
         try (ByteArrayInputStream content = new ByteArrayInputStream("hello".getBytes())) {
             fileService.uploadFile("C:\\fakepath\\ report.txt ", null, 5L, content, userId);
